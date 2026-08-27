@@ -24,9 +24,18 @@ Rahmen laufen über `/refine PROJ-2`, nicht über das `design.md` eines anderen 
 | Anmelden (`/login`) | Mit E-Mail und Passwort anmelden | abgemeldet | PROJ-1 |
 | Registrieren (`/signup`) | Konto anlegen | abgemeldet | PROJ-1 |
 | Ausgaben & Monatsübersicht (`/`) | Ausgaben erfassen, bearbeiten, löschen; Monatssummen sehen | angemeldet | PROJ-2 |
+| Konto (`/konto`) | Abmelden, Konto löschen | angemeldet | PROJ-1 |
 
-Mehr Bereiche gibt es nicht. **Keine Navigationsliste** — bei einem einzigen angemeldeten Bereich hätte
-sie nichts zu zeigen.
+Mehr Bereiche gibt es nicht. **Keine Navigationsliste** — bei zwei angemeldeten Bereichen, von denen
+einer selten aufgerufen wird, hätte sie nichts zu zeigen. `/konto` wird aus dem Header verlinkt.
+
+**Zu `/konto`** (ergänzt von `/architecture PROJ-1`): Der Bereich entstand, weil AC-14 (Abmelden) und
+AC-15 (Konto löschen) einen Ort brauchen, den Header aber PROJ-2 baut — und PROJ-1 ausgeliefert wird,
+bevor es PROJ-2 gibt. Die Abmelde-Aktion selbst gehört PROJ-1; der Header von PROJ-2 ruft **dieselbe**
+Aktion auf, statt eine zweite zu bauen.
+
+**Bis PROJ-2 gebaut ist**, ist `/` eine geschützte Platzhalterseite mit einem Satz und einem Link auf
+`/konto`. PROJ-2 ersetzt ihren Inhalt — der Zugriffsschutz der Route bleibt, wie PROJ-1 ihn gelegt hat.
 
 ## Layout-Regionen
 
@@ -35,7 +44,7 @@ sie nichts zu zeigen.
 - **Inhalt:** max. 1180px, zentriert.
 - **Keine Sidebar.**
 - **Login und Signup tragen keinen Rahmen:** zentrierte Karte auf leerem Grund, nur die Wortmarke
-  darüber.
+  darüber. **`/konto` folgt demselben Muster**, solange es den Header noch nicht gibt.
 - **Mobil (unter `md`):** Header bleibt, der Monatswechsler rückt in eine zweite Zeile. Kein Burger —
   es gibt nichts zu verbergen.
 
@@ -51,20 +60,29 @@ sie nichts zu zeigen.
 
 ## Anmeldezustände
 
-- **Abgemeldet:** erreichbar sind nur `/login` und `/signup`. Der Aufruf von `/` leitet auf `/login`.
-- **Angemeldet:** erreichbar ist `/`. Der Aufruf von `/login` oder `/signup` leitet auf `/`.
+- **Abgemeldet:** erreichbar sind nur `/login` und `/signup`. Der Aufruf von `/` oder `/konto` leitet
+  auf `/login`.
+- **Angemeldet:** erreichbar sind `/` und `/konto`. Der Aufruf von `/login` oder `/signup` leitet auf `/`.
+- **Wer das durchsetzt:** die Vorprüfung in `proxy.ts` (in Next.js 16 die frühere `middleware.ts`) **und**
+  zusätzlich jede geschützte Seite selbst. Beides gehört PROJ-1 und gilt für jedes spätere Feature mit.
 - **Rollen:** keine. Alle angemeldeten Personen sehen dieselbe Oberfläche, jeweils nur mit den eigenen
   Daten.
 
 ## Rahmen-Komponenten
 
-| Komponente | Datei | Zweck |
-|---|---|---|
-| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler, Abmelden |
-| `Wordmark` | `src/components/wordmark.tsx` | `auslage.` mit olivem Punkt — auch auf Login/Signup |
-| `PageHeader` | `src/components/page-header.tsx` | Titel + eine Hauptaktion, das gemeinsame Seitenmuster |
+| Komponente | Datei | Zweck | Gebaut von |
+|---|---|---|---|
+| `Wordmark` | `src/components/wordmark.tsx` | `auslage.` mit olivem Punkt — auch auf Login/Signup | **PROJ-1** |
+| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler, Abmelden, Link auf `/konto` | PROJ-2 |
+| `PageHeader` | `src/components/page-header.tsx` | Titel + eine Hauptaktion, das gemeinsame Seitenmuster | PROJ-2 |
 
-_Die Pfade sind der Vorschlag von `/init`; festgelegt werden sie im `design.md` von PROJ-2._
+_Die Pfade sind der Vorschlag von `/init`; festgelegt werden `AppHeader` und `PageHeader` im `design.md`
+von PROJ-2._
+
+**Das Fundament unter dem Rahmen legt PROJ-1**, weil es das erste Feature mit Oberfläche ist: das
+Wurzel-Layout (`lang="de"`, Dark fest gesetzt, Schriften über `next/font/google`), die Farb-Tokens in
+`globals.css`, der Toaster für die Rückmeldungen und die Sicherheits-Header. PROJ-2 baut seinen Header
+**in** dieses Layout hinein, statt es zu ersetzen.
 
 ---
 
