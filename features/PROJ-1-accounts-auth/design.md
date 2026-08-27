@@ -501,6 +501,21 @@ Gebaut ist deshalb:
 Alle Acceptance Criteria bleiben unverändert erfüllt. Der Zähler zählt jetzt *Versuche* statt
 *Fehlversuche* — praktisch dasselbe, weil eine geglückte Anmeldung sofort aufräumt.
 
+### TD-14 war falsch: lokal gibt es sehr wohl eine IP
+
+Der Entwurf nahm an, im lokalen Betrieb ohne vorgelagerten Server sei kein
+`x-forwarded-for`-Kopf gesetzt und die IP-Regel greife deshalb nicht. Beim Durchstich stand in
+jeder Zeile `::1`. Der Kopf ist also da, und **AC-9 ist lokal durch die Oberfläche prüfbar** —
+besser als gedacht.
+
+Die Kehrseite steht dafür fest: Weil beide Regeln bei 5 Versuchen in 15 Minuten liegen und lokal
+alle Anfragen von `::1` kommen, greift beim Testen mit mehreren Konten **die IP-Regel zuerst**.
+Wer AC-8 isoliert prüfen will, muss die Zähler zwischendurch leeren oder die Datenbankfunktion
+direkt mit einer eigenen IP aufrufen. Das ist kein Fehler, sondern genau das, was AC-9 verlangt —
+aber es ist eine Falle für `/qa`.
+
+Die Vorkehrung für den Fall *ohne* IP bleibt im Code: Fehlt der Kopf, greift nur die Adress-Regel.
+
 ### Kleinere Festlegungen
 
 - **Rückmeldungen:** „Sitzung abgelaufen" und „Konto gelöscht" stehen als Hinweiszeile über der
@@ -515,6 +530,10 @@ Alle Acceptance Criteria bleiben unverändert erfüllt. Der Zähler zählt jetzt
   `noValidate`. Eine zweite Stelle mit denselben Regeln ist die erste, die beim Ändern vergessen
   wird. Die Meldungen kommen aus einer Quelle.
 - **`/konto` bekam zusätzlich ein `loading.tsx`** mit den Skeletons, die das Seitenmuster verlangt.
+- **Die Kontolöschung ist ohne JavaScript nicht erreichbar**, weil der Dialoginhalt erst beim
+  Öffnen gerendert wird. Bei einer Aktion, die eine ausdrückliche Bestätigung verlangt, ist das
+  vertretbar — es heißt aber, dass die Verdrahtung des Buttons nur im Browser prüfbar ist. Die
+  Datenbankfunktion dahinter ist es nicht: die wurde über die Schnittstelle verifiziert.
 - **ESLint prüfte bisher auch `docs/`** — gitignoriertes Referenzmaterial mit eigenen Verstößen.
   Dadurch war `npm run lint` schon vor diesem Feature rot. `docs/**` steht jetzt in den
   `ignores` der ESLint-Konfiguration.

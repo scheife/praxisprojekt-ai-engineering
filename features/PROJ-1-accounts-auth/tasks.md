@@ -68,7 +68,7 @@ normale Bauaufgabe (T4).
 
 ## Level 5 — Durchstich
 
-- [ ] **T17**  Einmal am Stück durchklicken: Registrieren → `/konto` → Abmelden → Anmelden → fünf Fehlversuche bis zur Sperre → Konto löschen. Danach `npm run lint` und `npm run build` grün  · files: —  · → alle AC
+- [x] **T17**  Einmal am Stück durchklicken: Registrieren → `/konto` → Abmelden → Anmelden → fünf Fehlversuche bis zur Sperre → Konto löschen. Danach `npm run lint` und `npm run build` grün  · files: —  · → alle AC
 
 ---
 

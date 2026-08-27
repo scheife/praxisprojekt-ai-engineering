@@ -25,7 +25,12 @@ export async function logout() {
  * aufrufenden Person entfernt. Kein `service_role`-Schlüssel in dieser Anwendung — der
  * Schlüssel, der Row Level Security aushebelt, existiert hier nicht (design.md, TD-6).
  */
-export async function deleteAccount(): Promise<{ formError: string } | void> {
+export type DeleteAccountState = { formError?: string }
+
+export async function deleteAccount(
+  _prevState: DeleteAccountState,
+  _formData: FormData,
+): Promise<DeleteAccountState> {
   await requireUser()
 
   const supabase = await createClient()

@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { toast } from 'sonner'
+import { useActionState } from 'react'
 
-import { deleteAccount } from '@/lib/actions/account'
+import { deleteAccount, type DeleteAccountState } from '@/lib/actions/account'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -17,28 +16,25 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
+const EMPTY: DeleteAccountState = {}
+
 /**
  * Kontolöschung mit Bestätigungsdialog (AC-15, Art. 17 DSGVO).
  *
- * Gelingt sie, leitet die Action auf `/login` weiter — dieser Dialog sieht den Erfolg
- * also nie, nur den Fehlerfall.
+ * Bewusst ein Formular mit `useActionState` statt einer Klick-Funktion: der Fehlerfall
+ * landet dann als Zustand im Dialog, statt über einen Umweg als Toast. Gelingt die
+ * Löschung, leitet die Action auf `/login?reason=deleted` weiter — dieser Dialog sieht
+ * also nur den Fehlerfall.
+ *
+ * Ohne JavaScript ist die Löschung nicht erreichbar: Der Dialoginhalt wird erst beim
+ * Öffnen gerendert. Das ist bei einer Aktion, die eine ausdrückliche Bestätigung
+ * verlangt, vertretbar.
  */
 export function DeleteAccountDialog() {
-  const [open, setOpen] = useState(false)
-  const [pending, startTransition] = useTransition()
-
-  const confirm = () => {
-    startTransition(async () => {
-      const result = await deleteAccount()
-      if (result?.formError) {
-        setOpen(false)
-        toast.error(result.formError)
-      }
-    })
-  }
+  const [state, formAction, pending] = useActionState(deleteAccount, EMPTY)
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="destructive" className="h-9 font-grotesk">
           Konto löschen
@@ -54,22 +50,26 @@ export function DeleteAccountDialog() {
             rückgängig machen, und anmelden kannst du dich danach nicht mehr.
           </AlertDialogDescription>
         </AlertDialogHeader>
+
+        {state.formError && (
+          <p role="alert" className="text-[13px] text-destructive">
+            {state.formError}
+          </p>
+        )}
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending} className="h-9 font-grotesk">
             Abbrechen
           </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(event) => {
-              // Der Dialog soll sich nicht schließen, bevor die Löschung durch ist —
-              // sonst steht die Person vor einer Seite, die noch die alten Daten zeigt.
-              event.preventDefault()
-              confirm()
-            }}
-            disabled={pending}
-            className="h-9 bg-destructive font-grotesk text-destructive-foreground hover:bg-destructive/90"
-          >
-            {pending ? 'Wird gelöscht …' : 'Endgültig löschen'}
-          </AlertDialogAction>
+          <form action={formAction}>
+            <AlertDialogAction
+              type="submit"
+              disabled={pending}
+              className="h-9 w-full bg-destructive font-grotesk text-destructive-foreground hover:bg-destructive/90"
+            >
+              {pending ? 'Wird gelöscht …' : 'Endgültig löschen'}
+            </AlertDialogAction>
+          </form>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
