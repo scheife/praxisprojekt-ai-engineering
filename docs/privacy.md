@@ -1,72 +1,163 @@
-# Privacy Record — what this product does with personal data
+# Datenschutz-Register — auslage.
 
-> The honest overview of which personal data this product processes, why, and for how long.
+> Der ehrliche Überblick darüber, welche personenbezogenen Daten dieses Produkt verarbeitet, warum und
+> wie lange.
 >
-> - Created and kept current by `/dsgvo`, one entry per processing purpose.
-> - Grows with the product: when a feature changes what is stored, its entry changes too.
-> - **Altitude:** purposes, legal bases, retention, and who else sees the data. Field-level detail lives in `docs/data-model.md` and the feature designs.
+> - Angelegt und aktuell gehalten von `/dsgvo`, ein Eintrag pro Verarbeitungszweck.
+> - Wächst mit dem Produkt: Ändert ein Feature, was gespeichert wird, ändert sich sein Eintrag mit.
+> - **Flughöhe:** Zwecke, Rechtsgrundlagen, Aufbewahrung und wer die Daten sonst noch sieht.
+>   Feldgenaue Details stehen in `docs/data-model.md` und den Feature-Designs.
 >
-> This maps closely onto the record of processing activities (*Verarbeitungsverzeichnis*, Art. 30 GDPR; Art. 12 Swiss DSG) — but it is an engineering document, not a legal filing. A lawyer or your data protection officer / advisor has the final word on whether it is complete for your situation.
+> Das entspricht weitgehend einem Verarbeitungsverzeichnis (Art. 30 DSGVO) — ist aber ein
+> Engineering-Dokument, keine juristische Eingabe. Ob es für deine Situation vollständig ist, entscheiden
+> Jurist:innen oder ein:e Datenschutzbeauftragte:r.
 
-**Applicable law:** _GDPR (EU/DE) · DSG (CH) · both — from `.ai-eng-kit` → `law`; the rules are in `docs/law/`_
-**Data protection stance:** _lean | standard | strict — set in `docs/PRD.md` → Constraints_
-**Controller (Verantwortlicher):** _your company / your name and address — the legal entity behind the product_
-**Last reviewed:** _YYYY-MM-DD_
+**Anwendbares Recht:** DSGVO (EU). **Achtung:** `docs/law/gdpr.md` ist auf Deutschland zugeschnitten
+(BDSG, DDG, § 147 AO). Der Verantwortliche sitzt in Österreich — die DSGVO gilt identisch, die nationalen
+Ergänzungen nicht (DSG 2018 statt BDSG, ECG § 5 statt DDG, § 132 BAO mit 7 statt 10 Jahren,
+Datenschutzbehörde statt Landesbehörden). Österreichische Spezifika sind unten als **zu prüfen** markiert.
+
+**Datenschutz-Haltung:** `lean` (aus `docs/PRD.md` → Rahmenbedingungen)
+
+**Verantwortlicher:** _offen_ — voraussichtlich Alexander Kai Scheiflinger / alexmacht, Kärnten.
+Vollständige Anschrift wird erst gebraucht, wenn das Produkt öffentlich erreichbar ist. Siehe Offene Punkte.
+
+**Zuletzt geprüft:** 2026-08-27 (bei `/write-spec PROJ-1`)
+
+**Betriebszustand zum Zeitpunkt dieser Prüfung:** Das Produkt läuft **ausschließlich lokal** in Docker auf
+dem Rechner des Entwicklers. Es gibt keine öffentliche Adresse, keine echten Nutzer:innen und keine
+echten Daten — nur Demo-Einträge. Es existiert **kein Auftragsverarbeiter**, weil keine Daten den Rechner
+verlassen. Das ändert sich in dem Moment, in dem ein gehostetes Supabase-Projekt entsteht; die dann
+fälligen Punkte stehen unten unter „Wenn es online geht".
 
 ---
 
-## Processing activities
+## Verarbeitungstätigkeiten
 
-_One row per purpose, not per table. "Run user accounts" is a purpose; "the profiles table" is not._
+| Zweck | Daten | Von wem | Warum zulässig | Aufbewahrung | Beteiligte Dienste |
+|---|---|---|---|---|---|
+| Nutzerkonten betreiben (Registrierung, Anmeldung, Sitzung) | E-Mail-Adresse, Passwort-Hash, Nutzer-ID (UUID), Zeitpunkt der Registrierung | Registrierte Nutzer:innen | Art. 6 Abs. 1 lit. b DSGVO — Vertrag. Ohne Konto gibt es die Leistung nicht; E-Mail und Passwort sind dafür erforderlich | Bis zur Kontolöschung | keine (lokal) |
+| Anmeldung vor automatisiertem Erraten schützen (Drosselung) | IP-Adresse, E-Mail-Adresse, Zähler fehlgeschlagener Versuche, Zeitstempel | Jede Person, die das Anmeldeformular aufruft — auch nicht registrierte | Art. 6 Abs. 1 lit. f DSGVO — berechtigtes Interesse an der Sicherheit der Konten. Interessenabwägung fällt eindeutig aus: minimale Daten, kurze Speicherung, unmittelbarer Schutzzweck für die Betroffenen selbst | Zähler werden **spätestens 24 Stunden** nach dem letzten Versuch gelöscht; das Sperrfenster selbst beträgt 15 Minuten | keine (lokal) |
+| Sicherheitsprotokolle der Authentifizierung | IP-Adresse, User-Agent, Zeitstempel, Ereignistyp (`auth.audit_log_entries` in Supabase) | Alle, die sich an- oder abmelden | Art. 6 Abs. 1 lit. f DSGVO — berechtigtes Interesse an Nachvollziehbarkeit von Sicherheitsereignissen | Von Supabase Auth verwaltet — **Aufbewahrungsdauer noch nicht festgelegt**, siehe Offene Punkte | keine (lokal) |
 
-| Purpose | Data | Whose | Why it is lawful | Retention | Processors involved |
-|---------|------|-------|------------------|-----------|---------------------|
-| _Run user accounts_ | _Email, password hash, display name_ | _Registered users_ | _GDPR: Art. 6(1)(b) contract · DSG: expected purpose, no justification needed_ | _Until account deletion_ | _Supabase (EU)_ |
-| _..._ | _..._ | _..._ | _..._ | _..._ | _..._ |
+### Was PROJ-1 bewusst **nicht** erhebt
 
-## Sensitive data
+Kein Name, kein Anzeigename, keine Anschrift, keine Telefonnummer, keine Firmendaten. Für Registrierung
+und Anmeldung sind sie nicht erforderlich, und das billigste Datenschutzmittel ist ein Feld, das gar nicht
+erst existiert (Art. 5 Abs. 1 lit. c DSGVO). Wer später einen Anzeigenamen will, ergänzt ihn in `profiles`
+über `/refine`.
 
-_Health, biometrics, genetics, ethnicity, political opinion, religion, trade union membership, sex life or orientation, criminal matters — and, under the Swiss DSG, social-assistance measures and administrative proceedings (Art. 9 GDPR · Art. 5 lit. c DSG). These carry much stricter rules — usually explicit consent. List them separately so nobody overlooks them, or write "none"._
+### Vorausschau auf PROJ-2
 
-- _none_
-
-## Processors (Auftragsverarbeiter · Auftragsbearbeiter)
-
-_Every external service that touches personal data on your behalf (Art. 28 GDPR · Art. 9 DSG). Each needs a data processing agreement (AVV / DPA) — normally a checkbox or a downloadable document in the provider's dashboard. Under the DSG the countries you export to also have to be named in the privacy policy._
-
-| Service | What it processes | Region | DPA signed | Outside the adequate countries? |
-|---------|-------------------|--------|------------------|----------------|
-| _Supabase_ | _All application data_ | _eu-central-1 (Frankfurt)_ | _☐_ | _US company, EU hosting_ |
-| _Vercel_ | _Requests, logs_ | _..._ | _☐_ | _..._ |
-| _Sentry_ | _Error reports (scrubbed)_ | _..._ | _☐_ | _..._ |
-
-## Data subject rights — how they are served
-
-_Which part of the app actually delivers each right. "By email, manually" is a valid answer for a small product; leaving it blank is not._
-
-| Right | GDPR | DSG | How this product delivers it |
-|-------|------|-----|------------------------------|
-| Access / copy | Art. 15 | Art. 25 | _..._ |
-| Rectification | Art. 16 | Art. 32 | _..._ |
-| Erasure | Art. 17 | Art. 32 / Art. 6 Abs. 4 | _..._ |
-| Portability | Art. 20 | Art. 28 (narrower) | _..._ |
-| Objection | Art. 21 | Art. 30 Abs. 2 | _..._ |
-
-> Deadline: **one calendar month** under the GDPR (Art. 12(3), extendable by two for complex cases if the person is told within the first), **30 days** under the DSG (Art. 25 Abs. 7).
-
-## Open points
-
-_What is still unresolved, and who resolves it. `/dsgvo` adds items here; they leave when they are actually done._
-
-- [ ] _e.g. AVV with Sentry not yet signed_
-- [ ] _e.g. Retention period for uploaded files never decided_
-
-## For a lawyer / data protection officer or advisor
-
-_Questions that need a human. Keep the context with each question so it can be asked without re-explaining the product._
-
-- _e.g. Our free tier keeps analytics data for 24 months on legitimate interest — is that defensible for a B2C product with no login requirement?_
+Das Feld **Notiz** an einer Ausgabe ist ein Freitextfeld. Solche Felder füllen Menschen erfahrungsgemäß mit
+allem — auch mit Angaben über Dritte („Mittagessen mit Frau X"). Das ist bei `/write-spec PROJ-2` zu
+bewerten, nicht hier. Notiert, damit es nicht untergeht.
 
 ---
 
-_Run `/dsgvo` to create the first version of this record, and again whenever a feature changes what personal data the product holds._
+## Besondere Kategorien personenbezogener Daten
+
+**Keine.** Weder Gesundheits-, biometrische, genetische, ethnische, politische, religiöse noch
+Gewerkschafts- oder Sexualdaten (Art. 9 DSGVO), keine strafrechtlichen Daten (Art. 10 DSGVO).
+
+**Keine Kinderdaten.** Zielgruppe sind Gewerbetreibende und Freelancer; das Produkt spricht Minderjährige
+nicht an.
+
+---
+
+## Auftragsverarbeiter
+
+| Dienst | Was er verarbeitet | Region | AVV geschlossen | Außerhalb der EU/EWR? |
+|---|---|---|---|---|
+| _keiner_ | — | lokal, Docker | entfällt | nein |
+
+Solange Supabase in Docker auf dem eigenen Rechner läuft, gibt es keinen Auftragsverarbeiter im Sinne von
+Art. 28 DSGVO — es werden keine Daten an Dritte übermittelt. Auch **keine Analyse-, Tracking-, Zahlungs-,
+Mail- oder KI-Dienste**: die Dependencies wurden geprüft, es ist keines dieser SDKs installiert.
+
+**Cookies:** Die einzigen gesetzten Cookies sind die Sitzungs-Cookies von Supabase Auth. Sie sind für den
+angeforderten Dienst unbedingt erforderlich und damit **einwilligungsfrei** (§ 165 Abs. 3 TKG 2021 in
+Österreich, Umsetzung der ePrivacy-Richtlinie — **zu prüfen**). Es gibt kein Banner, weil es nichts gibt,
+wofür eines nötig wäre.
+
+---
+
+## Betroffenenrechte
+
+| Recht | Fundstelle | Wie dieses Produkt es erfüllt |
+|---|---|---|
+| Auskunft / Kopie | Art. 15 DSGVO | **Offen** — sinnvoll erst mit PROJ-2, wenn es Ausgabendaten zu exportieren gibt. In PROJ-1 bestünde die Auskunft aus E-Mail-Adresse und Registrierungsdatum |
+| Berichtigung | Art. 16 DSGVO | **Offen** — die einzige berichtigungsfähige Angabe ist die E-Mail-Adresse; eine Änderungsmöglichkeit ist in PROJ-1 nicht vorgesehen |
+| Löschung | Art. 17 DSGVO | **Als AC in PROJ-1 vorgeschlagen** — Konto löschen entfernt Konto, Profil und alle zugehörigen Daten |
+| Datenübertragbarkeit | Art. 20 DSGVO | **Offen** — gehört zu PROJ-2 (Export der Ausgaben in maschinenlesbarer Form) |
+| Widerspruch | Art. 21 DSGVO | Betrifft nur die auf berechtigtem Interesse gestützte Drosselung. Ein Widerspruch dagegen ist praktisch nicht sinnvoll, da sie dem Schutz der betroffenen Person selbst dient — bei einem Widerspruch wäre eine Einzelfallabwägung nötig |
+| Information | Art. 13 DSGVO | **Offen** — Datenschutzerklärung erst nötig, wenn das Produkt öffentlich erreichbar ist. Siehe „Wenn es online geht" |
+| Reaktionsfrist | Art. 12 Abs. 3 DSGVO | Ein Kalendermonat. Bei einem Produkt ohne echte Nutzer:innen derzeit gegenstandslos |
+
+---
+
+## Datenschutz-Folgenabschätzung (Art. 35 DSGVO)
+
+**Nicht erforderlich.** Keiner der vier Auslöser trifft zu:
+
+- keine systematische umfangreiche automatisierte Bewertung oder Profilbildung mit rechtlicher Wirkung
+- keine umfangreiche Verarbeitung besonderer Kategorien
+- keine systematische Überwachung öffentlich zugänglicher Bereiche
+- kein Eintrag auf einer Blacklist der Aufsichtsbehörde (**für Österreich zu prüfen** — die DSB führt
+  eigene Listen, nicht die deutsche DSK-Liste)
+
+Ein Ausgaben-Tracker mit E-Mail-Login liegt weit unter der Schwelle. Das ist ein vollständiges Ergebnis,
+kein übersprungener Schritt.
+
+---
+
+## Wenn es online geht
+
+Diese Punkte werden fällig, sobald ein gehostetes Supabase-Projekt oder eine öffentliche Adresse existiert
+— nicht vorher. Für die Prüfung ist keiner davon relevant, weil kein Deployment vorgesehen ist.
+
+- [ ] **AVV mit Supabase** schließen (Art. 28 DSGVO) — im Supabase-Dashboard als Dokument verfügbar
+- [ ] **Region `eu-central-1` (Frankfurt)** beim Anlegen des Projekts wählen — nachträglich nicht änderbar
+- [ ] **Drittstaatentransfer** klären: Supabase Inc. ist ein US-Unternehmen. Prüfen, ob es sich unter dem
+      EU-US Data Privacy Framework zertifiziert hat, sonst Standardvertragsklauseln
+- [ ] **Datenschutzerklärung** (Art. 13 DSGVO) — von jeder Seite erreichbar
+- [ ] **Impressum** — in Österreich nach ECG § 5 und MedienG, **nicht** nach deutschem DDG (**zu prüfen**)
+- [ ] **Error-Tracking**: derzeit keines installiert. Falls eines dazukommt, Scrubbing bewusst einschalten
+      — Fehlerberichte enthalten regelmäßig E-Mail-Adressen und Formularinhalte
+- [ ] **Reaktionsfrist** von einem Monat organisatorisch sicherstellen (Art. 12 Abs. 3 DSGVO)
+
+---
+
+## Offene Punkte
+
+- [ ] **Verantwortlicher** vollständig festhalten (Name, Anschrift, Kontakt) — nötig ab dem ersten
+      öffentlichen Zugang, nicht vorher
+- [ ] **Aufbewahrungsdauer der Supabase-Auth-Protokolle** (`auth.audit_log_entries`) festlegen. Supabase
+      verwaltet sie selbst; die Voreinstellung wurde noch nicht geprüft
+- [ ] **Auskunft und Export** (Art. 15, 20 DSGVO) bei `/write-spec PROJ-2` einplanen — dort gibt es
+      Ausgabendaten, die einen Export überhaupt sinnvoll machen
+- [ ] **E-Mail-Adresse ändern** (Art. 16 DSGVO) — in PROJ-1 nicht vorgesehen, bewusste Zurückstellung
+- [ ] **Freitextfeld „Notiz"** bei `/write-spec PROJ-2` bewerten (Angaben über Dritte)
+
+---
+
+## Für Jurist:innen oder Datenschutzbeauftragte
+
+Erst relevant, wenn aus dem Prüfungsprojekt ein echtes Produkt für andere Gewerbetreibende wird. Dann mit
+diesem Kontext fragen:
+
+1. **Aufbewahrung:** Ein Ausgaben-Tracker hält Belegdaten von Gewerbetreibenden. Greift § 132 BAO
+   (7 Jahre Aufbewahrungspflicht) auf die in `auslage.` erfassten Daten durch — mit der Folge, dass eine
+   Kontolöschung diese Daten *nicht* entfernen darf? Oder bleibt die Aufbewahrungspflicht beim Nutzer und
+   seiner eigenen Buchhaltung, sodass `auslage.` frei löschen kann? **Das ist die wichtigste offene Frage**,
+   weil sie das Löschkonzept umkehren würde.
+2. **Rolle:** Ist der Betreiber von `auslage.` Verantwortlicher oder Auftragsverarbeiter für die
+   Ausgabendaten der Kund:innen? Bei einem Buchhaltungs-Hilfsmittel ist beides vertretbar, und davon hängt
+   ab, welche Verträge nötig sind.
+3. **Cookies:** Reichen die Sitzungs-Cookies von Supabase Auth als „unbedingt erforderlich" nach
+   § 165 Abs. 3 TKG 2021, sodass kein Banner nötig ist?
+
+---
+
+_Diese Prüfung ist eine Engineering-Bewertung, keine Rechtsberatung — das letzte Wort haben Jurist:innen
+oder ein:e Datenschutzbeauftragte:r._
