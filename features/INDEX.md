@@ -22,9 +22,12 @@
 
 | ID | Feature | Description | Status | Spec | Created |
 |----|---------|-------------|--------|------|---------|
+| PROJ-1 | Konto & Anmeldung | Registrierung und Login per E-Mail und Passwort; der Ausgabenbereich ist nur angemeldet erreichbar, und jede Person sieht ausschließlich die eigenen Daten. | Roadmap | — | 2026-08-27 |
+| PROJ-2 | Ausgaben & Monatsübersicht | Ausgaben in Euro anlegen, bearbeiten und löschen (Betrag, Kategorie, Datum, Notiz) und je Monat Summe pro Kategorie plus Gesamtsumme sehen. | Roadmap | — | 2026-08-27 |
+| PROJ-3 | Fremdwährung & Wechselkurs | Ausgaben in Fremdwährung erfassen, per frankfurter.app live in Euro umrechnen und den verwendeten Kurs samt Datum ausweisen. | Roadmap | — | 2026-08-27 |
 
-**Build order:** _P0 (MVP): PROJ-1 → PROJ-2 · P1: PROJ-3 (needs PROJ-2) · P2: PROJ-4 (needs PROJ-2) — written by `/init`, kept current by `/refine`_
+**Build order:** P0 (MVP): PROJ-1 → PROJ-2 (braucht PROJ-1) → PROJ-3 (braucht PROJ-2)
 
 <!-- Add features above this line -->
 
-## Next Available ID: PROJ-1
+## Next Available ID: PROJ-4

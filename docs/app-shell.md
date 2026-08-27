@@ -1,64 +1,73 @@
-# App Shell & Navigation
+# App-Rahmen & Navigation — auslage.
 
-> The app-wide map of **the frame every feature is shown inside** — navigation, layout regions, and the patterns each page repeats.
+> Die app-weite Karte **des Rahmens, in dem jedes Feature angezeigt wird** — Navigation,
+> Layout-Regionen und die Muster, die jede Seite wiederholt.
 >
-> - Created by `/init` (the first holistic pass: top-level areas + layout).
-> - Refined by `/architecture` as each feature is designed.
-> - **Altitude:** structure, not styling. Which areas exist, where they live, who sees them, what every page shares. Colors, fonts, and component styling belong in `docs/design-system.md`; a single page's internals belong in that feature's `design.md`.
->
-> Without this map the shell grows by accretion — every feature adds a nav item and a header variant in its own `design.md`, and nobody owns the whole. Rebuilding it later is then expensive, because no acceptance criterion says what it is supposed to do.
+> - Angelegt von `/init` (der erste ganzheitliche Durchgang: Bereiche + Layout).
+> - Verfeinert von `/architecture`, sobald ein Feature entworfen wird.
+> - **Flughöhe:** Struktur, nicht Gestaltung. Welche Bereiche es gibt, wo sie liegen, wer sie sieht, was
+>   jede Seite teilt. Farben, Schriften und Komponenten-Styling stehen in `docs/design-system.md`; die
+>   Innenseiten einer einzelnen Seite im `design.md` ihres Features.
 
-## Owning feature
+## Besitzendes Feature
 
-_The feature whose `spec.md` carries the shell's acceptance criteria (e.g. `PROJ-1 App Shell & Navigation`), or "none — shell is trivial" for a single-screen app. Changes to the shell are refined there, not invented per feature._
+**Owner: PROJ-2 — Ausgaben & Monatsübersicht.**
 
-Owner: _PROJ-X — always a feature: the App Shell feature if one exists, otherwise the feature that builds the screen the frame sits on. Changes to the frame go through `/refine` on this feature._
+Es gibt kein eigenes „App Shell"-Feature: `auslage.` hat genau einen angemeldeten Bereich, der Rahmen
+ist ein Header. Er gehört deshalb dem Feature, das den Bildschirm baut, auf dem er sitzt. Änderungen am
+Rahmen laufen über `/refine PROJ-2`, nicht über das `design.md` eines anderen Features.
 
-## Top-Level Areas
+## Top-Level-Bereiche
 
-_The places a user can navigate to. One row per nav entry — not one row per page._
+| Bereich | Was man dort tut | Sichtbar für | Besitzendes Feature |
+|---|---|---|---|
+| Anmelden (`/login`) | Mit E-Mail und Passwort anmelden | abgemeldet | PROJ-1 |
+| Registrieren (`/signup`) | Konto anlegen | abgemeldet | PROJ-1 |
+| Ausgaben & Monatsübersicht (`/`) | Ausgaben erfassen, bearbeiten, löschen; Monatssummen sehen | angemeldet | PROJ-2 |
 
-| Area | What the user does there | Visible to | Owning feature |
-|------|--------------------------|------------|----------------|
-| _Dashboard_ | _Overview after login_ | _signed-in users_ | _PROJ-2_ |
-| _..._ | _..._ | _..._ | _..._ |
+Mehr Bereiche gibt es nicht. **Keine Navigationsliste** — bei einem einzigen angemeldeten Bereich hätte
+sie nichts zu zeigen.
 
-## Layout Regions
+## Layout-Regionen
 
-_The fixed frame. Name each region and what belongs in it._
+- **Header (56px):** durchgehend auf der angemeldeten Seite. Wortmarke `auslage.` links · Monatswechsler
+  (`‹ August 2026 ›`) mittig · Abmelden rechts.
+- **Inhalt:** max. 1180px, zentriert.
+- **Keine Sidebar.**
+- **Login und Signup tragen keinen Rahmen:** zentrierte Karte auf leerem Grund, nur die Wortmarke
+  darüber.
+- **Mobil (unter `md`):** Header bleibt, der Monatswechsler rückt in eine zweite Zeile. Kein Burger —
+  es gibt nichts zu verbergen.
 
-- **Sidebar:** _the top-level areas, logo at the top, account menu at the bottom_
-- **Header:** _page title, primary action for that page_
-- **Content:** _the feature's own UI_
-- **Mobile:** _how the sidebar behaves below `md` (burger / drawer / bottom bar)_
+## Seitenmuster
 
-## Page Pattern
+- **Seitenkopf:** Titel links, **genau eine** hervorgehobene Hauptaktion rechts (Olive).
+- **Ladezustand:** Skeletons in `--muted` an der Stelle des künftigen Inhalts. Kein Spinner-Overlay.
+- **Leerzustand:** ausformuliert — ein Satz, was hier stehen wird, plus die Hauptaktion. Nie eine leere
+  Tabelle.
+- **Fehlerzustand:** Feldfehler direkt am verursachenden Feld in `--destructive`; bei mehreren Feldern
+  zusätzlich eine zusammenfassende Zeile über dem Formular.
+- **Rückmeldungen:** Toast unten rechts, `--popover` als Fläche, 180ms.
 
-_What every page repeats, so features don't each invent their own. `/build` follows this instead of guessing._
+## Anmeldezustände
 
-- **Page header:** _title, optional subtitle, primary action on the right_
-- **Loading state:** _skeleton / spinner, and where_
-- **Empty state:** _what an area with no data shows_
-- **Error state:** _how a failed load is presented_
-- **Toasts / feedback:** _where confirmations appear_
+- **Abgemeldet:** erreichbar sind nur `/login` und `/signup`. Der Aufruf von `/` leitet auf `/login`.
+- **Angemeldet:** erreichbar ist `/`. Der Aufruf von `/login` oder `/signup` leitet auf `/`.
+- **Rollen:** keine. Alle angemeldeten Personen sehen dieselbe Oberfläche, jeweils nur mit den eigenen
+  Daten.
 
-## Auth States
+## Rahmen-Komponenten
 
-_The shell usually differs by who is looking. Say how._
+| Komponente | Datei | Zweck |
+|---|---|---|
+| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler, Abmelden |
+| `Wordmark` | `src/components/wordmark.tsx` | `auslage.` mit olivem Punkt — auch auf Login/Signup |
+| `PageHeader` | `src/components/page-header.tsx` | Titel + eine Hauptaktion, das gemeinsame Seitenmuster |
 
-- **Signed out:** _which areas are reachable, what the shell shows_
-- **Signed in:** _..._
-- **Roles (if any):** _which areas each role sees_
-
-## Shell Components
-
-_The shared building blocks and where they live, so nothing gets rebuilt per feature._
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| _AppSidebar_ | _`src/components/app-sidebar.tsx`_ | _top-level navigation_ |
-| _..._ | _..._ | _..._ |
+_Die Pfade sind der Vorschlag von `/init`; festgelegt werden sie im `design.md` von PROJ-2._
 
 ---
 
-_This is a living document. When `/architecture` designs a feature that adds a nav entry, a layout region, or a new page pattern, it updates this map first, so later features build against an accurate frame. Behavior changes to the shell go through `/refine` on the owning feature — never straight into a feature's `design.md`._
+_Lebendes Dokument. Wenn `/architecture` ein Feature entwirft, das eine Region oder ein Seitenmuster
+ergänzt, aktualisiert es zuerst diese Karte. Verhaltensänderungen am Rahmen laufen über `/refine` auf
+dem besitzenden Feature — nie direkt in das `design.md` eines Features._

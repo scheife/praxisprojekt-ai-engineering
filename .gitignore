@@ -41,3 +41,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Quell-Design-System (lokal, nicht versioniert)
+# Enthält interne Business-OS-Entwürfe, Porträtfotos und die Spec/Design der
+# alexmacht-Website — gehört nicht in ein Repo, das für die Abgabe public wird.
+# Alle für dieses Projekt nötigen Werte sind nach docs/design-system.md übernommen.
+docs/alexmacht.at Design System */

@@ -10,7 +10,7 @@
   "platform": "web",
   "stack": {
     "framework": "nextjs",
-    "backend": null,
+    "backend": "supabase",
     "test": "vitest",
     "e2e": "playwright",
     "ui": "shadcn",
@@ -27,7 +27,9 @@
     "kind": "http",
     "baseUrl": "http://localhost:3000"
   },
-  "law": null,
+  "law": [
+    "gdpr"
+  ],
   "managed": {
     ".claude/skills": [
       "architecture",

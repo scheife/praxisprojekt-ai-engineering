@@ -1,38 +1,72 @@
-# Data Model
+# Datenmodell — auslage.
 
-> The app-wide map of **what data this product stores and how it connects** — the shared blueprint every feature's tables conform to.
+> Die app-weite Karte davon, **welche Daten dieses Produkt speichert und wie sie zusammenhängen** —
+> der gemeinsame Bauplan, an den sich die Tabellen jedes Features halten.
 >
-> - Created by `/init` (the first holistic pass: entities + relationships).
-> - Refined by `/architecture` as each feature is designed.
-> - **Altitude:** entities, relationships, and ownership live here (product-level, anyone can read them). Column types, indexes, and exact foreign keys are decided per feature in that feature's `design.md` — not here.
+> - Angelegt von `/init` (der erste ganzheitliche Durchgang: Entitäten + Beziehungen).
+> - Verfeinert von `/architecture`, sobald ein Feature entworfen wird.
+> - **Flughöhe:** Entitäten, Beziehungen und Zugehörigkeit stehen hier (Produktebene, für alle lesbar).
+>   Spaltentypen, Indizes und die genauen Fremdschlüssel werden pro Feature im jeweiligen `design.md`
+>   entschieden — nicht hier.
 
-## Entities
+## Entitäten
 
-_Each entity is a kind of thing the app stores (a real-world noun). List the ones you know so far with a one-line purpose and who owns or can see it. No column types — just the thing and what it's for._
+| Entität | Was sie darstellt | Wem sie gehört / wer sie sieht |
+|---|---|---|
+| `profiles` | Das Konto einer Person in `auslage.` | die Person selbst |
+| `expenses` | Eine einzelne Geschäftsausgabe | die Person, die sie angelegt hat |
+| Kategorien | Feste Werteliste, nicht von Nutzer:innen verwaltet | für alle gleich, niemandem zugeordnet |
 
-| Entity | What it represents | Owned by / who can see it |
-|--------|--------------------|---------------------------|
-| _profiles_ | _A user's account profile_ | _the user themselves_ |
-| _..._ | _..._ | _..._ |
+**Zu `profiles`:** Im MVP trägt die Tabelle wenig mehr als die Verknüpfung zum Konto. Sie ist trotzdem
+da, weil `auth.users` in einem Schema liegt, das der Client nicht direkt abfragen soll, und weil PROJ-1
+an ihr das RLS-Muster samt Signup-Trigger etabliert, das `expenses` danach eins zu eins kopiert. Spätere
+Einstellungen (etwa eine Standardwährung) landen hier, ohne dass am Auth-Schema gearbeitet werden muss.
 
-## Relationships
+**Kategorien** sind eine feste Liste, keine verwaltbare Entität — eigene Kategorienverwaltung ist
+ausdrücklich Non-Goal. Ob daraus ein Enum, ein Check-Constraint oder eine kleine Nachschlagetabelle
+wird, entscheidet das `design.md` von PROJ-2.
 
-_How the entities connect, in plain language. This is where coherence comes from — get the connections right once, up front._
+Startvorschlag für die Liste (`/write-spec` darf sie anpassen):
+Büromaterial · Software & Abos · Hardware & Geräte · Reise & Fahrt · Bewirtung · Fortbildung ·
+Marketing & Werbung · Gebühren & Beiträge · Sonstiges
 
-- _A profile has many ..._
-- _Each ... belongs to exactly one ..._
-- _A ... can have many ..._
+## Beziehungen
 
-## Diagram (optional)
+- Ein Profil hat viele Ausgaben.
+- Jede Ausgabe gehört **genau einem** Profil.
+- Jede Ausgabe trägt **genau eine** Kategorie aus der festen Liste.
+- Eine Ausgabe hält **ihren eigenen Wechselkurs fest**. Es gibt keinen separaten Kurs-Datensatz und
+  keine Kurs-Tabelle.
 
-_A simple text sketch of the model, filled in as it firms up._
+## Die Modellierungsentscheidung, auf der das Produkt steht
+
+**Der Wechselkurs wird auf der Ausgabe eingefroren**, zusammen mit dem Datum, zu dem er galt — nicht bei
+jeder Anzeige neu geholt.
+
+Ohne das passiert Folgendes: Im März wird eine Rechnung über 1.250 USD erfasst, die Monatsübersicht
+zeigt 1.148,20 €. Im August steht im März plötzlich eine andere Summe, weil der Dollar sich bewegt hat.
+Eine abgeschlossene Monatsübersicht muss stehen bleiben.
+
+Nebeneffekt: Das Anzeigen der Liste braucht **null** API-Aufrufe. Nur das Anlegen einer
+Fremdwährungsausgabe ruft frankfurter.app auf — deshalb braucht es auch keine Kurs-Cache-Tabelle.
+
+## Zugriff
+
+Beide Tabellen sind über `user_id = auth.uid()` abgeriegelt — **zusätzlich** zur Prüfung im
+Anwendungscode, nicht statt ihr. PROJ-1 legt dieses Muster an, PROJ-2 und PROJ-3 kopieren es.
+
+## Skizze
 
 ```
-profiles
-  └─ owns many ...
-        └─ has many ...
+auth.users                    Supabase Auth — E-Mail, Passwort-Hash
+   └─ 1:1  profiles           Konto · Anker für spätere Einstellungen
+              └─ 1:n  expenses
+                        Betrag · Währung · eingefrorener Kurs + Kursdatum
+                        Kategorie · Datum · Notiz
+                              └─ Kategorie aus fester Werteliste
 ```
 
 ---
 
-_This is a living document. When `/architecture` designs a feature that introduces or changes an entity, it updates this map first, so later features build against an accurate picture. Run `/init` to create the first version from your feature map._
+_Lebendes Dokument. Wenn `/architecture` ein Feature entwirft, das eine Entität einführt oder ändert,
+aktualisiert es zuerst diese Karte, damit spätere Features gegen ein zutreffendes Bild bauen._
