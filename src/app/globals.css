@@ -42,9 +42,16 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* docs/design-system.md §6.1: Karten 12px, Buttons und Felder 9px. Die shadcn-Skala
+     leitet md/sm sonst aus lg ab und trifft beide Werte nicht - deshalb explizit. */
+  --radius-lg: 12px;
+  --radius-md: 9px;
+  --radius-sm: 6px;
+
+  /* docs/design-system.md §4: Open Sans für Fließtext, Tabellen und Formulare,
+     Space Grotesk für Headings, Wortmarke, Buttons und Labels. */
+  --font-sans: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-grotesk: var(--font-space-grotesk), var(--font-open-sans), sans-serif;
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
@@ -61,75 +68,83 @@
 }
 
 @layer base {
+  /* Light: definiert, aber nicht ausgeliefert (docs/design-system.md §3.4).
+     Es gibt keinen Theme-Umschalter; <html> trägt fest die Klasse "dark".
+     Die Werte stehen hier, damit sie später nicht in jedes Bauteil nachgezogen
+     werden müssen. Warmer Parchment-Boden aus dem Quellsystem. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --background: 40 7.7% 92.4%;
+    --foreground: 240 6.1% 9.6%;
+    --card: 45 22.2% 96.5%;
+    --card-foreground: 240 6.1% 9.6%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
+    --popover-foreground: 240 6.1% 9.6%;
+    --primary: 73.8 31.7% 32.2%;
     --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
+    --secondary: 45 10% 88%;
+    --secondary-foreground: 240 6.1% 9.6%;
+    --muted: 45 10% 88%;
+    --muted-foreground: 240 2% 46%;
+    --accent: 37.9 94.5% 42.7%;
+    --accent-foreground: 0 0% 5.1%;
+    --destructive: 3.6 70.8% 58.4%;
+    --destructive-foreground: 0 0% 5.1%;
+    --border: 60 2.6% 82.4%;
+    --input: 0 0% 100%;
+    --ring: 73.8 31.7% 32.2%;
+    --radius: 12px;
+    --chart-1: 73 34.3% 57.6%;
+    --chart-2: 73.3 30.5% 46.3%;
+    --chart-3: 73.4 31.5% 41.8%;
+    --chart-4: 73.8 31.7% 32.2%;
+    --chart-5: 72.9 33.9% 24.3%;
+    --sidebar-background: 45 22.2% 96.5%;
+    --sidebar-foreground: 240 6.1% 9.6%;
+    --sidebar-primary: 73.8 31.7% 32.2%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 45 10% 88%;
+    --sidebar-accent-foreground: 240 6.1% 9.6%;
+    --sidebar-border: 60 2.6% 82.4%;
+    --sidebar-ring: 73.8 31.7% 32.2%;
   }
 
+  /* Dark "Signature" - das, was tatsächlich ausgeliefert wird.
+     Werte aus docs/design-system.md §3.2 (Flächen), §3.3 (Akzente), §6.2 (Kategorienrampe).
+     Die Vordergrundregel ist pro Farbe verschieden und gemessen: Olive braucht hellen
+     Text, Amber und Destructive brauchen dunklen. Nicht vereinheitlichen. */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 60 6.7% 2.9%;
+    --foreground: 60 20% 95.1%;
+    --card: 60 8.3% 4.7%;
+    --card-foreground: 60 20% 95.1%;
+    --popover: 60 3% 6.5%;
+    --popover-foreground: 60 20% 95.1%;
+    --primary: 73.8 31.7% 32.2%;
+    --primary-foreground: 60 20% 95.1%;
+    --secondary: 60 4.2% 9.4%;
+    --secondary-foreground: 60 20% 95.1%;
+    --muted: 60 4.2% 9.4%;
+    --muted-foreground: 60 1.2% 50.8%;
+    --accent: 37.9 94.5% 42.7%;
+    --accent-foreground: 0 0% 5.1%;
+    --destructive: 3.6 70.8% 58.4%;
+    --destructive-foreground: 0 0% 5.1%;
+    --border: 60 1.8% 11.2%;
+    --input: 60 5% 7.8%;
+    --ring: 73.8 31.7% 32.2%;
+    --chart-1: 73 34.3% 57.6%;
+    --chart-2: 73.3 30.5% 46.3%;
+    --chart-3: 73.4 31.5% 41.8%;
+    --chart-4: 73.8 31.7% 32.2%;
+    --chart-5: 72.9 33.9% 24.3%;
+    --sidebar-background: 60 5.3% 3.7%;
+    --sidebar-foreground: 60 20% 95.1%;
+    --sidebar-primary: 73.8 31.7% 32.2%;
+    --sidebar-primary-foreground: 60 20% 95.1%;
+    --sidebar-accent: 60 4.2% 9.4%;
+    --sidebar-accent-foreground: 60 20% 95.1%;
+    --sidebar-border: 60 1.8% 11.2%;
+    --sidebar-ring: 73.8 31.7% 32.2%;
   }
 }
 
@@ -137,7 +152,28 @@
   * {
     @apply border-border;
   }
+
+  /* Grundmaßstab: 14px / 1.5 (docs/design-system.md §4.2 - App-Maßstab, dicht). */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans text-sm leading-normal antialiased;
+  }
+
+  /* Fokus ist Barrierefreiheit, keine Zugabe - für Tastaturnutzer:innen gibt es nichts
+     anderes (docs/design-system.md §6.1, §8). */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  }
+
+  /* docs/design-system.md §7: prefers-reduced-motion respektieren. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

@@ -12,6 +12,9 @@ const eslintConfig = [
       "build/**",
       "next-env.d.ts",
       "src/components/ui/**",
+      // Referenzmaterial, kein App-Code: die mitgelieferte Design-System-Ablage ist
+      // gitignoriert und wird nie gebaut.
+      "docs/**",
     ],
   },
 ];

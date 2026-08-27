@@ -472,3 +472,49 @@ auf ein verknüpftes Projekt übertragen — die Werte oben müssten also nicht 
 _Die offenen Punkte aus `spec.md` (CAPTCHA, Signup-Enumeration, § 132 BAO, Aufbewahrung der
 Auth-Protokolle) bleiben offen und werden von diesem Design nicht beantwortet — TD-16 nennt das
 Risiko der ersten beiden ausdrücklich._
+
+---
+
+## Notizen aus dem Bau
+
+_Angefügt von `/build`. Das Design oben ist der Entwurf, das hier die Stellen, an denen die
+Umsetzung davon abweicht — damit die Dokumente nicht auseinanderlaufen._
+
+### Die Drosselung hat zwei Funktionen statt drei — und das ist eine Sicherheitskorrektur
+
+Der Entwurf beschrieb **prüfen**, **festhalten** und **aufräumen** als drei Funktionen, dazu ein
+Zurücksetzen nach erfolgreicher Anmeldung. Beim Bauen zeigte sich, dass das ein Loch hat: Der
+Server ruft diese Funktionen **abgemeldet** auf, sie müssen also für die Rolle `anon` freigegeben
+sein — und `anon` ist der Schlüssel, der in jedem Browser steckt. Eine freigegebene
+„Zähler zurücksetzen"-Funktion hätte jede:r direkt aufrufen können; die Drosselung wäre Dekoration
+gewesen.
+
+Gebaut ist deshalb:
+
+- **`login_attempt_gate(email, ip)`** — prüft **und** hält den Versuch fest, in einem Aufruf,
+  bevor die Zugangsdaten geprüft werden. Die einzige abgemeldet aufrufbare Funktion. Ein bereits
+  gesperrter Versuch wird nicht mitgezählt, sonst verlängert Hämmern die Sperre endlos.
+- **`clear_own_login_attempts()`** — nimmt **kein Argument** und liest die Adresse aus dem
+  angemeldeten Konto. Nur für `authenticated`. Niemand kann fremde Zähler zurücksetzen.
+- **`cleanup_login_attempts()`** — unverändert, ohne jedes Client-Recht.
+
+Alle Acceptance Criteria bleiben unverändert erfüllt. Der Zähler zählt jetzt *Versuche* statt
+*Fehlversuche* — praktisch dasselbe, weil eine geglückte Anmeldung sofort aufräumt.
+
+### Kleinere Festlegungen
+
+- **Rückmeldungen:** „Sitzung abgelaufen" und „Konto gelöscht" stehen als Hinweiszeile über der
+  Karte auf `/login` (so wie in der Meldungstabelle oben). Nur das Abmelden ist ein Toast — eine
+  flüchtige Bestätigung gehört nicht über ein Formular, in das man gerade wieder tippen will.
+- **Steuerelementhöhe 36px** wird über `className` an den Elementen dieses Features gesetzt, nicht
+  in den shadcn-Bausteinen. Die gehören zum Rahmen, und der gehört PROJ-2 — dort ist der richtige
+  Ort, den Wert einmal zentral zu setzen.
+- **Toast-Fläche** ist derzeit `--background` statt `--popover`, weil das der ausgelieferte Zustand
+  von `src/components/ui/sonner.tsx` ist. Ein Token-Tausch für PROJ-2, kein Eingriff hier.
+- **Keine Client-Validierung.** Die Zod-Prüfung läuft nur auf dem Server, die Formulare tragen
+  `noValidate`. Eine zweite Stelle mit denselben Regeln ist die erste, die beim Ändern vergessen
+  wird. Die Meldungen kommen aus einer Quelle.
+- **`/konto` bekam zusätzlich ein `loading.tsx`** mit den Skeletons, die das Seitenmuster verlangt.
+- **ESLint prüfte bisher auch `docs/`** — gitignoriertes Referenzmaterial mit eigenen Verstößen.
+  Dadurch war `npm run lint` schon vor diesem Feature rot. `docs/**` steht jetzt in den
+  `ignores` der ESLint-Konfiguration.
