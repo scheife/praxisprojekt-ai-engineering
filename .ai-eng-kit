@@ -1,0 +1,81 @@
+{
+  "version": "0.5.1",
+  "mode": "new",
+  "language": "de",
+  "agents": [
+    "claude"
+  ],
+  "memory": "CLAUDE.md",
+  "createdWith": "create-ai-eng-app",
+  "platform": "web",
+  "stack": {
+    "framework": "nextjs",
+    "backend": null,
+    "test": "vitest",
+    "e2e": "playwright",
+    "ui": "shadcn",
+    "deploy": null,
+    "packageManager": "npm"
+  },
+  "commands": {
+    "dev": "npm run dev",
+    "build": "npm run build",
+    "test": "npm test",
+    "lint": "npm run lint"
+  },
+  "probe": {
+    "kind": "http",
+    "baseUrl": "http://localhost:3000"
+  },
+  "law": null,
+  "managed": {
+    ".claude/skills": [
+      "architecture",
+      "audit",
+      "build",
+      "cleanup",
+      "deploy",
+      "dsgvo",
+      "e2e-tests",
+      "help",
+      "init",
+      "map",
+      "qa",
+      "refactor",
+      "refine",
+      "reverse-spec",
+      "security-check",
+      "starter-kit-migration",
+      "tasks",
+      "verify-setup",
+      "write-spec"
+    ],
+    ".claude/rules": [
+      "general.md",
+      "security.md"
+    ],
+    ".claude/agents": [
+      "qa-engineer.md"
+    ],
+    "docs/production": [
+      "database-optimization.md",
+      "error-tracking.md",
+      "performance.md",
+      "rate-limiting.md",
+      "security-headers.md"
+    ],
+    "docs/stacks": [
+      "backend-supabase.md",
+      "deploy-hostinger.md",
+      "deploy-vercel.md",
+      "framework-nextjs.md",
+      "tests-vitest-playwright.md",
+      "ui-shadcn.md"
+    ],
+    "docs/law": [
+      "ai-act.md",
+      "dsg.md",
+      "gdpr.md"
+    ]
+  }
+}
