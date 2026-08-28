@@ -6,7 +6,6 @@ import { deleteAccount, type DeleteAccountState } from '@/lib/actions/account'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -61,14 +60,30 @@ export function DeleteAccountDialog() {
           <AlertDialogCancel disabled={pending} className="h-9 font-grotesk">
             Abbrechen
           </AlertDialogCancel>
+          {/*
+            Bewusst ein gewöhnlicher Button und NICHT `AlertDialogAction`.
+
+            `AlertDialogAction` ist bei Radix ein `Dialog.Close`: sein Klick-Handler ist
+            `composeEventHandlers(props.onClick, () => onOpenChange(false))`, schließt also
+            den Dialog. Da dieses Formular **innerhalb** von `AlertDialogContent` liegt,
+            wurde es dabei ausgehängt, bevor React das Absenden verarbeiten konnte — der
+            Knopf löste überhaupt nichts aus, und der Dialog verschwand, als wäre gelöscht
+            worden (QA-Bericht, BUG-4: null Anfragen, Konto blieb bestehen).
+
+            Ohne `Close` bleibt der Dialog offen, solange die Action läuft: erst zeigt er
+            „Wird gelöscht …", dann leitet die Action auf `/login?reason=deleted` weiter.
+            Das ist zugleich die Voraussetzung dafür, dass `state.formError` überhaupt je
+            sichtbar wird — vorher war der Dialog beim Eintreffen des Fehlers längst zu.
+          */}
           <form action={formAction}>
-            <AlertDialogAction
+            <Button
               type="submit"
+              variant="destructive"
               disabled={pending}
-              className="h-9 w-full bg-destructive font-grotesk text-destructive-foreground hover:bg-destructive/90"
+              className="h-9 w-full font-grotesk"
             >
               {pending ? 'Wird gelöscht …' : 'Endgültig löschen'}
-            </AlertDialogAction>
+            </Button>
           </form>
         </AlertDialogFooter>
       </AlertDialogContent>

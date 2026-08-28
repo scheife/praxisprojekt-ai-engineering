@@ -99,7 +99,7 @@ Datei nicht schreiben.
 - [x] **T21**  Migration: beide Tore behandeln „keine erkennbare IP" als **eigenen Eimer** statt als Freifahrtschein (`ip is not distinct from p_ip`). Vorher übersprang `signup_attempt_gate` die Prüfung bei fehlender IP ganz und `login_attempt_gate` ließ die IP-Regel aus — das war die Hälfte von BUG-1, die in der Datenbank saß  · files: `supabase/migrations/20260828120000_ip_bucket_not_skip.sql`  · → AC-9, AC-17
 - [x] **T22**  `clientIpFrom` liest `x-forwarded-for` nur noch, wenn ein vertrauenswürdiger Proxy davorsteht (`TRUSTED_PROXY_HOPS`, Vorgabe `0`), und nimmt dann den `n`-ten Eintrag **von rechts** statt den ersten. Ohne Proxy wird der Kopf gar nicht gelesen  · files: `src/lib/rate-limit.ts`, `src/lib/rate-limit.test.ts`  · → AC-9, AC-17
 - [x] **T23**  Eigene Meldung für die Registrierung, wenn die Datenbank nicht erreichbar ist — bisher las man dort von einer „Anmeldung", die man nicht versucht hat (BUG-2)  · files: `src/lib/actions/auth.ts`  · → EC-4
-- [ ] **T24** `[user]`  `TRUSTED_PROXY_HOPS=0` in `.env.local.example` dokumentieren  · **where:** `.env.local.example`, unter den Supabase-Variablen · Der Schreibzugriff auf diese Datei ist für Claude gesperrt; der genaue Textblock steht im Build-Bericht  · → AC-9, AC-17
+- [x] **T24** `[user]`  `TRUSTED_PROXY_HOPS=0` in `.env.local.example` dokumentieren  · **where:** `.env.local.example`, unter den Supabase-Variablen · Der Schreibzugriff auf diese Datei ist für Claude gesperrt; der genaue Textblock steht im Build-Bericht  · → AC-9, AC-17
 
 > **Nicht in diesem Durchgang behoben, mit Absicht:**
 > - **BUG-3** (die 500-ms-Zusage aus AC-18 reißt in Ausreißern) — die Untergrenze von 350 ms
@@ -108,6 +108,21 @@ Datei nicht schreiben.
 >   Ausreißern nichts. Das ist eine Frage an den Vertrag, nicht an den Code → `/refine`.
 > - **BUG-4** (die Registrierungssperre zählt Versuche statt angelegter Konten) — betrifft den
 >   Wortlaut von AC-17 und gehört deshalb zuerst in ein `/refine`, nicht in einen Build.
+
+---
+
+## Level 8 — Nachbesserung nach dem E2E-Durchlauf
+
+<!-- Ergänzt am 28.08.2026. Die E2E-Suite hat BUG-4 gefunden: den Befund, den drei QA-Läufe
+     ohne Browser nicht sehen konnten. -->
+
+- [x] **T25**  Der Bestätigungsknopf im Löschdialog ist ein gewöhnlicher `Button type="submit"` statt `AlertDialogAction`. Letzteres ist bei Radix ein `Dialog.Close` und hängte das Formular beim Klick aus, bevor React das Absenden verarbeiten konnte — der Knopf löste nichts aus  · files: `src/components/account/delete-account-dialog.tsx`  · → AC-15
+- [x] **T26**  Vitest sammelt nur noch `src/**` ein. Mit dem neuen `tests/`-Verzeichnis griff es sich sonst die Playwright-Datei und brach ab (`npm test` rot bei 38 grünen Tests)  · files: `vitest.config.ts`  · → Testbarkeit, kein AC
+- [x] **T27**  Playwright: `workers: 2` und `timeout: 90s`, dazu `global-setup`, das Testkonten und Drosselungs-Zähler leert  · files: `playwright.config.ts`, `tests/global-setup.ts`, `tests/helpers.ts`, `.gitignore`  · → AC-15, EC-1 (macht die Suite verlässlich)
+
+> **Weiterhin nicht behoben, mit Absicht:** BUG-1 (Aussperrung aller Nutzer:innen durch den
+> gemeinsamen Drosselungs-Eimer), BUG-2 (die Tore sind direkt aufrufbar) und BUG-3 (AC-17 zählt
+> Versuche statt Konten). Alle drei sind Vertrags- vor Codefragen und gehören in `/refine PROJ-1`.
 
 ---
 
@@ -129,7 +144,7 @@ Datei nicht schreiben.
 | AC-12 | T8, T13, T14 |
 | AC-13 | T1 |
 | AC-14 | T8, T12, T16 |
-| AC-15 | T3, T12, T16 |
+| AC-15 | T3, T12, T16, T25 |
 | AC-16 | T2, T18 |
 | AC-17 | T18, T19, T21, T22 |
 | AC-18 | T19 |

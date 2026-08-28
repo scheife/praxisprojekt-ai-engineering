@@ -47,3 +47,9 @@ next-env.d.ts
 # alexmacht-Website — gehört nicht in ein Repo, das für die Abgabe public wird.
 # Alle für dieses Projekt nötigen Werte sind nach docs/design-system.md übernommen.
 docs/alexmacht.at Design System */
+
+# Playwright (Lauf-Artefakte, keine Quellen)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

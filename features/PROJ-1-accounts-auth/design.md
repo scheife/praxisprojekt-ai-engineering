@@ -682,3 +682,42 @@ Datenbank „Die **Anmeldung** ist gerade nicht möglich." Jetzt gibt es `LOGIN_
   eine Frage an den Vertrag (`/refine` auf AC-18), nicht an den Code.
 - **BUG-4** (die Registrierungssperre zählt Versuche statt angelegter Konten). Betrifft den
   Wortlaut von AC-17 und gehört deshalb zuerst in ein `/refine`.
+
+---
+
+## Nachtrag: Behebung von BUG-4 aus dem E2E-Durchlauf (28.08.2026)
+
+**Der Befund.** Der Knopf „Endgültig löschen" im Bestätigungsdialog löste **nichts** aus: keine
+einzige Anfrage ging hinaus, das Konto blieb bestehen — und der Dialog schloss sich, als wäre es
+erledigt. Ein stiller Fehlschlag auf genau dem Weg, über den `spec.md` das Löschrecht aus
+Art. 17 DSGVO einlöst.
+
+**Die Ursache, in der Quelle nachgelesen statt vermutet.** `AlertDialogAction` ist bei Radix ein
+`DialogPrimitive.Close` (`node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:85`), und dessen
+Klick-Handler ist `composeEventHandlers(props.onClick, () => context.onOpenChange(false))`. Der Klick
+schließt also den Dialog. Weil das `<form action={formAction}>` **innerhalb** von
+`AlertDialogContent` liegt, wurde es dabei ausgehängt, bevor React das Absenden verarbeiten konnte.
+
+**Warum `e.preventDefault()` keine Lösung gewesen wäre:** Es hätte zwar Radix' Schließen unterbunden
+(`composeEventHandlers` prüft `defaultPrevented`), zugleich aber das Absenden des Formulars selbst
+verhindert — der Knopf ist ein `type="submit"`.
+
+### TD-19: Der Bestätigungsknopf ist ein gewöhnlicher Button, kein `AlertDialogAction`
+
+| | |
+|---|---|
+| **Entscheidung** | Im Löschdialog steht `<Button type="submit" variant="destructive">` statt `AlertDialogAction` |
+| **Begründung** | Der Dialog darf sich nicht schließen, solange die Action läuft — sonst verschwindet das Formular unter ihr |
+| **Alternative erwogen** | Das Formular aus dem Dialoginhalt herausziehen und den Knopf über `form="..."` anbinden; oder die Action aus einem `onClick` heraus aufrufen statt über ein Formular |
+| **Abwägung** | Der Dialog bleibt jetzt offen, solange gelöscht wird, und zeigt „Wird gelöscht …". Das ist nicht nur hinnehmbar, sondern die Voraussetzung dafür, dass `state.formError` überhaupt je sichtbar wird — vorher war der Dialog beim Eintreffen eines Fehlers längst zu, der im Bauteil vorgesehene Fehlerfall also toter Code |
+| **Datum** | 2026-08-28 |
+
+### Zwei Nebenwirkungen des neuen `tests/`-Verzeichnisses
+
+- **Vitest sammelte die Playwright-Datei ein** und brach mit „Playwright Test did not expect
+  test.beforeEach() to be called here" ab — `npm test` war rot bei 38 grünen Tests. `vitest.config.ts`
+  sammelt jetzt ausdrücklich nur `src/**`.
+- **Die E2E-Suite braucht `workers: 2` und `timeout: 90s`.** Acht gleichzeitige Registrierungen
+  überlasten `next dev`, und eine Journey durchläuft mehrere Seiten und Server Actions. Beides ist
+  Testumgebung, nicht Produktverhalten: dieselben Tests sind seriell grün, und die Antwortzeiten
+  misst `/qa` gegen den Produktions-Build.
