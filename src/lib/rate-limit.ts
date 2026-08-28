@@ -19,19 +19,55 @@ export type GateResult =
   | { state: 'unavailable' }
 
 /**
- * Die IP der anfragenden Person aus den Kopfzeilen.
+ * Wie viele vertrauenswürdige Proxys zwischen Aufrufer und App stehen.
  *
- * Im lokalen Betrieb ohne vorgelagerten Server gibt es keine — dann greift nur die
- * Adress-Regel, statt alle Anfragen in einen gemeinsamen Topf zu werfen und die
- * Entwicklung nach fünf Tippfehlern auszusperren (design.md, TD-14).
+ * `0` (die Vorgabe) heißt: keiner. Dann stammt `x-forwarded-for` vom Aufrufer selbst und
+ * wird **nicht gelesen** — siehe `clientIpFrom`. Läuft die App später hinter genau einem
+ * Reverse Proxy, ist der Wert `1`.
+ *
+ * Bewusst ohne `NEXT_PUBLIC_`-Präfix: der Wert gehört auf den Server und darf nicht mit
+ * dem Bundle in den Browser wandern.
  */
-export function clientIpFrom(headers: Headers): string | null {
-  const forwarded = headers.get('x-forwarded-for')
-  if (forwarded) {
-    // Bei mehreren Einträgen ist der erste die ursprüngliche Person.
-    const first = forwarded.split(',')[0]?.trim()
-    if (first) return first
-  }
+const TRUSTED_PROXY_HOPS = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? '0', 10)
+
+/**
+ * Die IP der anfragenden Person — aber nur, wenn sie überhaupt vertrauenswürdig sein kann.
+ *
+ * **Warum das nicht einfach der erste Eintrag ist (QA-Bericht, BUG-1):** `x-forwarded-for`
+ * schreibt der Aufrufer, und Proxys **hängen an**, statt zu ersetzen. Der erste Eintrag ist
+ * damit im Regelfall genau der Wert, den der Angreifer behauptet. Wer ihn als Schlüssel
+ * nimmt, lässt sich die Drosselung vom Angreifer selbst konfigurieren: eine andere IP je
+ * Anfrage, und AC-9 wie AC-17 sind ausgeschaltet (gemessen: 14 von 14 Anmeldeversuchen
+ * durch, 16 von 16 Konten angelegt).
+ *
+ * Deshalb gilt jetzt:
+ * - **Ohne vertrauenswürdigen Proxy** (`hops = 0`) wird der Kopf gar nicht gelesen. Das
+ *   Ergebnis ist `null` — und `null` ist seit der Migration `20260828120000` ein **eigener
+ *   Eimer**, kein Freifahrtschein: alle Anfragen ohne erkennbare IP zählen gemeinsam.
+ *   Lokal ist das exakt das bisherige Verhalten, wo sich ohnehin alle Anfragen `::1`
+ *   teilten — nur ohne die Umgehung.
+ * - **Mit `hops = n`** zählt der `n`-te Eintrag **von rechts**: den hat der eigene Proxy
+ *   angehängt, alles links davon kann der Aufrufer frei erfinden und wird ignoriert.
+ *
+ * Der Parameter existiert, damit die Regel testbar ist, ohne an der Umgebung zu drehen.
+ */
+export function clientIpFrom(
+  headers: Headers,
+  hops: number = TRUSTED_PROXY_HOPS,
+): string | null {
+  if (!Number.isFinite(hops) || hops < 1) return null
+
+  const chain = (headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+  // Zu kurze Kette heißt: der eigene Proxy hat nicht angehängt, was er sollte. Dann lieber
+  // keine IP als eine erfundene — der gemeinsame Eimer fängt es auf.
+  if (chain.length >= hops) return chain[chain.length - hops] ?? null
+
+  // Ein Proxy, der `x-forwarded-for` nicht setzt, setzt oft `x-real-ip`. Auch das gilt nur,
+  // wenn überhaupt einer vor der App steht.
   return headers.get('x-real-ip')?.trim() || null
 }
 

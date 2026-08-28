@@ -34,8 +34,15 @@ export type AuthFormState = {
  * unterscheidet, verrät, welche Adressen ein Konto haben.
  */
 const CREDENTIALS_WRONG = 'E-Mail-Adresse oder Passwort stimmt nicht.'
-const UNAVAILABLE =
+
+/**
+ * Zwei Sätze statt einem: Wer gerade ein Konto anlegen will, soll nicht von einer
+ * „Anmeldung" lesen, die er nicht versucht hat (QA-Bericht, BUG-2).
+ */
+const LOGIN_UNAVAILABLE =
   'Die Anmeldung ist gerade nicht möglich. Bitte versuche es in einem Moment noch einmal.'
+const SIGNUP_UNAVAILABLE =
+  'Die Registrierung ist gerade nicht möglich. Bitte versuche es in einem Moment noch einmal.'
 
 /**
  * Jede fehlgeschlagene Anmeldung braucht mindestens so lange.
@@ -105,7 +112,7 @@ export async function login(
     return fail({ formError: throttled(gate.retryAfterMinutes), email })
   }
   if (gate.state === 'unavailable') {
-    return fail({ formError: UNAVAILABLE, email })
+    return fail({ formError: LOGIN_UNAVAILABLE, email })
   }
 
   const supabase = await createClient()
@@ -150,7 +157,7 @@ export async function signup(
     }
   }
   if (gate.state === 'unavailable') {
-    return { formError: UNAVAILABLE, email }
+    return { formError: SIGNUP_UNAVAILABLE, email }
   }
 
   const supabase = await createClient()
@@ -176,7 +183,7 @@ export async function signup(
       }
     }
 
-    return { formError: UNAVAILABLE, email }
+    return { formError: SIGNUP_UNAVAILABLE, email }
   }
 
   // Die Profilzeile ist zu diesem Zeitpunkt bereits da — der Datenbank-Trigger hat sie

@@ -2,24 +2,65 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clientIpFrom, passLoginGate, passSignupGate, retryAfterMinutes } from './rate-limit'
 
-describe('IP-Ermittlung (TD-14)', () => {
-  it('nimmt bei mehreren Einträgen den ersten — die ursprüngliche Person', () => {
+describe('IP-Ermittlung — ohne vertrauenswürdigen Proxy (Vorgabe, BUG-1)', () => {
+  // hops = 0: `x-forwarded-for` schreibt der Aufrufer. Wer ihn dann als Schlüssel nimmt,
+  // lässt sich die Drosselung vom Angreifer konfigurieren. Also gar nicht erst lesen.
+  it('ignoriert den Kopf vollständig, egal was darin steht', () => {
     const headers = new Headers({
       'x-forwarded-for': '203.0.113.9, 198.51.100.7, 192.0.2.1',
     })
-    expect(clientIpFrom(headers)).toBe('203.0.113.9')
+    expect(clientIpFrom(headers, 0)).toBeNull()
   })
 
-  it('weicht auf x-real-ip aus', () => {
-    expect(clientIpFrom(new Headers({ 'x-real-ip': '203.0.113.9' }))).toBe('203.0.113.9')
+  it('lässt sich auch mit einem leeren ersten Eintrag nicht austricksen', () => {
+    // Genau der Weg, der AC-9 und AC-17 im QA-Durchlauf ausgeschaltet hat.
+    expect(clientIpFrom(new Headers({ 'x-forwarded-for': ',1.2.3.4' }), 0)).toBeNull()
+    expect(clientIpFrom(new Headers({ 'x-forwarded-for': ',' }), 0)).toBeNull()
   })
 
-  it('liefert null, wenn keine IP erkennbar ist — dann greift nur die Adress-Regel', () => {
-    expect(clientIpFrom(new Headers())).toBeNull()
+  it('ignoriert auch x-real-ip, solange kein Proxy davorsteht', () => {
+    expect(clientIpFrom(new Headers({ 'x-real-ip': '203.0.113.9' }), 0)).toBeNull()
   })
 
-  it('behandelt einen leeren Kopf wie einen fehlenden', () => {
-    expect(clientIpFrom(new Headers({ 'x-forwarded-for': '   ' }))).toBeNull()
+  it('liefert null, wenn gar kein Kopf da ist', () => {
+    expect(clientIpFrom(new Headers(), 0)).toBeNull()
+  })
+})
+
+describe('IP-Ermittlung — hinter einem vertrauenswürdigen Proxy', () => {
+  it('nimmt den Eintrag, den der eigene Proxy angehängt hat — den letzten', () => {
+    const headers = new Headers({
+      'x-forwarded-for': '203.0.113.9, 198.51.100.7, 192.0.2.1',
+    })
+    expect(clientIpFrom(headers, 1)).toBe('192.0.2.1')
+  })
+
+  it('ignoriert, was der Aufrufer links davon erfindet', () => {
+    // Der Angreifer behauptet eine andere IP; angehängt hat der Proxy 192.0.2.1.
+    const gefaelscht = new Headers({ 'x-forwarded-for': 'frei-erfunden, 192.0.2.1' })
+    const ehrlich = new Headers({ 'x-forwarded-for': '192.0.2.1' })
+    expect(clientIpFrom(gefaelscht, 1)).toBe(clientIpFrom(ehrlich, 1))
+  })
+
+  it('zählt bei zwei Proxys den zweiten von rechts', () => {
+    const headers = new Headers({
+      'x-forwarded-for': '203.0.113.9, 198.51.100.7, 192.0.2.1',
+    })
+    expect(clientIpFrom(headers, 2)).toBe('198.51.100.7')
+  })
+
+  it('überspringt leere Einträge, statt sich von ihnen verschieben zu lassen', () => {
+    expect(clientIpFrom(new Headers({ 'x-forwarded-for': ', ,192.0.2.1' }), 1)).toBe(
+      '192.0.2.1',
+    )
+  })
+
+  it('weicht auf x-real-ip aus, wenn der Proxy nur den setzt', () => {
+    expect(clientIpFrom(new Headers({ 'x-real-ip': '203.0.113.9' }), 1)).toBe('203.0.113.9')
+  })
+
+  it('liefert null, wenn die Kette kürzer ist als erwartet — lieber keine IP als eine erfundene', () => {
+    expect(clientIpFrom(new Headers({ 'x-forwarded-for': '192.0.2.1' }), 2)).toBeNull()
   })
 })
 

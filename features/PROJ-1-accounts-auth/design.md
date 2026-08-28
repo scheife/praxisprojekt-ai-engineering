@@ -618,3 +618,67 @@ Passwort stimmt nicht."
 
 `src/lib/supabase/client.ts` wurde von nichts importiert. Entfernt; PROJ-2 legt ihn an, wenn
 es ihn braucht.
+
+---
+
+## Nachtrag: Behebung von BUG-1 und BUG-2 aus dem zweiten QA-Durchlauf (28.08.2026)
+
+### BUG-1 — die IP-Regeln gehörten dem Aufrufer
+
+**Der Befund.** `clientIpFrom` nahm den **ersten** Eintrag aus `x-forwarded-for`. Diesen Kopf
+schreibt aber der Aufrufer, und Proxys **hängen an**, statt zu ersetzen — der erste Eintrag ist
+deshalb im Regelfall genau der Wert, den ein Angreifer behauptet. Zwei Wege liefen daran vorbei:
+
+| Weg | vorher | jetzt |
+|---|---|---|
+| je Anfrage eine andere IP behaupten | 14 von 14 Anmeldeversuchen durch, 16 von 16 Konten angelegt | 5 durch, 10 angelegt |
+| Kopf `,1.2.3.4` (leerer erster Eintrag) | 14 von 14 durch, 14 von 14 angelegt | 5 durch, 10 angelegt |
+
+Der zweite Weg war der schlimmere: Ein leerer erster Eintrag ließ `clientIpFrom` auf `null`
+fallen, und `null` bedeutete in **beiden** Toren „Regel überspringen". Ein einziger statischer
+Kopf schaltete AC-9 und AC-17 vollständig ab.
+
+**Die Behebung hat zwei Hälften — keine genügt allein.**
+
+*In der Datenbank* (`20260828120000_ip_bucket_not_skip.sql`): „keine erkennbare IP" ist jetzt ein
+**eigener Eimer**, kein Freifahrtschein. Aus `if p_ip is not null then …` wurde
+`a.ip is not distinct from p_ip`. Wer ohne verwertbare IP kommt, wird mit allen anderen zusammen
+gezählt. Der frühe Ausstieg in `signup_attempt_gate` ist ersatzlos weg.
+
+*In der Anwendung* (`src/lib/rate-limit.ts`): Der Kopf wird nur noch gelesen, wenn ein
+vertrauenswürdiger Proxy davorsteht, und dann zählt der `n`-te Eintrag **von rechts** — den hat
+der eigene Proxy angehängt, alles links davon ist frei erfunden und wird ignoriert.
+
+**Warum das lokal nichts ändert.** Ohne vorgelagerten Server teilten sich bisher schon alle
+Anfragen die IP `::1` und damit einen Eimer. Künftig heißt derselbe Eimer `null`. Die Sorge aus
+TD-14, die Entwicklung sperre sich nach fünf Tippfehlern selbst aus, traf also ohnehin nie zu —
+die Notiz „TD-14 war falsch: lokal gibt es sehr wohl eine IP" weiter oben hatte das bereits
+festgehalten.
+
+### TD-18: Der Kopf `x-forwarded-for` gilt nur mit ausdrücklich erklärtem Proxy
+
+| | |
+|---|---|
+| **Entscheidung** | `TRUSTED_PROXY_HOPS` (Vorgabe `0`) sagt, wie viele vertrauenswürdige Proxys vor der App stehen. Bei `0` wird `x-forwarded-for` **gar nicht gelesen**; bei `n` zählt der `n`-te Eintrag von rechts |
+| **Begründung** | Es gibt keinen Weg, einem selbst geschriebenen Kopf anzusehen, ob er echt ist. Die Vertrauensgrenze muss deshalb aus der Umgebung kommen, nicht aus dem Inhalt der Anfrage. Sicher als Vorgabe, ausdrücklich zu lockern |
+| **Alternative erwogen** | Weiter den ersten Eintrag nehmen und nur leere Einträge abfangen — hätte Variante B geschlossen und Variante A offen gelassen |
+| **Abwägung** | Ohne erklärten Proxy teilen sich alle Anfragen einen Eimer: fünf Fehlversuche von irgendwem sperren die IP-Regel für alle. Das ist derselbe Zustand wie bisher lokal und der Preis dafür, dass niemand mehr aus seinem Eimer herausspringt. Sobald die App hinter einem Proxy läuft, macht `TRUSTED_PROXY_HOPS=1` daraus wieder echte, getrennte IPs |
+| **Datum** | 2026-08-28 |
+
+**Der Wert gehört nicht in den Browser** — bewusst ohne `NEXT_PUBLIC_`-Präfix.
+
+### BUG-2 — die Registrierung sprach von einer „Anmeldung"
+
+`UNAVAILABLE` war eine Konstante für beide Wege. Auf `/signup` las man dadurch bei gestoppter
+Datenbank „Die **Anmeldung** ist gerade nicht möglich." Jetzt gibt es `LOGIN_UNAVAILABLE` und
+`SIGNUP_UNAVAILABLE`.
+
+### Nicht behoben, mit Begründung
+
+- **BUG-3** (AC-18: „unter 500 ms je Antwort" reißt in Ausreißern). Die Untergrenze von 350 ms
+  verursacht die Ausreißer **nicht**: `notFasterThanFloor` schläft nur die Differenz, und bei
+  509 ms echter Arbeit schläft es gar nicht mehr. Sie zu senken änderte an genau den Antworten
+  nichts, die über 500 ms lagen. Die Ausreißer sind reine Arbeitszeit unter Last. Damit ist das
+  eine Frage an den Vertrag (`/refine` auf AC-18), nicht an den Code.
+- **BUG-4** (die Registrierungssperre zählt Versuche statt angelegter Konten). Betrifft den
+  Wortlaut von AC-17 und gehört deshalb zuerst in ein `/refine`.

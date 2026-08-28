@@ -10,9 +10,15 @@
 > Eigentümer: `/tasks` legt diese Datei an; `/build` hakt ab. Kein Statusfeld hier — der Status des
 > Features lebt ausschließlich in `features/INDEX.md`.
 
-**Keine `[user]`-Aufgaben.** `design.md` → *Settings the user makes* ist leer: Alles, was dieses
-Feature an Auth-Einstellungen braucht, steht in `supabase/config.toml` im Repo und ist damit eine
-normale Bauaufgabe (T4).
+**Auth-Einstellungen sind keine `[user]`-Aufgaben.** Alles, was dieses Feature an
+Auth-Einstellungen braucht, steht in `supabase/config.toml` im Repo und ist damit eine normale
+Bauaufgabe (T4).
+
+**Eine `[user]`-Aufgabe kam später dazu:** T24 in Ebene 7 — eine Zeile in `.env.local.example`.
+Sie ist **keine fehlende Schutzmaßnahme**: die sichere Vorgabe (`TRUSTED_PROXY_HOPS = 0`, Kopf
+wird nicht gelesen) gilt auch ohne die Datei. Es geht allein darum, die Variable dort zu
+dokumentieren, wo die Regel in `.claude/rules/security.md` sie erwartet — Claude darf in diese
+Datei nicht schreiben.
 
 ---
 
@@ -84,6 +90,27 @@ normale Bauaufgabe (T4).
 
 ---
 
+## Level 7 — Nachbesserung nach dem zweiten QA-Durchlauf
+
+<!-- Ergänzt am 28.08.2026 nach dem zweiten /qa-Lauf. BUG-1 war der einzige High-Befund:
+     die IP-gestützten Regeln ließen sich vom Aufrufer abschalten. Die Behebung hat zwei
+     Hälften, Datenbank und Anwendung — beide sind nötig, keine genügt allein. -->
+
+- [x] **T21**  Migration: beide Tore behandeln „keine erkennbare IP" als **eigenen Eimer** statt als Freifahrtschein (`ip is not distinct from p_ip`). Vorher übersprang `signup_attempt_gate` die Prüfung bei fehlender IP ganz und `login_attempt_gate` ließ die IP-Regel aus — das war die Hälfte von BUG-1, die in der Datenbank saß  · files: `supabase/migrations/20260828120000_ip_bucket_not_skip.sql`  · → AC-9, AC-17
+- [x] **T22**  `clientIpFrom` liest `x-forwarded-for` nur noch, wenn ein vertrauenswürdiger Proxy davorsteht (`TRUSTED_PROXY_HOPS`, Vorgabe `0`), und nimmt dann den `n`-ten Eintrag **von rechts** statt den ersten. Ohne Proxy wird der Kopf gar nicht gelesen  · files: `src/lib/rate-limit.ts`, `src/lib/rate-limit.test.ts`  · → AC-9, AC-17
+- [x] **T23**  Eigene Meldung für die Registrierung, wenn die Datenbank nicht erreichbar ist — bisher las man dort von einer „Anmeldung", die man nicht versucht hat (BUG-2)  · files: `src/lib/actions/auth.ts`  · → EC-4
+- [ ] **T24** `[user]`  `TRUSTED_PROXY_HOPS=0` in `.env.local.example` dokumentieren  · **where:** `.env.local.example`, unter den Supabase-Variablen · Der Schreibzugriff auf diese Datei ist für Claude gesperrt; der genaue Textblock steht im Build-Bericht  · → AC-9, AC-17
+
+> **Nicht in diesem Durchgang behoben, mit Absicht:**
+> - **BUG-3** (die 500-ms-Zusage aus AC-18 reißt in Ausreißern) — die Untergrenze von 350 ms
+>   verursacht die Ausreißer *nicht*: `notFasterThanFloor` schläft nur, solange noch Zeit übrig
+>   ist, und tut bei 509 ms echter Arbeit gar nichts mehr. Sie zu senken änderte an den
+>   Ausreißern nichts. Das ist eine Frage an den Vertrag, nicht an den Code → `/refine`.
+> - **BUG-4** (die Registrierungssperre zählt Versuche statt angelegter Konten) — betrifft den
+>   Wortlaut von AC-17 und gehört deshalb zuerst in ein `/refine`, nicht in einen Build.
+
+---
+
 ## Abdeckung
 
 | AC / EC | Aufgaben |
@@ -96,7 +123,7 @@ normale Bauaufgabe (T4).
 | AC-6 | T5, T6, T11, T13 |
 | AC-7 | T10, T11, T13 |
 | AC-8 | T2, T10, T11, T13 |
-| AC-9 | T2, T10, T11, T13 |
+| AC-9 | T2, T10, T11, T13, T21, T22 |
 | AC-10 | T11, T13, T14 |
 | AC-11 | T7, T8, T15, T16 |
 | AC-12 | T8, T13, T14 |
@@ -104,12 +131,12 @@ normale Bauaufgabe (T4).
 | AC-14 | T8, T12, T16 |
 | AC-15 | T3, T12, T16 |
 | AC-16 | T2, T18 |
-| AC-17 | T18, T19 |
+| AC-17 | T18, T19, T21, T22 |
 | AC-18 | T19 |
 | EC-1 | T14 |
 | EC-2 | T11 |
 | EC-3 | T4, T7, T13 |
-| EC-4 | T11, T13 |
+| EC-4 | T11, T13, T23 |
 | EC-5 | T7, T12 |
 | EC-6 | T9 |
 | EC-7 | T20 |
