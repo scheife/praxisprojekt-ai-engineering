@@ -123,6 +123,26 @@ Datei nicht schreiben.
 > **Weiterhin nicht behoben, mit Absicht:** BUG-1 (Aussperrung aller Nutzer:innen durch den
 > gemeinsamen Drosselungs-Eimer), BUG-2 (die Tore sind direkt aufrufbar) und BUG-3 (AC-17 zählt
 > Versuche statt Konten). Alle drei sind Vertrags- vor Codefragen und gehören in `/refine PROJ-1`.
+> → **Genau das ist am 28.08.2026 passiert; Ebene 9 setzt das Ergebnis um.**
+
+---
+
+## Level 9 — Umsetzung des `/refine` vom 28.08.2026
+
+<!-- Das /refine hat die drei offenen Befunde am Vertrag entschieden: BUG-1 durch eine neue
+     Fassung von AC-9, BUG-3 durch eine neue Fassung von AC-17, BUG-2 bleibt bewusst offen
+     (TD-25). Gegenüber dem Code im Repo ändert sich dadurch genau zweierlei — siehe
+     design.md → „Was dieser Durchgang ändert". Drei disjunkte Dateisätze, alle [P]. -->
+
+- [x] **T28** [P]  Migration: `login_attempt_gate` bildet ohne verwertbare IP **keinen gemeinsamen Eimer** mehr — die IP-Regel wird wieder übersprungen, wenn `p_ip` leer ist (`is not distinct from` fällt dort weg). Grund: ein Zähler, der Angreifer und Nutzer:innen nicht unterscheiden kann, sperrt nur — fünf Fehlversuche auf eine erfundene Adresse blockierten jede echte Anmeldung 15 Minuten lang. **`signup_attempt_gate` bleibt unverändert** und behält den gemeinsamen Eimer (TD-23)  · files: `supabase/migrations/20260828140000_login_gate_no_shared_bucket.sql`  · → AC-9
+- [x] **T29** [P]  Die Drosselungsmeldung der Registrierung spricht von **Versuchen** statt von angelegten Konten und nennt nicht mehr „diese Verbindung" — ohne erkennbare IP stammen die Versuche gerade nicht aus derselben. Neuer Text: „Es wurden gerade zu viele Registrierungen versucht. Bitte versuche es in {n} Minuten erneut." Dazu die Kommentare in `rate-limit.ts`, die beim Anmelde-Tor noch die alte Eimer-Semantik beschreiben  · files: `src/lib/actions/auth.ts`, `src/lib/rate-limit.ts`  · → AC-17
+- [x] **T30** [P]  E2E-Gerüst: Der Reset der Drosselungs-Zähler **bleibt**, aber seine Begründung wird richtiggestellt. Bisher steht dort „sobald BUG-1 behoben ist, wird dieser Reset überflüssig" — das gilt nach T28 nur noch fürs Anmelden. Fürs **Registrieren** wird der Reset dauerhaft nötig, weil TD-23 den gemeinsamen Eimer bewusst behält und die Suite pro Lauf mehr als 10 Konten anlegt. Ohne Reset liefe sie in die eigene Sperre  · files: `tests/helpers.ts`, `tests/global-setup.ts`, `tests/PROJ-1-accounts-auth.spec.ts`, `playwright.config.ts`  · → AC-9, AC-17
+
+---
+
+## Level 10 — Durchstich
+
+- [x] **T31**  Gegen die Datenbankfunktionen nachweisen: fünf Fehlversuche auf eine erfundene Adresse sperren **keine** echte Anmeldung mehr (AC-9), die Adress-Regel greift unverändert bei fünf Versuchen (AC-8), die Registrierungssperre bei zehn (AC-17), und die Meldung dort nennt Versuche. Danach `npm run lint`, `npm run build`, `npm test` und die E2E-Suite grün  · files: —  · → AC-8, AC-9, AC-17
 
 ---
 
@@ -137,8 +157,8 @@ Datei nicht schreiben.
 | AC-5 | T11, T14 |
 | AC-6 | T5, T6, T11, T13 |
 | AC-7 | T10, T11, T13 |
-| AC-8 | T2, T10, T11, T13 |
-| AC-9 | T2, T10, T11, T13, T21, T22 |
+| AC-8 | T2, T10, T11, T13, T31 |
+| AC-9 | T2, T10, T11, T13, T21, T22, T28, T30, T31 |
 | AC-10 | T11, T13, T14 |
 | AC-11 | T7, T8, T15, T16 |
 | AC-12 | T8, T13, T14 |
@@ -146,7 +166,7 @@ Datei nicht schreiben.
 | AC-14 | T8, T12, T16 |
 | AC-15 | T3, T12, T16, T25 |
 | AC-16 | T2, T18 |
-| AC-17 | T18, T19, T21, T22 |
+| AC-17 | T18, T19, T21, T22, T29, T30, T31 |
 | AC-18 | T19 |
 | EC-1 | T14 |
 | EC-2 | T11 |
@@ -169,8 +189,12 @@ dem sie nicht gehören.
   ihre AC-IDs geprüft ist. Das hält den Datenvertrag vor der Oberfläche: Schema (L1) → Bausteine (L2)
   → Actions (L3) → Oberfläche (L4).
 - **`[P]` verlangt disjunkte Dateien.** Keine zwei `[P]`-Aufgaben derselben Ebene nennen denselben
-  Pfad. Geprüft: L1 sechs disjunkte Sätze, L2 vier, L3 zwei, L4 vier.
+  Pfad. Geprüft: L1 sechs disjunkte Sätze, L2 vier, L3 zwei, L4 vier, L9 drei — Migration,
+  Anwendung und Testgerüst berühren einander nicht.
 - **Warum T7 bis T10 nicht in derselben Ebene wie T11/T12 stehen:** die Server Actions importieren
   alle vier. Lägen sie zusammen, bekäme ein paralleler Agent eine Datei zu sehen, die es noch nicht
   gibt.
-- **T17 ist bewusst nicht `[P]`** — es ist die Integration, nicht ein weiterer Baustein.
+- **T17 und T31 sind bewusst nicht `[P]`** — sie sind die Integration, nicht ein weiterer Baustein.
+- **Die Ebenen 6 bis 10 sind Nachbesserungen**, keine Neubauten: Ebene 1 bis 5 haben das Feature
+  gebaut, danach hat jeder `/qa`- und `/e2e-tests`-Lauf eine Ebene angehängt. Ebene 9 setzt um, was
+  das `/refine` vom 28.08.2026 am Vertrag entschieden hat — offen sind dort nur noch T28 bis T31.

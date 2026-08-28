@@ -24,11 +24,18 @@ an ihr das RLS-Muster samt Signup-Trigger etabliert, das `expenses` danach eins 
 Einstellungen (etwa eine Standardwährung) landen hier, ohne dass am Auth-Schema gearbeitet werden muss.
 
 **Zu `login_attempts`** (eingeführt von PROJ-1): Die Tabelle gehört niemandem und hängt an keinem Profil.
-Sie hält zweierlei fest, unterschieden durch ein Merkmal `kind`: einen **fehlgeschlagenen Anmeldeversuch**
-zu einer E-Mail-Adresse und einer IP — auch wenn die Adresse gar kein Konto hat — und einen
-**Registrierungsversuch** je IP-Adresse. Sie ist die einzige Tabelle des Produkts, auf die **kein**
-Client zugreifen kann: RLS ist an, es gibt bewusst keine Policy, und gelesen wird nur durch
-Datenbankfunktionen mit erhöhten Rechten. Ihre Zeilen werden **nach 24 Stunden gelöscht** — die einzige
+Sie hält zweierlei fest, unterschieden durch ein Merkmal `kind`: einen **Anmeldeversuch** zu einer
+E-Mail-Adresse — auch wenn die Adresse gar kein Konto hat — und einen **Registrierungsversuch** je
+Herkunft. Beide tragen die IP-Adresse, sofern eine vertrauenswürdig erkennbar ist.
+
+Was eine fehlende IP bedeutet, ist je Art **verschieden**, und das ist Absicht (PROJ-1, AC-9 gegen
+AC-17): Beim Anmelden entfällt die IP-Regel dann ersatzlos — es gibt mit der Regel je Adresse eine
+Rückfallregel, und ein gemeinsamer Zähler wäre dort nur ein Hebel, um alle auszusperren. Beim
+Registrieren zählen alle Versuche ohne IP **gemeinsam** — dort gibt es keine Rückfallregel, weil jede
+Adresse neu ist.
+
+Sie ist die einzige Tabelle des Produkts, auf die **kein** Client lesend zugreifen kann: RLS ist an, es
+gibt bewusst keine Policy, und gelesen wird nur durch Datenbankfunktionen mit erhöhten Rechten. Ihre Zeilen werden **nach 24 Stunden gelöscht** — die einzige
 Entität mit einer eigenen Aufbewahrungsfrist. Details im `design.md` von PROJ-1, Rechtsgrundlage in
 `docs/privacy.md`.
 

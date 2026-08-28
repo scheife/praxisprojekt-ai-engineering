@@ -20,14 +20,17 @@ const AKTION = { timeout: 30_000 }
  * und teuer in der Pflege, die Masse der AC-Abdeckung tragen die Unit- und Integrationstests
  * aus `/build` und `/qa`. Hier steht nur, was niemals stillschweigend brechen darf.
  *
- * **Nicht abgedeckt, mit Absicht:** die Drosselung (AC-8, AC-9, AC-17). Dort liegt ein
- * offener High-Befund (QA-Bericht, BUG-1), und ein Test, der fünf Fehlanmeldungen auslöst,
- * würde derzeit alle parallel laufenden Anmelde-Tests mit aussperren.
+ * **Nicht abgedeckt, mit Absicht:** die Drosselung (AC-8, AC-9, AC-17). Sie hängt an Zählern,
+ * die sich über eine ganze Suite hinweg gegenseitig beeinflussen; geprüft wird sie gezielt
+ * gegen die Datenbankfunktionen — in den Unit-Tests und in `/qa`, wo eine IP frei übergeben
+ * werden kann. Ein E2E-Test, der fünf Fehlanmeldungen auslöst, wäre hier nur ein Zufallsgeber
+ * für die anderen Journeys.
  */
 
 test.beforeEach(() => {
-  // Siehe helpers.ts: solange alle Anfragen einen Zähler-Eimer teilen, sperrt die Suite
-  // sich sonst selbst aus. Keine der Journeys hier prüft die Drosselung.
+  // Siehe helpers.ts: Die Registrierungs-Drosselung zählt ohne erklärten Proxy alle Versuche
+  // gemeinsam (AC-17, TD-23) — ohne diesen Reset sperrt sich die Suite selbst aus. Keine der
+  // Journeys hier prüft die Drosselung.
   clearThrottle()
 })
 

@@ -70,6 +70,23 @@ function throttled(minutes: number): string {
   } erneut.`
 }
 
+/**
+ * Die Sperre der Registrierung — mit zwei bewussten Unterschieden zur Anmeldemeldung (AC-17,
+ * TD-24):
+ *
+ * 1. Sie spricht von **Versuchen**, nicht von angelegten Konten. Gezählt werden Versuche; ein
+ *    Wortlaut, der etwas anderes behauptet, wäre schlicht unwahr. Dass Versuche zählen, ist
+ *    außerdem Absicht: AC-5 verrät, ob eine Adresse ein Konto hat — zählte die Sperre nur
+ *    Erfolge, ließe sich damit unbegrenzt durchprobieren, wer hier Kunde ist.
+ * 2. Sie nennt **nicht** „diese Verbindung". Ohne vertrauenswürdig erkennbare IP zählen alle
+ *    Versuche gemeinsam (TD-23) — dann stammen sie gerade nicht aus derselben Verbindung.
+ */
+function signupThrottled(minutes: number): string {
+  return `Es wurden gerade zu viele Registrierungen versucht. Bitte versuche es in ${minutes} ${
+    minutes === 1 ? 'Minute' : 'Minuten'
+  } erneut.`
+}
+
 /** Feldfehler aus dem Schema in die Form bringen, die das Formular anzeigt. */
 function fieldErrorsFrom(issues: { path: PropertyKey[]; message: string }[]) {
   const fieldErrors: AuthFormState['fieldErrors'] = {}
@@ -149,12 +166,7 @@ export async function signup(
   // das sich das Design verließ, gibt es in diesem Stack nicht (QA-Bericht, BUG-3).
   const gate = await passSignupGate(email, clientIpFrom(await headers()))
   if (gate.state === 'blocked') {
-    return {
-      formError: `Von dieser Verbindung wurden gerade viele Konten angelegt. Bitte versuche es in ${
-        gate.retryAfterMinutes
-      } ${gate.retryAfterMinutes === 1 ? 'Minute' : 'Minuten'} erneut.`,
-      email,
-    }
+    return { formError: signupThrottled(gate.retryAfterMinutes), email }
   }
   if (gate.state === 'unavailable') {
     return { formError: SIGNUP_UNAVAILABLE, email }

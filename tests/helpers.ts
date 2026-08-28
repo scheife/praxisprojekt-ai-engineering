@@ -40,14 +40,21 @@ function psql(sql: string): string {
 /**
  * Leert die Drosselungs-Zähler.
  *
- * Notwendig wegen BUG-1 aus dem QA-Bericht: Solange kein vertrauenswürdiger Proxy erklärt
- * ist, teilen sich **alle** Anfragen einen einzigen Zähler-Eimer. Ohne diesen Reset würde
- * die Suite sich selbst aussperren — die Registrierung ist auf 10 Konten je Stunde für die
- * gesamte App begrenzt, und diese Suite legt acht an (vier Journeys × zwei Projekte).
+ * **Dieser Reset bleibt dauerhaft nötig — bitte nicht entfernen.** Die frühere Begründung
+ * („nur solange BUG-1 offen ist") gilt seit dem `/refine` vom 28.08.2026 nicht mehr, der
+ * Reset selbst aber sehr wohl, und zwar aus einem anderen Grund:
  *
- * Das versteckt den Fehler nicht: Keine der vier Journeys prüft die Drosselung. AC-8, AC-9
- * und AC-17 sind bewusst NICHT Teil dieser Suite, weil dort ein offener High-Befund liegt.
- * Sobald BUG-1 behoben ist, wird dieser Reset überflüssig.
+ * - **Anmelden:** Ohne erklärten Proxy entfällt die IP-Regel ersatzlos (AC-9, TD-22). Hier
+ *   sperrt sich die Suite also nicht mehr selbst aus — dafür bräuchte es den Reset nicht.
+ * - **Registrieren:** Hier zählen alle Versuche ohne erkennbare IP weiterhin **gemeinsam**,
+ *   und das ist Absicht (AC-17, TD-23) — es gibt keine Rückfallregel je Konto, die den
+ *   Schutz sonst trüge. Die Grenze von 10 Registrierungen je Stunde gilt damit für die
+ *   gesamte App, und diese Suite legt acht Konten an (vier Journeys × zwei Projekte). Zwei
+ *   Läufe in derselben Stunde laufen ohne Reset in die eigene Sperre.
+ *
+ * Das versteckt nichts: Keine der vier Journeys prüft die Drosselung. AC-8, AC-9 und AC-17
+ * werden von den Unit-Tests und von `/qa` gegen die Datenbankfunktionen geprüft, wo sich die
+ * Zähler gezielt und ohne Nebenwirkung auf andere Tests füllen lassen.
  */
 export function clearThrottle(): void {
   psql('delete from public.login_attempts;')

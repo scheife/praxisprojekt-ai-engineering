@@ -3,7 +3,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
   // Räumt vor dem Lauf die Testkonten früherer Läufe weg und leert die Drosselungs-Zähler.
-  // Nötig, solange alle Anfragen einen gemeinsamen Zähler-Eimer teilen (QA-Bericht, BUG-1).
+  // Dauerhaft nötig: Die Registrierungs-Drosselung zählt ohne erklärten Proxy alle Versuche
+  // gemeinsam — bewusst so (AC-17, TD-23). Siehe clearThrottle in tests/helpers.ts.
   globalSetup: './tests/global-setup.ts',
   fullyParallel: true,
   // Acht Tests gleichzeitig gegen `next dev` überlasten den Entwicklungsserver: jede

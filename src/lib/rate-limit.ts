@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/server'
  * weiterer Schlüssel, und die 24-Stunden-Löschung ist in derselben Datenbank nachweisbar,
  * in der sie entsteht (design.md, TD-4).
  *
- * Werte: 5 Versuche in 15 Minuten, getrennt je E-Mail-Adresse und je IP-Adresse (AC-8, AC-9).
+ * Werte: 5 Versuche in 15 Minuten, getrennt je E-Mail-Adresse (AC-8) und je IP-Adresse (AC-9);
+ * die IP-Regel greift nur, wenn eine IP vertrauenswürdig erkennbar ist — siehe `clientIpFrom`.
  * Prüfen und Festhalten passieren in **einem** Datenbankaufruf — eine getrennte
  * „zurücksetzen"-Funktion, die der Browser aufrufen könnte, würde die ganze Drosselung
  * wertlos machen.
@@ -42,12 +43,17 @@ const TRUSTED_PROXY_HOPS = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? '0'
  *
  * Deshalb gilt jetzt:
  * - **Ohne vertrauenswürdigen Proxy** (`hops = 0`) wird der Kopf gar nicht gelesen. Das
- *   Ergebnis ist `null` — und `null` ist seit der Migration `20260828120000` ein **eigener
- *   Eimer**, kein Freifahrtschein: alle Anfragen ohne erkennbare IP zählen gemeinsam.
- *   Lokal ist das exakt das bisherige Verhalten, wo sich ohnehin alle Anfragen `::1`
- *   teilten — nur ohne die Umgehung.
+ *   Ergebnis ist `null`, und was das bedeutet, ist **je Tor verschieden** (AC-9 gegen AC-17):
+ *   Beim **Anmelden** entfällt die IP-Regel dann ersatzlos — es bleibt die Regel je Adresse
+ *   (AC-8), die auch ohne IP trägt. Ein gemeinsamer Zähler wäre hier kein Schutz, sondern ein
+ *   Hebel: fünf Fehlversuche auf eine erfundene Adresse sperrten sonst jede echte Anmeldung
+ *   für 15 Minuten (QA-Bericht, BUG-1 · design.md, TD-22).
+ *   Beim **Registrieren** zählen alle Versuche ohne IP dagegen **gemeinsam** — dort gibt es
+ *   keine Rückfallregel je Konto, weil jede Adresse neu ist, und ohne den gemeinsamen Eimer
+ *   wäre das Anlegen von Konten wieder unbegrenzt (TD-23).
  * - **Mit `hops = n`** zählt der `n`-te Eintrag **von rechts**: den hat der eigene Proxy
- *   angehängt, alles links davon kann der Aufrufer frei erfinden und wird ignoriert.
+ *   angehängt, alles links davon kann der Aufrufer frei erfinden und wird ignoriert. Dann
+ *   greifen beide Regeln mit echter, getrennter IP und der Unterschied verschwindet.
  *
  * Der Parameter existiert, damit die Regel testbar ist, ohne an der Umgebung zu drehen.
  */
@@ -117,8 +123,11 @@ export async function passLoginGate(
  * Direktregistrierungen gingen durch. Ein CAPTCHA bleibt die stärkere Maßnahme und ist in
  * `spec.md` bewusst zurückgestellt; das hier schließt nur die Lücke.
  *
- * Anders als beim Anmelden zählt hier **nur die IP**: Die Adresse ist bei jeder Registrierung
- * eine neue und taugt nicht als Schlüssel.
+ * Anders als beim Anmelden zählt hier **nur die Herkunft**: Die Adresse ist bei jeder
+ * Registrierung eine neue und taugt nicht als Schlüssel. Und anders als beim Anmelden zählen
+ * Versuche **ohne** erkennbare IP hier **gemeinsam**, statt aus der Regel zu fallen — es gibt
+ * keine Rückfallregel je Konto, die den Schutz sonst trüge (AC-17, TD-23). Der Preis ist
+ * bekannt: ohne erklärten Proxy sind es 10 Registrierungen je Stunde für alle zusammen.
  */
 export async function passSignupGate(
   email: string,
