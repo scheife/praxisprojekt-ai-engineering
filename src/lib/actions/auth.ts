@@ -173,7 +173,25 @@ export async function signup(
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({ email, password })
+  let { error } = await supabase.auth.signUp({ email, password })
+
+  // Verliert eine Registrierung das Rennen um dieselbe Adresse, meldet Supabase das **nicht**
+  // als „Adresse vergeben": Der Client bekommt einen `AuthRetryableFetchError` mit HTTP 500
+  // und „Database error saving new user" — der Unique-Constraint-Verstoß auf
+  // `users_email_partial_key` steht nur im Auth-Log (QA-Bericht, BUG-1).
+  //
+  // Am Status oder am Text lässt sich der Fall **nicht** festmachen: Dieselbe Antwort kommt
+  // auch, wenn der Signup-Trigger scheitert. Dann existiert die Adresse gerade nicht, und
+  // „hat schon ein Konto" wäre eine Lüge, die vom Registrieren aussperrt.
+  //
+  // Also wird nicht geraten, sondern entschieden: Ein zweiter Versuch trifft auf ein
+  // abgeschlossenes Rennen. Gab es einen Gewinner, antwortet Supabase jetzt mit 422
+  // `user_already_exists`, und die Verzweigung unten liefert die Meldung aus AC-5 (EC-2).
+  // War es ein echter Ausfall, scheitert auch der zweite Versuch, und es bleibt bei
+  // SIGNUP_UNAVAILABLE. Genau ein Versuch, keine Schleife.
+  if (error?.status === 500) {
+    error = (await supabase.auth.signUp({ email, password })).error
+  }
 
   if (error) {
     // Die Datenbank-Mindestlänge ist die dritte Prüfung hinter Browser und Server. Kommt

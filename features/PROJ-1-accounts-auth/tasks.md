@@ -146,6 +146,14 @@ Datei nicht schreiben.
 
 ---
 
+## Level 11 — Behebung von BUG-1 aus dem fünften QA-Durchlauf
+
+<!-- Ergänzt am 28.08.2026. Genau ein Befund, genau eine Datei. -->
+
+- [x] **T32**  Beim Registrieren wird nach einem Fehler mit Status 500 **genau einmal** erneut versucht. Der Verlierer eines Rennens bekommt von Supabase keinen 422er, sondern „Database error saving new user" — und am Text lässt sich der Fall nicht festmachen, weil ein gescheiterter Signup-Trigger dieselbe Antwort erzeugt. Der zweite Versuch entscheidet es: Gab es einen Gewinner, kommt 422 und damit die Meldung aus AC-5; war es ein Ausfall, bleibt es bei „nicht möglich"  · files: `src/lib/actions/auth.ts`, `src/lib/actions/auth.test.ts`  · → EC-2, AC-5
+
+---
+
 ## Abdeckung
 
 | AC / EC | Aufgaben |
@@ -154,7 +162,7 @@ Datei nicht schreiben.
 | AC-2 | T1 |
 | AC-3 | T4, T9, T14 |
 | AC-4 | T9, T11, T14 |
-| AC-5 | T11, T14 |
+| AC-5 | T11, T14, T32 |
 | AC-6 | T5, T6, T11, T13 |
 | AC-7 | T10, T11, T13 |
 | AC-8 | T2, T10, T11, T13, T31 |
@@ -169,7 +177,7 @@ Datei nicht schreiben.
 | AC-17 | T18, T19, T21, T22, T29, T30, T31 |
 | AC-18 | T19 |
 | EC-1 | T14 |
-| EC-2 | T11 |
+| EC-2 | T11, T32 |
 | EC-3 | T4, T7, T13 |
 | EC-4 | T11, T13, T23 |
 | EC-5 | T7, T12 |

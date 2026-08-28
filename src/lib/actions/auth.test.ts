@@ -50,9 +50,11 @@ function formular(email: string, password: string): FormData {
   return fd
 }
 
+type Zustand = { formError?: string; fieldErrors?: { email?: string; password?: string } }
+
 async function laufe(fn: () => Promise<unknown>) {
   try {
-    return { state: (await fn()) as { formError?: string }, redirectedTo: null as string | null }
+    return { state: (await fn()) as Zustand, redirectedTo: null as string | null }
   } catch (error) {
     if (error instanceof RedirectSignal) return { state: {}, redirectedTo: error.to }
     throw error
@@ -95,6 +97,65 @@ describe('Registrierungssperre — der Wortlaut (AC-17, TD-24)', () => {
     await laufe(() => signup({}, formular('neu@example.com', 'EinLangesPasswort1')))
 
     expect(signUp).not.toHaveBeenCalled()
+  })
+})
+
+describe('Gleichzeitige Registrierung auf dieselbe Adresse (EC-2)', () => {
+  /**
+   * Der Verlierer des Rennens bekommt von Supabase **nicht** „Adresse vergeben", sondern
+   * einen `AuthRetryableFetchError`: HTTP 500, `code: undefined`,
+   * „Database error saving new user". Der Unique-Constraint-Verstoß steht nur im Auth-Log.
+   * Gemessen am 28.08.2026, QA-Bericht BUG-1.
+   */
+  const rennverlust = { status: 500, code: undefined, message: 'Database error saving new user' }
+  const schonVergeben = { status: 422, code: 'user_already_exists', message: 'User already registered' }
+
+  it('zeigt die Meldung aus AC-5, sobald der zweite Versuch den Gewinner sieht', async () => {
+    signUp
+      .mockResolvedValueOnce({ error: rennverlust })
+      .mockResolvedValueOnce({ error: schonVergeben })
+
+    const { state } = await laufe(() => signup({}, formular('race@example.com', 'EinLangesPasswort1')))
+
+    expect(state.formError).toBe('Diese E-Mail-Adresse hat schon ein Konto. Melde dich an.')
+    expect(signUp).toHaveBeenCalledTimes(2)
+  })
+
+  it('behauptet bei einem echten Ausfall NICHT, die Adresse sei vergeben', async () => {
+    // Dieselbe Antwort entsteht, wenn der Signup-Trigger scheitert — dann gibt es kein
+    // Konto zu der Adresse, und „hat schon ein Konto" würde vom Registrieren aussperren.
+    signUp.mockResolvedValue({ error: rennverlust })
+
+    const { state } = await laufe(() => signup({}, formular('neu@example.com', 'EinLangesPasswort1')))
+
+    expect(state.formError).toMatch(/^Die Registrierung ist gerade nicht möglich/)
+    expect(state.formError).not.toMatch(/schon ein Konto/)
+  })
+
+  it('versucht es genau einmal erneut, nicht in einer Schleife', async () => {
+    signUp.mockResolvedValue({ error: rennverlust })
+
+    await laufe(() => signup({}, formular('neu@example.com', 'EinLangesPasswort1')))
+
+    expect(signUp).toHaveBeenCalledTimes(2)
+  })
+
+  it('wiederholt nichts, wenn die Adresse schon beim ersten Versuch als vergeben gilt', async () => {
+    signUp.mockResolvedValue({ error: schonVergeben })
+
+    const { state } = await laufe(() => signup({}, formular('alt@example.com', 'EinLangesPasswort1')))
+
+    expect(state.formError).toBe('Diese E-Mail-Adresse hat schon ein Konto. Melde dich an.')
+    expect(signUp).toHaveBeenCalledTimes(1)
+  })
+
+  it('wiederholt nichts bei einem zu schwachen Passwort', async () => {
+    signUp.mockResolvedValue({ error: { status: 422, code: 'weak_password' } })
+
+    const { state } = await laufe(() => signup({}, formular('neu@example.com', 'kurz'.repeat(3))))
+
+    expect(state.fieldErrors?.password).toBe('Dein Passwort braucht mindestens 10 Zeichen.')
+    expect(signUp).toHaveBeenCalledTimes(1)
   })
 })
 

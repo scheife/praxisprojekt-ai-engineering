@@ -963,3 +963,61 @@ Transaktion wiederhergestellt, Befund reproduziert, `rollback`):
 Nutzerdaten, und die Weiterleitung aus AC-12 sitzt in `proxy.ts`, das für jede Anfrage läuft. Die
 Tabelle und der Build widersprechen sich hier trotzdem; das gehört geprüft und entweder korrigiert
 oder in der Tabelle festgehalten.
+
+---
+
+### Nachtrag: Behebung von BUG-1 aus dem fünften QA-Durchlauf (28.08.2026)
+
+**Der Befund.** Beim gleichzeitigen Registrieren derselben Adresse entstand korrekt genau ein Konto,
+der Verlierer des Rennens sah aber „Die Registrierung ist gerade nicht möglich" statt der in EC-2
+zugesagten Meldung aus AC-5.
+
+**Was der Client wirklich bekommt** — nachgemessen, nicht aus dem Server-Log abgeschrieben:
+
+| Fall | `status` | `code` | `message` |
+|---|---|---|---|
+| Rennen verloren | **500** | `undefined` | `"Database error saving new user"` |
+| Adresse sequentiell vergeben | 422 | `user_already_exists` | `"User already registered"` |
+
+Der QA-Bericht nannte zunächst `unexpected_failure` — das steht im **Auth-Log**, nicht in der
+Antwort an den Client. Der Unique-Constraint-Verstoß auf `users_email_partial_key` taucht beim
+Aufrufer überhaupt nicht auf.
+
+**Warum der naheliegende Fix falsch gewesen wäre.** Auf Status oder Meldungstext zu prüfen, trifft
+den falschen Fall mit: **Dieselbe Antwort** entsteht, wenn der Signup-Trigger scheitert. Dann gibt es
+zu der Adresse gar kein Konto, und „hat schon ein Konto" wäre eine Lüge, die vom Registrieren
+aussperrt — schlimmer als der Bug.
+
+**Die Behebung entscheidet, statt zu raten:** Bei Status 500 wird **genau einmal** erneut
+registriert. Das Rennen ist dann vorbei und der Gewinner geschrieben, also antwortet Supabase mit
+422 `user_already_exists`, und die bestehende Verzweigung liefert die Meldung aus AC-5. War es ein
+echter Ausfall, scheitert auch der zweite Versuch, und es bleibt bei `SIGNUP_UNAVAILABLE`. Keine
+Schleife, ein zusätzlicher Aufruf ausschließlich im Fehlerpfad.
+
+**Nachgewiesen:**
+
+| Prüfung | Ergebnis |
+|---|---|
+| Rennen über die laufende App, 5 Läufe | 5 von 5: Meldung aus AC-5, genau ein Konto |
+| Signup-Trigger absichtlich zerstört (erzeugt denselben 500er) | „Die Registrierung ist gerade nicht möglich" — **nicht** „schon ein Konto" |
+| Trigger wiederhergestellt | Registrierung 303, ein Konto, ein Profil (AC-2 unversehrt) |
+| Rot-Nachweis | Wiederholung entfernt → 3 Tests rot, darunter der Bug selbst |
+
+Dazu fünf neue Tests in `src/lib/actions/auth.test.ts` (57 gesamt).
+
+### Die E2E-Suite ist gegen `next dev` unzuverlässig — gemessen
+
+Beim Absichern des Fixes fiel auf, dass die Suite sporadisch fehlschlägt, auch in Journeys, die diese
+Änderung nicht berührt. Der Vergleich mit und ohne den Fix zeigt: **es liegt nicht am Code, sondern
+am Server, gegen den getestet wird.**
+
+| Konfiguration | Lauf 1 | Lauf 2 | Lauf 3 | Dauer |
+|---|---|---|---|---|
+| `next dev`, **ohne** Fix | 3 rot | 8 grün | 5 rot | 1,7–3,2 min |
+| `next dev`, **mit** Fix | 8 grün | 8 grün | 4 rot | 1,0–2,2 min |
+| **`next start`**, mit Fix | **8 grün** | **8 grün** | **8 grün** | **27–38 s** |
+
+`playwright.config.ts` startet derzeit `npm run dev`. Ein Regressionsnetz, das in einem von drei
+Läufen grundlos reißt, wird irgendwann ignoriert — und dann fängt es nichts mehr. Der Wechsel auf
+einen Produktions-Build ist **nicht** Teil dieser Behebung und bewusst offen gelassen; er gehört
+entschieden, nicht nebenbei gemacht.
