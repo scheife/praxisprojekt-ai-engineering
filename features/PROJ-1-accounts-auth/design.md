@@ -698,6 +698,21 @@ Die Vorkehrung für den Fall *ohne* IP bleibt im Code: Fehlt der Kopf, greift nu
 - **Rückmeldungen:** „Sitzung abgelaufen" und „Konto gelöscht" stehen als Hinweiszeile über der
   Karte auf `/login` (so wie in der Meldungstabelle oben). Nur das Abmelden ist ein Toast — eine
   flüchtige Bestätigung gehört nicht über ein Formular, in das man gerade wieder tippen will.
+- **Schein hinter der Karte auf `/login` und `/signup`** (`.auth-backdrop` in `globals.css`): zwei
+  radiale Verläufe in Olive (`--primary` mit 18 %, `olive-link` mit 9 %) als Pseudo-Element hinter
+  dem Inhalt. Der Grund ist messbar: `--card` (`#0d0d0b`) liegt nur fünf Helligkeitspunkte über
+  `--background` (`#080807`) — auf einem großen Bildschirm schwebt die Karte dadurch nicht, sie
+  verschwindet. Reine Dekoration, ohne Klickfläche und ohne Rolle für Screenreader.
+- **Einblenden beim Laden** (`.auth-enter` / `.auth-enter-delayed`): 320 ms, Easing
+  `cubic-bezier(.22,1,.36,1)`, 8 px Anheben, Wortmarke 90 ms vor der Karte. Werte aus
+  `docs/design-system.md` §7, nur CSS. **Kein `opacity: 0` als Grundzustand** — die Null lebt
+  ausschließlich im `from` der Keyframes, damit die Regel „Inhalte sind im Grundzustand sichtbar"
+  auch dann hält, wenn keine Animation läuft. Die globale `prefers-reduced-motion`-Regel kürzt zwar
+  jede Dauer, **setzt aber die Verzögerung nicht zurück**; ohne die eigene Regel dafür bliebe die
+  Karte bei reduzierter Bewegung 90 ms unsichtbar — genau das Flackern, das die Einstellung
+  vermeiden soll.
+- **`/` und `/konto` haben den Schein bewusst nicht.** Dort baut PROJ-2 den Header hinein und
+  entscheidet den Hintergrund mit; ein Vorgriff hier wäre eine Festlegung für ein fremdes Feature.
 - **Wortmarke auf `text-4xl` (36px)**, einheitlich auf allen fünf Stellen — `/login`, `/signup`,
   `/`, `/konto` und dessen `loading.tsx`. Vorher `text-2xl` (24px), was neben der Kartenüberschrift
   (`text-xl`, 20px) kaum auffiel: das erste Element der Seite sah aus wie eine zweite Überschrift.

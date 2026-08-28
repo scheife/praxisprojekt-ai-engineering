@@ -10,10 +10,10 @@ export const metadata: Metadata = { title: 'Konto anlegen · auslage.' }
 /** Wie `/login`: kein Rahmen, zentrierte Karte, Wortmarke darüber (docs/app-shell.md). */
 export default function SignupPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
-      <Wordmark className="mb-8 text-4xl" />
+    <main className="auth-backdrop flex min-h-screen flex-col items-center justify-center px-5 py-12">
+      <Wordmark className="auth-enter mb-8 text-4xl" />
 
-      <div className="w-full max-w-sm">
+      <div className="auth-enter-delayed w-full max-w-sm">
         <Card>
           <CardHeader>
             <CardTitle className="font-grotesk text-xl">Konto anlegen</CardTitle>

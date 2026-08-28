@@ -43,8 +43,11 @@ Aktion auf, statt eine zweite zu bauen.
   (`‹ August 2026 ›`) mittig · Abmelden rechts.
 - **Inhalt:** max. 1180px, zentriert.
 - **Keine Sidebar.**
-- **Login und Signup tragen keinen Rahmen:** zentrierte Karte auf leerem Grund, nur die Wortmarke
-  darüber. **`/konto` folgt demselben Muster**, solange es den Header noch nicht gibt.
+- **Login und Signup tragen keinen Rahmen:** zentrierte Karte, nur die Wortmarke darüber. Hinter der
+  Karte liegt ein weicher Schein in Olive — er trennt sie vom Grund, der sonst fast dieselbe
+  Helligkeit hat (Details im `design.md` von PROJ-1, dem beide Seiten gehören).
+  **`/konto` folgt demselben Muster**, solange es den Header noch nicht gibt — **ohne** den Schein:
+  den Hintergrund des angemeldeten Bereichs entscheidet PROJ-2 mit dem Header.
 - **Mobil (unter `md`):** Header bleibt, der Monatswechsler rückt in eine zweite Zeile. Kein Burger —
   es gibt nichts zu verbergen.
 

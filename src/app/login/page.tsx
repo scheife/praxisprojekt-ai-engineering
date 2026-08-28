@@ -23,10 +23,10 @@ export default async function LoginPage({
   const { reason } = await searchParams
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
-      <Wordmark className="mb-8 text-4xl" />
+    <main className="auth-backdrop flex min-h-screen flex-col items-center justify-center px-5 py-12">
+      <Wordmark className="auth-enter mb-8 text-4xl" />
 
-      <div className="w-full max-w-sm">
+      <div className="auth-enter-delayed w-full max-w-sm">
         <LoginNotice reason={reason} />
 
         <Card>

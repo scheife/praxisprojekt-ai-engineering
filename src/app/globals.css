@@ -67,6 +67,77 @@
   to { height: 0; }
 }
 
+/* ---------------------------------------------------------------------------
+   Die Anmeldeseiten: Schein hinter der Karte + ruhiges Einblenden.
+
+   Warum überhaupt: --card (#0d0d0b) liegt nur wenige Prozent über --background
+   (#080807). Auf einem großen Bildschirm schwebt die Karte dadurch nicht, sie
+   verschwindet. Der Schein gibt ihr einen Grund, auf dem sie steht.
+
+   docs/design-system.md §7 gibt die Regeln vor, an die sich das hier hält:
+   nur CSS, keine Bibliothek · Dauern 120/180/320ms · Easing (.22,1,.36,1) ·
+   ruhig, kein Bounce · prefers-reduced-motion respektieren.
+
+   Die wichtigste Regel ist „Inhalte sind im Grundzustand sichtbar - nie erst
+   durch eine Animation": Deshalb steht NIRGENDS `opacity: 0` als Grundzustand.
+   Die 0 lebt ausschließlich im `from` der Keyframes. Läuft die Animation nicht
+   - kein CSS, reduzierte Bewegung, alter Browser -, ist alles normal sichtbar.
+   --------------------------------------------------------------------------- */
+
+@keyframes auth-glow-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes auth-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Der Schein. Liegt als Pseudo-Element hinter dem Inhalt, fängt keine Klicks ab
+   und ist reine Dekoration - deshalb ohne eigene Rolle für Screenreader. */
+.auth-backdrop {
+  position: relative;
+  isolation: isolate;
+}
+
+.auth-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Zwei Ellipsen statt einer: die weite trägt den Raum, die enge setzt den Kern
+     hinter die Karte. Olive #606C38 = --primary, Olive-Link #8a9a52 für den Kern. */
+  background:
+    radial-gradient(46rem 34rem at 50% 44%, rgba(96, 108, 56, 0.18), transparent 68%),
+    radial-gradient(20rem 15rem at 50% 42%, rgba(138, 154, 82, 0.09), transparent 62%);
+  animation: auth-glow-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Einblenden, leicht gestaffelt: erst die Wortmarke, dann die Karte darunter.
+   320ms ist die `slow`-Stufe - für den ersten Eindruck einer Seite richtig,
+   für alles Wiederkehrende wäre sie zu lang. */
+.auth-enter {
+  animation: auth-rise-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-enter-delayed {
+  animation: auth-rise-in 320ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+}
+
+/* Die globale Regel weiter unten kürzt jede Animation auf 0,01ms - sie setzt aber
+   die VERZÖGERUNG nicht zurück. Ohne diese Zeile bliebe die Karte bei reduzierter
+   Bewegung 90ms lang unsichtbar: genau das Flackern, das die Einstellung vermeiden
+   soll. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-backdrop::before,
+  .auth-enter,
+  .auth-enter-delayed {
+    animation-delay: 0ms !important;
+  }
+}
+
 @layer base {
   /* Light: definiert, aber nicht ausgeliefert (docs/design-system.md §3.4).
      Es gibt keinen Theme-Umschalter; <html> trägt fest die Klasse "dark".
