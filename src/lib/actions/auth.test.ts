@@ -200,3 +200,81 @@ describe('Getrennte Meldungen je Weg, wenn die Datenbank nicht erreichbar ist (E
     expect(state.formError).toMatch(/^Die Registrierung ist gerade nicht möglich/)
   })
 })
+
+describe('Die Untergrenze von 350 ms bei fehlgeschlagener Anmeldung (AC-18)', () => {
+  /**
+   * Warum diese Tests existieren: AC-18 verlangt, dass die Antwortzeit nicht verrät, ob eine
+   * Adresse registriert ist. Getragen wird das allein von `MIN_FAILURE_MS` — einer Zahl, die
+   * beim Aufräumen harmlos aussieht. Ohne Test verschwindet sie geräuschlos: der Wortlaut aus
+   * AC-7 bliebe grün, und der Seitenkanal wäre trotzdem wieder offen.
+   *
+   * Gemessen wird gegen 340 ms statt gegen 350 — der Timer darf ein paar Millisekunden früh
+   * feuern, ohne dass der Test flackert. Ein entfernter Boden fällt trotzdem auf: ohne ihn
+   * antwortet die Action in unter 10 ms.
+   */
+  const BODEN_MIT_TOLERANZ = 340
+
+  async function dauerVon(fn: () => Promise<unknown>): Promise<number> {
+    const start = Date.now()
+    await laufe(fn)
+    return Date.now() - start
+  }
+
+  it('bremst den schnellsten Weg — die abgelehnte Schema-Prüfung', async () => {
+    // Ohne Boden ist dieser Weg der schnellste von allen: keine Datenbank, kein Netz.
+    const dauer = await dauerVon(() => login({}, formular('keine-email', 'EinLangesPasswort1')))
+
+    expect(dauer).toBeGreaterThanOrEqual(BODEN_MIT_TOLERANZ)
+  })
+
+  it('bremst die abgelehnten Zugangsdaten — den Weg, um den es AC-18 geht', async () => {
+    signInWithPassword.mockResolvedValue({ error: { code: 'invalid_credentials', status: 400 } })
+
+    const dauer = await dauerVon(() =>
+      login({}, formular('bekannt@example.com', 'FalschesPasswort1')),
+    )
+
+    expect(dauer).toBeGreaterThanOrEqual(BODEN_MIT_TOLERANZ)
+  })
+
+  it('bremst auch die gesperrte Anmeldung, die die Datenbank gar nicht erst fragt', async () => {
+    passLoginGate.mockResolvedValue({ state: 'blocked', retryAfterMinutes: 15 })
+
+    const dauer = await dauerVon(() =>
+      login({}, formular('bekannt@example.com', 'EinLangesPasswort1')),
+    )
+
+    expect(dauer).toBeGreaterThanOrEqual(BODEN_MIT_TOLERANZ)
+  })
+
+  it('bremst auch die nicht erreichbare Datenbank', async () => {
+    passLoginGate.mockResolvedValue({ state: 'unavailable' })
+
+    const dauer = await dauerVon(() =>
+      login({}, formular('bekannt@example.com', 'EinLangesPasswort1')),
+    )
+
+    expect(dauer).toBeGreaterThanOrEqual(BODEN_MIT_TOLERANZ)
+  })
+
+  it('bremst die geglückte Anmeldung NICHT — sie verrät nichts, was die Person nicht weiß', async () => {
+    const dauer = await dauerVon(() =>
+      login({}, formular('bekannt@example.com', 'EinLangesPasswort1')),
+    )
+
+    expect(dauer).toBeLessThan(BODEN_MIT_TOLERANZ)
+  })
+})
+
+describe('Supabase’ eigene Drosselung (HTTP 429)', () => {
+  it('erklärt sie als Fehlversuchs-Sperre, nicht als falsches Passwort', async () => {
+    // Sonst sähe dieselbe Ursache je nachdem, welche Drosselung zuerst greift, nach zwei
+    // verschiedenen Problemen aus — und „Passwort stimmt nicht" wäre schlicht falsch.
+    signInWithPassword.mockResolvedValue({ error: { status: 429 } })
+
+    const { state } = await laufe(() => login({}, formular('bekannt@example.com', 'EinLangesPasswort1')))
+
+    expect(state.formError).toBe('Zu viele Fehlversuche. Bitte versuche es in 15 Minuten erneut.')
+    expect(state.formError).not.toBe('E-Mail-Adresse oder Passwort stimmt nicht.')
+  })
+})
