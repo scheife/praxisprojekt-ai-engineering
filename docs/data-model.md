@@ -16,16 +16,17 @@
 | `profiles` | Das Konto einer Person in `auslage.` | die Person selbst |
 | `expenses` | Eine einzelne Geschäftsausgabe | die Person, die sie angelegt hat |
 | Kategorien | Feste Werteliste, nicht von Nutzer:innen verwaltet | für alle gleich, niemandem zugeordnet |
-| `login_attempts` | Ein festgehaltener fehlgeschlagener Anmeldeversuch | niemandem — Sicherheitsprotokollierung, für keinen Client lesbar |
+| `login_attempts` | Ein festgehaltener Anmelde- oder Registrierungsversuch | niemandem — Sicherheitsprotokollierung, für keinen Client lesbar |
 
 **Zu `profiles`:** Im MVP trägt die Tabelle wenig mehr als die Verknüpfung zum Konto. Sie ist trotzdem
 da, weil `auth.users` in einem Schema liegt, das der Client nicht direkt abfragen soll, und weil PROJ-1
 an ihr das RLS-Muster samt Signup-Trigger etabliert, das `expenses` danach eins zu eins kopiert. Spätere
 Einstellungen (etwa eine Standardwährung) landen hier, ohne dass am Auth-Schema gearbeitet werden muss.
 
-**Zu `login_attempts`** (eingeführt von PROJ-1): Die Tabelle gehört niemandem und hängt an keinem Profil
-— sie hält fest, dass zu einer E-Mail-Adresse und einer IP-Adresse ein Anmeldeversuch fehlgeschlagen ist,
-auch wenn die Adresse gar kein Konto hat. Sie ist die einzige Tabelle des Produkts, auf die **kein**
+**Zu `login_attempts`** (eingeführt von PROJ-1): Die Tabelle gehört niemandem und hängt an keinem Profil.
+Sie hält zweierlei fest, unterschieden durch ein Merkmal `kind`: einen **fehlgeschlagenen Anmeldeversuch**
+zu einer E-Mail-Adresse und einer IP — auch wenn die Adresse gar kein Konto hat — und einen
+**Registrierungsversuch** je IP-Adresse. Sie ist die einzige Tabelle des Produkts, auf die **kein**
 Client zugreifen kann: RLS ist an, es gibt bewusst keine Policy, und gelesen wird nur durch
 Datenbankfunktionen mit erhöhten Rechten. Ihre Zeilen werden **nach 24 Stunden gelöscht** — die einzige
 Entität mit einer eigenen Aufbewahrungsfrist. Details im `design.md` von PROJ-1, Rechtsgrundlage in
@@ -79,7 +80,8 @@ auth.users                    Supabase Auth — E-Mail, Passwort-Hash
                         Kategorie · Datum · Notiz
                               └─ Kategorie aus fester Werteliste
 
-login_attempts                daneben, ohne Verbindung — E-Mail · IP · Zeitpunkt
+login_attempts                daneben, ohne Verbindung — Art · E-Mail · IP · Zeitpunkt
+                              Art: Anmeldeversuch oder Registrierungsversuch
                               kein Client-Zugriff · nach 24 Stunden gelöscht
 ```
 

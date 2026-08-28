@@ -28,7 +28,7 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 - **Anzeigename, Profilbild, Firmendaten** — Datenminimierung, für Registrierung und Anmeldung nicht erforderlich.
 - **Soziale Logins** (Google, Apple) und **Zwei-Faktor-Authentifizierung**.
 - **Rollen, Teams, Mehrbenutzer-Konten** — Non-Goal im PRD.
-- **CAPTCHA auf der Registrierung** — siehe Open Questions.
+- **CAPTCHA auf der Registrierung** — weiterhin zurückgestellt. Seit 28.08.2026 begrenzt AC-17 die Registrierung stattdessen auf 10 Konten je IP in 60 Minuten; das ersetzt kein CAPTCHA, weil es gegen einen über viele IPs verteilten Angriff nichts ausrichtet. Siehe Open Questions.
 - **Auskunft und Datenexport** (Art. 15/20 DSGVO) — verschoben nach PROJ-2, wo es Ausgabendaten zu exportieren gibt.
 - **Datenschutzerklärung und Impressum** — fällig vor öffentlicher Erreichbarkeit, siehe `docs/privacy.md`.
 
@@ -56,6 +56,8 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 - [ ] **AC-8** — Angenommen es gab 5 fehlgeschlagene Anmeldeversuche für dieselbe E-Mail-Adresse innerhalb von 15 Minuten, wenn ein weiterer Versuch erfolgt, dann wird er abgelehnt und die Person sieht, in wie vielen Minuten sie es erneut versuchen kann
 - [ ] **AC-9** — Angenommen es gab 5 fehlgeschlagene Anmeldeversuche von derselben IP-Adresse innerhalb von 15 Minuten, wenn ein weiterer Versuch erfolgt, dann wird er abgelehnt — unabhängig davon, welche E-Mail-Adressen dabei verwendet wurden
 - [ ] **AC-10** — Angenommen ein Anmelde- oder Registrierungsformular wird abgeschickt, wenn die Anfrage übertragen wird, dann erscheinen E-Mail-Adresse und Passwort zu keinem Zeitpunkt in der URL
+- [ ] **AC-17** — Angenommen von derselben IP-Adresse wurden innerhalb von 60 Minuten bereits 10 Konten angelegt, wenn ein weiterer Registrierungsversuch erfolgt, dann wird er abgelehnt und die Person sieht, in wie vielen Minuten sie es erneut versuchen kann
+- [ ] **AC-18** — Angenommen eine Anmeldung schlägt fehl, wenn die Antwortzeiten für eine registrierte und eine unbekannte Adresse gemessen werden, dann sind sie nicht unterscheidbar: die Mediane liegen weniger als 10 % auseinander und die gemessenen Wertebereiche überlappen — bei weiterhin unter 500 ms je Antwort
 
 ### Zugriffsschutz
 
@@ -70,7 +72,7 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 ### Kontolöschung und Aufbewahrung
 
 - [ ] **AC-15** — Angenommen jemand ist angemeldet, wenn die Kontolöschung gewählt und in einem Bestätigungsdialog bestätigt wird, dann werden Konto, Profil und alle zugehörigen Daten entfernt, die Person wird abgemeldet, und eine erneute Anmeldung mit denselben Zugangsdaten schlägt fehl *(Art. 17 DSGVO)*
-- [ ] **AC-16** — Angenommen die Drosselung hat Zähler zu fehlgeschlagenen Versuchen gespeichert, wenn seit dem letzten Versuch 24 Stunden vergangen sind, dann sind diese Daten samt IP-Adresse gelöscht *(Art. 5 Abs. 1 lit. e DSGVO)*
+- [ ] **AC-16** — Angenommen die Drosselung hat Zähler zu Anmelde- **oder Registrierungsversuchen** gespeichert, wenn seit dem jeweiligen Versuch 24 Stunden vergangen sind, dann sind diese Daten samt IP-Adresse gelöscht *(Art. 5 Abs. 1 lit. e DSGVO)*
 
 ## Edge Cases
 
@@ -80,6 +82,7 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 - **EC-4** — Angenommen die Datenbank ist nicht erreichbar, wenn eine Anmeldung versucht wird, dann erscheint eine verständliche Meldung, das Passwortfeld wird geleert, und die eingegebenen Daten landen nicht in der URL
 - **EC-5** — Angenommen jemand hat die App in zwei Browser-Tabs offen, wenn im ersten Tab das Konto gelöscht wird, dann führt die nächste Aktion im zweiten Tab zur Weiterleitung auf `/login` statt zu einem Absturz
 - **EC-6** — Angenommen ein Passwort enthält führende oder nachgestellte Leerzeichen, wenn es bei Registrierung und Anmeldung verwendet wird, dann verhalten sich beide gleich — das Passwort wird in beiden Fällen identisch behandelt
+- **EC-7** — Angenommen jemand versucht sich wiederholt mit einem sehr kurzen Passwort anzumelden, wenn diese Versuche fehlschlagen, dann zählen sie wie jeder andere Fehlversuch zur Drosselung, und die Meldung nennt nicht die Passwortregel
 
 ## Technical Requirements
 
@@ -89,7 +92,8 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 
 ## Open Questions
 
-- [ ] **CAPTCHA auf der Registrierung** — bewusst zurückgestellt, weil ein Provider-Konto und ein Key nötig wären und das Formular ohne Deployment nur lokal erreichbar ist. Vor dem ersten öffentlichen Zugang nachzuholen.
+- [ ] **CAPTCHA auf der Registrierung** — bewusst zurückgestellt, weil ein Provider-Konto und ein Key nötig wären und das Formular ohne Deployment nur lokal erreichbar ist. Vor dem ersten öffentlichen Zugang nachzuholen. → *Teilweise entschärft (28.08.2026): AC-17 begrenzt die Registrierung je IP. Gegen einen über viele IPs verteilten Angriff hilft das nicht — die Frage bleibt offen.*
+- [ ] **`docs/privacy.md` beschreibt nur die Anmelde-Drosselung.** Mit AC-17 werden auch Registrierungsversuche mit IP-Adresse festgehalten — dieselben Daten, dieselben 24 Stunden, dieselbe Rechtsgrundlage, aber ein weiterer Personenkreis: nicht mehr nur, wer sich erfolglos anmeldet, sondern jede Person, die ein Konto anlegt. Das Verarbeitungsverzeichnis gehört nachgezogen: `/dsgvo PROJ-1`.
 - [ ] **Signup-Enumeration:** AC-5 verrät, dass eine Adresse bereits registriert ist. Das ist die unvermeidliche Folge der Entscheidung gegen die E-Mail-Bestätigung — ohne Bestätigungsmail gibt es keine Antwort, die für beide Fälle gleich aussieht. Akzeptiert fürs MVP; die Bestätigung würde es schließen.
 - [ ] **§ 132 BAO:** Darf eine Kontolöschung die erfassten Belegdaten wirklich entfernen, oder greift die 7-jährige Aufbewahrungspflicht durch? Würde AC-15 umkehren. Frage für Jurist:innen, Kontext in `docs/privacy.md`.
 - [ ] **Aufbewahrungsdauer der Supabase-Auth-Protokolle** (`auth.audit_log_entries`) — Voreinstellung noch nicht geprüft.
@@ -107,3 +111,6 @@ Keine. PROJ-1 ist das Fundament; PROJ-2 und PROJ-3 setzen darauf auf.
 | Keine Namens- oder Firmenfelder | Datenminimierung (Art. 5 Abs. 1 lit. c DSGVO); für Registrierung und Anmeldung nicht erforderlich | 2026-08-27 |
 | Kontolöschung schon in PROJ-1 | Kostet jetzt einen Button und eine Kaskade, nachträglich deutlich mehr | 2026-08-27 |
 | Auskunft und Export nach PROJ-2 | In PROJ-1 bestünde der Export aus E-Mail-Adresse und Registrierungsdatum — sinnvoll erst mit Ausgabendaten | 2026-08-27 |
+| Eigene Drosselung der Registrierung: 10 Konten je IP in 60 Minuten | Das Design stützte sich auf Supabase' Limit von 30 pro 5 Minuten je IP. QA hat gemessen, dass es diesen Schutz in diesem Stack nicht gibt — 40 von 40 Direktregistrierungen gingen durch. Ohne eigene Grenze ist das Anlegen von Konten unbegrenzt automatisierbar. 10 je Stunde lässt eine Person, eine Familie oder ein kleines Büro durch und stoppt Massenanlage sofort | 2026-08-28 |
+| Fehlgeschlagene Anmeldungen brauchen mindestens 350 ms | Ohne feste Untergrenze verriet die Antwortzeit, ob eine Adresse registriert ist: 153 gegen 72 ms, die Wertebereiche überlappten nicht. Ein wortgleicher Meldungstext nützt dann nichts. 350 ms liegt über dem langsamen Pfad und unter der 500-ms-Vorgabe | 2026-08-28 |
+| Beim Anmelden gilt keine Mindestlänge für das Passwort | Sie gehört zur Vergabe eines Passworts, nicht zur Prüfung eines eingegebenen. Vorher scheiterten kurze Rateversuche schon an der Schema-Prüfung, liefen damit an der Drosselung vorbei und wurden nicht gezählt — und das Anmeldeformular plauderte die Passwortregel aus | 2026-08-28 |

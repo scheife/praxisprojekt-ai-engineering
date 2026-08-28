@@ -72,6 +72,18 @@ normale Bauaufgabe (T4).
 
 ---
 
+## Level 6 — Nachbesserung nach dem QA-Durchlauf
+
+<!-- Ergänzt am 28.08.2026. Die Arbeit war zum Zeitpunkt dieses Eintrags bereits erledigt und
+     gegen einen Produktions-Build verifiziert; die Aufgaben stehen hier, damit AC-17, AC-18 und
+     EC-7 nicht ohne Task in der Kette hängen. -->
+
+- [x] **T18**  Migration: Spalte `kind` auf `login_attempts`, neues Tor `signup_attempt_gate` (10 Registrierungen je IP in 60 Minuten), `login_attempt_gate` und `clear_own_login_attempts` auf `kind='login'` eingegrenzt  · files: `supabase/migrations/20260828100000_signup_throttle.sql`  · → AC-17, AC-16
+- [x] **T19**  Registrierungs-Tor anbinden und Fehlschläge der Anmeldung auf mindestens 350 ms bremsen, damit die Antwortzeit nicht verrät, ob eine Adresse registriert ist  · files: `src/lib/rate-limit.ts`, `src/lib/actions/auth.ts`  · → AC-17, AC-18
+- [x] **T20**  Beim Anmelden keine Passwort-Mindestlänge mehr prüfen, damit kurze Rateversuche gezählt werden und die Meldung die Regel nicht preisgibt  · files: `src/lib/validation/auth.ts`, `src/lib/validation/auth.test.ts`  · → EC-7, AC-8, AC-7
+
+---
+
 ## Abdeckung
 
 | AC / EC | Aufgaben |
@@ -91,15 +103,18 @@ normale Bauaufgabe (T4).
 | AC-13 | T1 |
 | AC-14 | T8, T12, T16 |
 | AC-15 | T3, T12, T16 |
-| AC-16 | T2 |
+| AC-16 | T2, T18 |
+| AC-17 | T18, T19 |
+| AC-18 | T19 |
 | EC-1 | T14 |
 | EC-2 | T11 |
 | EC-3 | T4, T7, T13 |
 | EC-4 | T11, T13 |
 | EC-5 | T7, T12 |
 | EC-6 | T9 |
+| EC-7 | T20 |
 
-Alle 16 AC und alle 6 EC sind abgedeckt. Umgekehrt trägt jede Aufgabe mindestens eine AC-Referenz —
+Alle 18 AC und alle 7 EC sind abgedeckt. Umgekehrt trägt jede Aufgabe mindestens eine AC-Referenz —
 mit einer benannten Ausnahme: die Sicherheits-Header in T6 kommen aus `.claude/rules/security.md`,
 nicht aus einem Acceptance Criterion. Das steht dort ausdrücklich, statt sie an ein AC zu hängen, zu
 dem sie nicht gehören.
