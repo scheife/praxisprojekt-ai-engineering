@@ -24,7 +24,7 @@ export default async function LoginPage({
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
-      <Wordmark className="mb-8 text-2xl" />
+      <Wordmark className="mb-8 text-4xl" />
 
       <div className="w-full max-w-sm">
         <LoginNotice reason={reason} />

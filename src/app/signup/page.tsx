@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Konto anlegen · auslage.' }
 export default function SignupPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
-      <Wordmark className="mb-8 text-2xl" />
+      <Wordmark className="mb-8 text-4xl" />
 
       <div className="w-full max-w-sm">
         <Card>

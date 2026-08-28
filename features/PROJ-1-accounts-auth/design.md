@@ -698,6 +698,13 @@ Die Vorkehrung für den Fall *ohne* IP bleibt im Code: Fehlt der Kopf, greift nu
 - **Rückmeldungen:** „Sitzung abgelaufen" und „Konto gelöscht" stehen als Hinweiszeile über der
   Karte auf `/login` (so wie in der Meldungstabelle oben). Nur das Abmelden ist ein Toast — eine
   flüchtige Bestätigung gehört nicht über ein Formular, in das man gerade wieder tippen will.
+- **Wortmarke auf `text-4xl` (36px)**, einheitlich auf allen fünf Stellen — `/login`, `/signup`,
+  `/`, `/konto` und dessen `loading.tsx`. Vorher `text-2xl` (24px), was neben der Kartenüberschrift
+  (`text-xl`, 20px) kaum auffiel: das erste Element der Seite sah aus wie eine zweite Überschrift.
+  **Bewusste Abweichung von der Skala** in `docs/design-system.md` §4.2, die bei 32px endet — die
+  Skala ist dort ausdrücklich als „App-Maßstab, dicht" für Fließtext und Überschriften beschrieben;
+  die Wortmarke ist ein Logo und steht außerhalb davon. Das `loading.tsx` von `/konto` trägt
+  denselben Wert, sonst springt die Wortmarke beim Fertigladen.
 - **Steuerelementhöhe 36px** wird über `className` an den Elementen dieses Features gesetzt, nicht
   in den shadcn-Bausteinen. Die gehören zum Rahmen, und der gehört PROJ-2 — dort ist der richtige
   Ort, den Wert einmal zentral zu setzen.

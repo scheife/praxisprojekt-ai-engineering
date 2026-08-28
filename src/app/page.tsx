@@ -15,7 +15,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1180px] flex-col items-start justify-center gap-6 px-5 py-12">
-      <Wordmark className="text-2xl" />
+      <Wordmark className="text-4xl" />
       <div className="flex flex-col gap-2">
         <h1 className="font-grotesk text-2xl font-bold tracking-[-0.02em]">
           Hier entstehen deine Ausgaben.

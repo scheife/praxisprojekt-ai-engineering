@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 export default function KontoLoading() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[560px] flex-col justify-center gap-6 px-5 py-12">
-      <Wordmark className="text-2xl" />
+      <Wordmark className="text-4xl" />
       <Card>
         <CardHeader>
           <Skeleton className="h-6 w-24" />
