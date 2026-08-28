@@ -537,3 +537,84 @@ Die Vorkehrung für den Fall *ohne* IP bleibt im Code: Fehlt der Kopf, greift nu
 - **ESLint prüfte bisher auch `docs/`** — gitignoriertes Referenzmaterial mit eigenen Verstößen.
   Dadurch war `npm run lint` schon vor diesem Feature rot. `docs/**` steht jetzt in den
   `ignores` der ESLint-Konfiguration.
+
+---
+
+## Nachtrag: Behebung der QA-Befunde
+
+_Angefügt nach dem QA-Durchlauf vom 27.08.2026. Alles hier wurde gegen einen
+**Produktions-Build** (`next build && next start`) verifiziert, nicht gegen `next dev` — siehe
+den ersten Punkt, warum das den Unterschied macht._
+
+### BUG-1 war ein Fehlbefund — gemessen am falschen Server
+
+QA meldete, geschützte Seiten trügen `no-cache` statt des in TD-11 festgelegten `no-store`.
+Gemessen wurde gegen `next dev`. Im Produktions-Build tragen `/` und `/konto`
+`no-store, must-revalidate` — genau den Wert, den `src/proxy.ts` setzt. TD-11 hält also.
+
+Der Versuch, den Kopf zusätzlich über `next.config.ts` → `headers()` zu setzen, wurde wieder
+zurückgenommen: Die Regel greift zwar (mit einem Testkopf nachgewiesen), aber Next.js
+überschreibt `Cache-Control` bei gerenderten Seiten — im Dev-Modus mit `no-cache`, in der
+Produktion mit dem Wert aus dem Proxy. Zusätzliche Konfiguration hätte nichts bewirkt.
+
+**Die Lehre für kommende Prüfungen:** Kopfzeilen und Zwischenspeicher-Verhalten sind gegen
+`next start` zu messen, nicht gegen `next dev`.
+
+### BUG-2 — die Antwortzeit verrät nichts mehr
+
+Jeder **fehlgeschlagene** Anmeldeversuch braucht jetzt mindestens **350 ms**
+(`MIN_FAILURE_MS` in `src/lib/actions/auth.ts`). Vorher lagen die Zeiten für eine bekannte und
+eine unbekannte Adresse vollständig auseinander (153 gegen 72 ms, ohne Überlappung), weil
+Supabase Auth bei einem bestehenden Konto den Passwort-Hash prüft und bei einer unbekannten
+Adresse sofort antwortet. Die Annahme im Abschnitt „Die Meldungen, wortwörtlich", Supabase
+rechne gegen einen Blindwert, war falsch.
+
+Nachher: **375 gegen 374 ms**, 0,2 % Unterschied, Wertebereiche vollständig überlappend.
+Die langsamste Antwort lag bei 417 ms und damit unter der Vorgabe aus `spec.md`
+(Anmeldung in unter 500 ms).
+
+Geglückte Anmeldungen werden **nicht** gebremst — sie verraten nichts, was die Person nicht
+ohnehin weiß.
+
+### BUG-3 — die Registrierung hat jetzt eine eigene Drosselung
+
+Das Design stützte sich auf Supabase' `sign_in_sign_ups` (30 pro 5 Minuten je IP). QA hat
+nachgewiesen, dass es diesen Schutz hier nicht gibt: `GOTRUE_RATE_LIMIT_SIGN_IN_SIGN_UPS`
+existiert im Auth-Container gar nicht, 40 von 40 Direktregistrierungen gingen durch.
+
+Neu: **`signup_attempt_gate(email, ip)`** — **10 Registrierungen je IP-Adresse in 60 Minuten**,
+nach demselben Muster wie das Anmelde-Tor (prüfen und festhalten in einem Aufruf, damit es keine
+vom Browser aufrufbare Rücksetzfunktion braucht). Nur je IP: die Adresse ist bei jeder
+Registrierung eine neue und taugt nicht als Schlüssel.
+
+Die Tabelle `login_attempts` trägt dafür eine Spalte `kind` (`login` | `signup`). Das
+Zurücksetzen nach erfolgreicher Anmeldung räumt nur `login`-Zeilen weg — sonst löste sich eine
+Registrierungssperre dadurch auf, dass sich jemand anmeldet.
+
+**Ein CAPTCHA ersetzt das nicht.** Es bleibt die stärkere Maßnahme und in `spec.md` bewusst
+zurückgestellt; diese Drosselung schließt nur die Lücke, die das Design offen gelassen hat.
+
+> **Offen: `spec.md` kennt dieses Verhalten noch nicht.** Der Vertrag hat kein Acceptance
+> Criterion für die Registrierungs-Drosselung — er ist während `/build` schreibgeschützt.
+> Nachzuholen mit `/refine PROJ-1`.
+
+> **Offen: `docs/privacy.md` beschreibt nur die Anmelde-Drosselung.** Es werden jetzt auch
+> Registrierungsversuche mit IP-Adresse festgehalten (dieselben 24 Stunden, dieselbe
+> Rechtsgrundlage). Nachzuziehen mit `/dsgvo`.
+
+### BUG-4 — die Längenregel gilt nicht mehr beim Anmelden
+
+`loginSchema` prüfte dieselbe Mindestlänge wie `signupSchema`. Das hatte zwei Folgen: Ein
+Rateversuch mit einem zu kurzen Passwort scheiterte schon an der Schema-Prüfung und lief damit
+**an der Drosselung vorbei** — 30 solche Versuche ergaben null gezählte Zeilen —, und das
+Anmeldeformular plauderte die Passwortregel aus, statt schlicht „stimmt nicht" zu sagen.
+
+Beim Anmelden gilt jetzt nur noch: nicht leer, höchstens 200 Zeichen. Die Längenregel gehört
+zur **Vergabe** eines Passworts, nicht zur Prüfung eines eingegebenen. Nachgemessen: 5 kurze
+Versuche werden gezählt, der 6. ist gesperrt, und die Meldung lautet „E-Mail-Adresse oder
+Passwort stimmt nicht."
+
+### BUG-5 — toter Browser-Client entfernt
+
+`src/lib/supabase/client.ts` wurde von nichts importiert. Entfernt; PROJ-2 legt ihn an, wenn
+es ihn braucht.

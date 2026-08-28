@@ -33,13 +33,30 @@ const email = z
  * Anmeldung. Führende und nachgestellte Leerzeichen gehören zum Passwort, und beide Wege
  * müssen identisch rechnen (EC-6).
  */
-const password = z
+const newPassword = z
   .string()
   .min(PASSWORD_MIN, `Dein Passwort braucht mindestens ${PASSWORD_MIN} Zeichen.`)
   .max(PASSWORD_MAX, `Dein Passwort darf höchstens ${PASSWORD_MAX} Zeichen haben.`)
 
-export const loginSchema = z.object({ email, password })
-export const signupSchema = z.object({ email, password })
+/**
+ * Beim **Anmelden** gilt die Längenregel bewusst nicht.
+ *
+ * Sie gehört zur Vergabe eines Passworts, nicht zur Prüfung eines eingegebenen. Stünde sie
+ * hier, hätte das zwei Folgen, die beide falsch sind: Ein zu kurzer Rateversuch würde schon
+ * an der Schema-Prüfung scheitern und damit **an der Drosselung vorbeilaufen**, ohne gezählt
+ * zu werden (AC-8) — und das Anmeldeformular würde die Passwortregel ausplaudern, statt
+ * schlicht „stimmt nicht" zu sagen (AC-7).
+ *
+ * Die Obergrenze bleibt, damit die Eingabe begrenzt ist; zu lange Eingaben sind dann einfach
+ * falsche Passwörter.
+ */
+const submittedPassword = z
+  .string()
+  .min(1, 'Bitte gib dein Passwort ein.')
+  .max(200, 'E-Mail-Adresse oder Passwort stimmt nicht.')
+
+export const loginSchema = z.object({ email, password: submittedPassword })
+export const signupSchema = z.object({ email, password: newPassword })
 
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>

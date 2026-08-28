@@ -3,7 +3,12 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 
-import { clearOwnLoginAttempts, clientIpFrom, passLoginGate } from '@/lib/rate-limit'
+import {
+  clearOwnLoginAttempts,
+  clientIpFrom,
+  passLoginGate,
+  passSignupGate,
+} from '@/lib/rate-limit'
 import { createClient } from '@/lib/supabase/server'
 import { loginSchema, signupSchema } from '@/lib/validation/auth'
 
@@ -32,6 +37,26 @@ const CREDENTIALS_WRONG = 'E-Mail-Adresse oder Passwort stimmt nicht.'
 const UNAVAILABLE =
   'Die Anmeldung ist gerade nicht möglich. Bitte versuche es in einem Moment noch einmal.'
 
+/**
+ * Jede fehlgeschlagene Anmeldung braucht mindestens so lange.
+ *
+ * Ohne diese Schwelle verrät die Antwortzeit, ob eine Adresse registriert ist: Supabase Auth
+ * prüft bei einem bestehenden Konto das Passwort gegen den Hash und braucht dafür rund 90 ms,
+ * bei einer unbekannten Adresse antwortet es nach rund 10 ms. Gemessen lagen die
+ * Wertebereiche vollständig auseinander — eine einzige Anfrage genügte zur Unterscheidung,
+ * obwohl der Meldungstext identisch ist (AC-7).
+ *
+ * 350 ms liegt über dem langsamen Pfad und unter der Vorgabe aus `spec.md`, dass eine
+ * Anmeldung in unter 500 ms beantwortet ist. Nur Fehlschläge werden gebremst; eine geglückte
+ * Anmeldung verrät nichts, was die Person nicht ohnehin weiß.
+ */
+const MIN_FAILURE_MS = 350
+
+async function notFasterThanFloor(startedAt: number): Promise<void> {
+  const remaining = MIN_FAILURE_MS - (Date.now() - startedAt)
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
+}
+
 function throttled(minutes: number): string {
   return `Zu viele Fehlversuche. Bitte versuche es in ${minutes} ${
     minutes === 1 ? 'Minute' : 'Minuten'
@@ -53,6 +78,14 @@ export async function login(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
+  const startedAt = Date.now()
+
+  /** Jeder Fehlschlag verlässt die Action über diesen Weg — und damit nie zu schnell. */
+  const fail = async (state: AuthFormState): Promise<AuthFormState> => {
+    await notFasterThanFloor(startedAt)
+    return state
+  }
+
   const rawEmail = String(formData.get('email') ?? '')
   const parsed = loginSchema.safeParse({
     email: rawEmail,
@@ -60,7 +93,7 @@ export async function login(
   })
 
   if (!parsed.success) {
-    return { fieldErrors: fieldErrorsFrom(parsed.error.issues), email: rawEmail }
+    return fail({ fieldErrors: fieldErrorsFrom(parsed.error.issues), email: rawEmail })
   }
 
   const { email, password } = parsed.data
@@ -69,10 +102,10 @@ export async function login(
   // auch für Adressen, zu denen es gar kein Konto gibt (AC-7, AC-8, AC-9).
   const gate = await passLoginGate(email, clientIpFrom(await headers()))
   if (gate.state === 'blocked') {
-    return { formError: throttled(gate.retryAfterMinutes), email }
+    return fail({ formError: throttled(gate.retryAfterMinutes), email })
   }
   if (gate.state === 'unavailable') {
-    return { formError: UNAVAILABLE, email }
+    return fail({ formError: UNAVAILABLE, email })
   }
 
   const supabase = await createClient()
@@ -81,8 +114,8 @@ export async function login(
   if (error) {
     // Greift ausnahmsweise Supabase' eigene Drosselung, soll die Person nicht zwei
     // verschiedene Erklärungen für dasselbe sehen.
-    if (error.status === 429) return { formError: throttled(15), email }
-    return { formError: CREDENTIALS_WRONG, email }
+    if (error.status === 429) return fail({ formError: throttled(15), email })
+    return fail({ formError: CREDENTIALS_WRONG, email })
   }
 
   await clearOwnLoginAttempts()
@@ -104,6 +137,22 @@ export async function signup(
   }
 
   const { email, password } = parsed.data
+
+  // Ohne diese Drosselung ist die Registrierung unbegrenzt automatisierbar: Das Limit, auf
+  // das sich das Design verließ, gibt es in diesem Stack nicht (QA-Bericht, BUG-3).
+  const gate = await passSignupGate(email, clientIpFrom(await headers()))
+  if (gate.state === 'blocked') {
+    return {
+      formError: `Von dieser Verbindung wurden gerade viele Konten angelegt. Bitte versuche es in ${
+        gate.retryAfterMinutes
+      } ${gate.retryAfterMinutes === 1 ? 'Minute' : 'Minuten'} erneut.`,
+      email,
+    }
+  }
+  if (gate.state === 'unavailable') {
+    return { formError: UNAVAILABLE, email }
+  }
+
   const supabase = await createClient()
   const { error } = await supabase.auth.signUp({ email, password })
 

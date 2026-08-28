@@ -74,6 +74,43 @@ export async function passLoginGate(
 }
 
 /**
+ * Prüft und zählt Registrierungsversuche — 10 je IP-Adresse in 60 Minuten.
+ *
+ * Nötig, weil das Limit, auf das sich das Design stützte, in diesem Stack nicht existiert:
+ * `GOTRUE_RATE_LIMIT_SIGN_IN_SIGN_UPS` ist im Auth-Container nicht gesetzt, und 40 von 40
+ * Direktregistrierungen gingen durch. Ein CAPTCHA bleibt die stärkere Maßnahme und ist in
+ * `spec.md` bewusst zurückgestellt; das hier schließt nur die Lücke.
+ *
+ * Anders als beim Anmelden zählt hier **nur die IP**: Die Adresse ist bei jeder Registrierung
+ * eine neue und taugt nicht als Schlüssel.
+ */
+export async function passSignupGate(
+  email: string,
+  ip: string | null,
+): Promise<GateResult> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('signup_attempt_gate', {
+    p_email: email,
+    p_ip: ip,
+  })
+
+  if (error) return { state: 'unavailable' }
+
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) return { state: 'unavailable' }
+
+  const { blocked, retry_after_seconds } = row as {
+    blocked: boolean
+    retry_after_seconds: number
+  }
+
+  return blocked
+    ? { state: 'blocked', retryAfterMinutes: retryAfterMinutes(retry_after_seconds) }
+    : { state: 'allowed' }
+}
+
+/**
  * Setzt die Zähler des **eigenen** Kontos nach erfolgreicher Anmeldung zurück.
  * Ohne Argument: die Adresse kommt aus der Sitzung, damit niemand fremde Zähler löschen kann.
  * Schlägt das fehl, bleibt eine Handvoll Zeilen liegen, die nach 24 Stunden ohnehin

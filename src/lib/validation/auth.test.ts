@@ -61,6 +61,21 @@ describe('Passwort-Prüfung', () => {
     )
   })
 
+  it('prüft beim Anmelden KEINE Mindestlänge — sonst liefe ein kurzer Rateversuch an der Drosselung vorbei (AC-8)', () => {
+    const kurz = loginSchema.safeParse({ email: 'a@example.com', password: 'kurz' })
+    expect(kurz.success).toBe(true)
+
+    // und das Anmeldeformular plaudert die Regel nicht aus (AC-7)
+    const leer = loginSchema.safeParse({ email: 'a@example.com', password: '' })
+    expect(leer.success === false && leer.error.issues[0].message).not.toContain('mindestens 10')
+  })
+
+  it('begrenzt die Eingabelänge beim Anmelden trotzdem', () => {
+    expect(
+      loginSchema.safeParse({ email: 'a@example.com', password: 'x'.repeat(201) }).success,
+    ).toBe(false)
+  })
+
   it('lässt Randleerzeichen im Passwort unangetastet — bei Anmeldung wie Registrierung (EC-6)', () => {
     const mitLeerzeichen = '  geheimespasswort  '
 

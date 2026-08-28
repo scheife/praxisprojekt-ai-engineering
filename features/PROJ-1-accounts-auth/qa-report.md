@@ -270,3 +270,42 @@ beim ersten Prüflauf wie ein Sicherheitsleck aussah.
 Deployment** sind BUG-1, BUG-2 und BUG-3 zu beheben — alle drei sind genau dann relevant, wenn die App
 von außen erreichbar ist, und alle drei betreffen Annahmen, die das Design getroffen hat und die sich
 in der Praxis nicht bestätigt haben.
+
+---
+
+## Nachtrag vom 28.08.2026 — Behebung, und eine Korrektur an diesem Bericht
+
+### BUG-1 war ein Fehlbefund dieses Berichts
+
+Die Messung lief gegen `next dev`. Im **Produktions-Build** tragen `/` und `/konto`
+`cache-control: no-store, must-revalidate` — genau den Wert aus `src/proxy.ts`. TD-11 hält, es
+gab nichts zu beheben. Der Dev-Server setzt bei gerenderten Seiten seinen eigenen Kopf und
+überschreibt dabei auch Regeln aus `next.config.ts` (mit einem Testkopf nachgewiesen: die Regel
+greift, der `Cache-Control`-Wert wird trotzdem ersetzt).
+
+**Konsequenz für kommende Durchläufe:** Kopfzeilen und Zwischenspeicher-Verhalten gegen
+`next start` messen, nicht gegen `next dev`. Dieser Bericht hat das nicht getan.
+
+### Behobene Fehler
+
+| Fehler | Behebung | Gegenprobe (Produktions-Build) |
+|---|---|---|
+| BUG-1 | keine — Fehlbefund, siehe oben | `/` und `/konto`: `no-store, must-revalidate` |
+| BUG-2 | Fehlschläge brauchen mindestens 350 ms (`MIN_FAILURE_MS`) | 375 ms gegen 374 ms, 0,2 % Unterschied, Bereiche überlappen; langsamste Antwort 417 ms < 500 ms |
+| BUG-3 | neue Drosselung `signup_attempt_gate`: 10 Registrierungen je IP in 60 Minuten | 20 Versuche → 10 angelegt, ab Nr. 11 abgewiesen; 10 `signup`-Zeilen gezählt |
+| BUG-4 | `loginSchema` prüft keine Passwortlänge mehr | 5 kurze Versuche gezählt, ab dem 6. gesperrt; Meldung jetzt „E-Mail-Adresse oder Passwort stimmt nicht." |
+| BUG-5 | `src/lib/supabase/client.ts` entfernt | keine Importe betroffen |
+
+### Regression nach der Behebung
+
+- Anmelde-Drosselung greift weiterhin ab dem 6. Versuch (AC-8)
+- Anmeldung mit richtigen Daten: `HTTP 303 → /` (AC-6)
+- Zähler nach erfolgreicher Anmeldung zurückgesetzt: 0 Zeilen
+- `npm test` 23 grün · `npm run lint` grün · `npm run build` grün · `npx tsc --noEmit` sauber
+
+### Weiterhin offen
+
+- `spec.md` hat kein Acceptance Criterion für die Registrierungs-Drosselung → `/refine PROJ-1`
+- `docs/privacy.md` beschreibt nur die Anmelde-Drosselung, nicht die neue Registrierungs-Zählung → `/dsgvo`
+- Die Liste „Nicht verifiziert in diesem Durchlauf" bleibt unverändert offen — dieser Nachtrag
+  hat nichts davon nachgeholt (kein Browser, keine Viewports, keine Dialog-Verdrahtung)
