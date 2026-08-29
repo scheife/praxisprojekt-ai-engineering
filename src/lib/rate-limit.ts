@@ -83,23 +83,82 @@ export function retryAfterMinutes(seconds: number): number {
 }
 
 /**
- * Prüft die Sperre und hält den Versuch fest. Wird **vor** der Prüfung der Zugangsdaten
- * aufgerufen — auch für Adressen, zu denen es gar kein Konto gibt, sonst verriete das
- * Einsetzen der Drosselung, welche Adresse existiert (AC-7).
+ * Wie lange ein Tor-Aufruf höchstens dauern darf, bevor er als Störung gilt.
+ *
+ * **Warum es die Frist gibt (QA-Bericht Lauf 6, BUG-1):** Ohne sie wartet der Aufruf, bis der
+ * HTTP-Client von sich aus aufgibt — gemessen **60 Sekunden** bei angehaltener Datenbank, vier
+ * von vier Messungen. Die Meldung aus EC-4 kam am Ende zwar richtig, aber eine Minute zu spät:
+ * hinter einem üblichen vorgelagerten Server mit 30- bis 60-Sekunden-Frist sähe die Person
+ * statt der freundlichen Meldung einen Gateway-Fehler, und EC-4 hielte im Betrieb nicht mehr,
+ * was es lokal hält.
+ *
+ * **Warum 2 Sekunden:** Das Tor macht einen einzigen Datenbank-Roundtrip — lokal einstellige
+ * Millisekunden, auch eine ausgelastete gehostete Instanz antwortet weit darunter. 2 s ist
+ * großzügig genug, dass eine langsame, aber gesunde Datenbank die Frist nie reißt, und kurz
+ * genug, dass ein Ausfall in zwei Sekunden sichtbar wird statt in einer Minute.
+ *
+ * **Was die Frist nicht ist:** keine Antwortzeit-Zusage. AC-18 verlangt unter 500 ms für
+ * *fehlgeschlagene Anmeldungen* bei arbeitender Datenbank — dort wird die Frist nie erreicht.
+ * Greift sie, ist die Datenbank gestört, und dann gilt EC-4, nicht AC-18.
  */
-export async function passLoginGate(
+const GATE_TIMEOUT_MS = 2000
+
+/**
+ * Das Geheimnis, das App und Datenbank teilen (TD-26, QA-Bericht Lauf 6 BUG-2).
+ *
+ * **Wozu:** Eine Anmeldung beginnt ohne Sitzung, also muss die App die Tore mit dem
+ * **öffentlichen** Schlüssel aufrufen — und der steckt in jedem Browser. Vorher genügten
+ * damit fünf anonyme Aufrufe, um ein fremdes Konto 15 Minuten zu sperren. Das Recht lässt
+ * sich nicht entziehen (die App braucht es selbst), also entscheidet nicht mehr das Recht,
+ * sondern das Wissen: Wer das Geheimnis nicht kennt, kommt am Tor nicht vorbei.
+ *
+ * Bewusst ohne `NEXT_PUBLIC_`-Präfix — mit diesem Präfix landete der Wert im Bundle und
+ * damit genau bei denen, gegen die er schützt.
+ *
+ * Fehlt er, wird **nicht** stillschweigend durchgewunken: Der leere Wert passt nicht zum
+ * hinterlegten Abdruck, die Datenbank lehnt ab, und die Anmeldung scheitert hörbar. Das ist
+ * die entschiedene Variante — eine vergessene Einrichtung fällt sofort auf, statt still die
+ * Lücke offen zu lassen.
+ *
+ * Bei jedem Aufruf gelesen statt einmal beim Laden: Das macht die Regel prüfbar, ohne an der
+ * Umgebung des ganzen Testlaufs zu drehen — derselbe Grund, aus dem `clientIpFrom` seine
+ * `hops` als Parameter nimmt.
+ */
+function gateSecret(): string {
+  return process.env.GATE_SECRET ?? ''
+}
+
+/**
+ * Ruft ein Tor auf und übersetzt die Antwort — für beide Tore identisch.
+ *
+ * Beide fallen bei jeder Störung **zu**, nicht auf: eine Drosselung, die bei einem Fehler
+ * durchwinkt, ist genau dann weg, wenn sie gebraucht wird. Das gilt für einen Datenbankfehler,
+ * für eine leere Antwort und für die abgelaufene Frist gleichermaßen — ein Abbruch durch
+ * `AbortSignal` kommt beim Supabase-Client als gewöhnlicher `error` zurück, nicht als Ausnahme.
+ */
+async function passGate(
+  fn: 'login_attempt_gate' | 'signup_attempt_gate',
   email: string,
   ip: string | null,
 ): Promise<GateResult> {
+  const secret = gateSecret()
+
+  if (!secret) {
+    // Kein nutzerseitiger Text, sondern eine Zeile fürs Server-Log: Ohne diesen Hinweis
+    // sähe man nur „Anmeldung gerade nicht möglich" und suchte den Fehler an der Datenbank.
+    console.error(
+      '[rate-limit] GATE_SECRET ist nicht gesetzt — die Drosselungs-Tore lehnen deshalb ' +
+        'jeden Aufruf ab. Wert in .env.local eintragen und mit private.set_gate_secret() ' +
+        'in der Datenbank hinterlegen (design.md, TD-26).',
+    )
+  }
+
   const supabase = await createClient()
 
-  const { data, error } = await supabase.rpc('login_attempt_gate', {
-    p_email: email,
-    p_ip: ip,
-  })
+  const { data, error } = await supabase
+    .rpc(fn, { p_secret: secret, p_email: email, p_ip: ip })
+    .abortSignal(AbortSignal.timeout(GATE_TIMEOUT_MS))
 
-  // Ist die Datenbank nicht erreichbar, wird nicht durchgewinkt. Eine Drosselung, die bei
-  // einer Störung aussetzt, ist genau dann weg, wenn sie gebraucht wird.
   if (error) return { state: 'unavailable' }
 
   const row = Array.isArray(data) ? data[0] : data
@@ -113,6 +172,18 @@ export async function passLoginGate(
   return blocked
     ? { state: 'blocked', retryAfterMinutes: retryAfterMinutes(retry_after_seconds) }
     : { state: 'allowed' }
+}
+
+/**
+ * Prüft die Sperre und hält den Versuch fest. Wird **vor** der Prüfung der Zugangsdaten
+ * aufgerufen — auch für Adressen, zu denen es gar kein Konto gibt, sonst verriete das
+ * Einsetzen der Drosselung, welche Adresse existiert (AC-7).
+ */
+export async function passLoginGate(
+  email: string,
+  ip: string | null,
+): Promise<GateResult> {
+  return passGate('login_attempt_gate', email, ip)
 }
 
 /**
@@ -133,26 +204,7 @@ export async function passSignupGate(
   email: string,
   ip: string | null,
 ): Promise<GateResult> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.rpc('signup_attempt_gate', {
-    p_email: email,
-    p_ip: ip,
-  })
-
-  if (error) return { state: 'unavailable' }
-
-  const row = Array.isArray(data) ? data[0] : data
-  if (!row) return { state: 'unavailable' }
-
-  const { blocked, retry_after_seconds } = row as {
-    blocked: boolean
-    retry_after_seconds: number
-  }
-
-  return blocked
-    ? { state: 'blocked', retryAfterMinutes: retryAfterMinutes(retry_after_seconds) }
-    : { state: 'allowed' }
+  return passGate('signup_attempt_gate', email, ip)
 }
 
 /**

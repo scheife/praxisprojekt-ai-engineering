@@ -154,6 +154,22 @@ Datei nicht schreiben.
 
 ---
 
+## Level 12 — Behebung der beiden Befunde aus dem sechsten QA-Durchlauf
+
+<!-- Ergänzt am 29.08.2026. Zwei Befunde, zwei getrennte Ursachen — beide in derselben
+     Datei plus einer neuen Migration, deshalb nacheinander statt [P]. -->
+
+- [x] **T33**  Migration: Beide Tore verlangen ein **geteiltes Geheimnis** als erstes Argument (`p_secret`). Schema `private` (von PostgREST nicht ausgeliefert) mit `gate_secret` — nur der SHA-256-Abdruck, nie der Klartext —, dazu `private.set_gate_secret()` zum Hinterlegen und `private.assert_gate_secret()` als Vorschaltprüfung. Die **alten zweiargumentigen Signaturen werden gelöscht**, sonst bliebe die Lücke als zweite Überladung bestehen. `anon` behält das Ausführungsrecht, weil eine Anmeldung ohne Sitzung beginnt — der Schutz liegt jetzt im Wissen, nicht im Recht. **Fail closed:** ohne hinterlegtes oder passendes Geheimnis wird jeder Aufruf abgelehnt  · files: `supabase/migrations/20260829100000_gate_shared_secret.sql`  · → AC-8, AC-9, AC-17 (BUG-2, TD-26)
+- [x] **T34**  `rate-limit.ts`: das Geheimnis aus `GATE_SECRET` mitschicken; eine **Frist von 2 Sekunden** auf den Tor-Aufruf (`AbortSignal.timeout`), damit eine nicht erreichbare Datenbank nicht 60 Sekunden lang hängt; beide Tore teilen sich dafür einen gemeinsamen `passGate`. Ein Abbruch kommt als gewöhnlicher Fehler zurück und fällt damit **zu**, nicht auf  · files: `src/lib/rate-limit.ts`  · → EC-4 (BUG-1), AC-8, AC-9, AC-17 (BUG-2)
+- [x] **T35**  Tests für beides: dass die Frist eine **echte** Frist ist (auf `AbortSignal.timeout` gehorcht, nicht nur auf „irgendein Signal"), dass das Geheimnis aus der Umgebung tatsächlich mitgeht, dass ein fehlender Wert zum leeren Text wird statt zu `undefined`, und dass die Ablehnung der Datenbank als Störung gilt  · files: `src/lib/rate-limit.test.ts`  · → EC-4, AC-8, AC-9, AC-17
+- [ ] **T36** `[user]`  Das Geheimnis in **beiden** Hälften hinterlegen  · **where:** (a) `GATE_SECRET=<wert>` in `.env.local`, (b) `select private.set_gate_secret('<derselbe wert>');` in der Datenbank · Der Schreibzugriff auf `.env.local` ist für Claude gesperrt; der Wert steht im Build-Bericht. **Ohne diesen Schritt sind Anmeldung und Registrierung gesperrt** — das ist die bewusst gewählte laute Variante  · → AC-8, AC-9, AC-17
+
+> **Zur Erinnerung, weil es leicht übersehen wird:** `T24` (`TRUSTED_PROXY_HOPS=0` in
+> `.env.local.example`) ist weiterhin nicht überprüfbar — die Datei ist für Claude nicht lesbar.
+> `GATE_SECRET` gehört als Platzhalter in dieselbe Datei und damit in dieselbe Hand-off.
+
+---
+
 ## Abdeckung
 
 | AC / EC | Aufgaben |
@@ -165,8 +181,8 @@ Datei nicht schreiben.
 | AC-5 | T11, T14, T32 |
 | AC-6 | T5, T6, T11, T13 |
 | AC-7 | T10, T11, T13 |
-| AC-8 | T2, T10, T11, T13, T31 |
-| AC-9 | T2, T10, T11, T13, T21, T22, T28, T30, T31 |
+| AC-8 | T2, T10, T11, T13, T31, T33, T34, T35, T36 |
+| AC-9 | T2, T10, T11, T13, T21, T22, T28, T30, T31, T33, T34, T35, T36 |
 | AC-10 | T11, T13, T14 |
 | AC-11 | T7, T8, T15, T16 |
 | AC-12 | T8, T13, T14 |
@@ -174,12 +190,12 @@ Datei nicht schreiben.
 | AC-14 | T8, T12, T16 |
 | AC-15 | T3, T12, T16, T25 |
 | AC-16 | T2, T18 |
-| AC-17 | T18, T19, T21, T22, T29, T30, T31 |
+| AC-17 | T18, T19, T21, T22, T29, T30, T31, T33, T34, T35, T36 |
 | AC-18 | T19 |
 | EC-1 | T14 |
 | EC-2 | T11, T32 |
 | EC-3 | T4, T7, T13 |
-| EC-4 | T11, T13, T23 |
+| EC-4 | T11, T13, T23, T34, T35 |
 | EC-5 | T7, T12 |
 | EC-6 | T9 |
 | EC-7 | T20 |

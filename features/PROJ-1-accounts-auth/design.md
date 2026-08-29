@@ -507,13 +507,32 @@ PROJ-1 ist das erste Feature mit Oberfläche und legt deshalb an, was danach all
 | `NEXT_PUBLIC_SUPABASE_URL` | ja, so gewollt | Adresse der lokalen Supabase-Instanz |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ja, so gewollt | öffentlicher Schlüssel; genau deshalb muss RLS sitzen |
 | `TRUSTED_PROXY_HOPS` | **nein, und das ist wesentlich** | Wie viele vertrauenswürdige Proxys vor der App stehen. Vorgabe `0` = keiner, dann wird `x-forwarded-for` nicht gelesen (TD-18). Steuert, ob AC-9 überhaupt greift |
+| `GATE_SECRET` | **nein, und das ist der ganze Punkt** | Das Geheimnis, das App und Datenbank teilen (TD-26). Ohne es lehnen beide Tore jeden Aufruf ab — auch den der App |
 
-`TRUSTED_PROXY_HOPS` gehört mit Vorgabewert `0` und einer Zeile Erklärung in `.env.local.example` —
-ohne `NEXT_PUBLIC_`-Präfix, sonst landet die Vertrauensgrenze im ausgelieferten JavaScript.
+Beide gehören ohne `NEXT_PUBLIC_`-Präfix in `.env.local.example`, sonst landete die Vertrauensgrenze
+bzw. das Geheimnis im ausgelieferten JavaScript und damit genau bei denen, gegen die sie schützen.
+
+**`GATE_SECRET` hat zwei Hälften, und beide sind nötig.** Die App liest den Wert aus der Umgebung;
+die Datenbank kennt nur seinen SHA-256-Abdruck. Der Abdruck wird **nicht** in einer Migration
+hinterlegt — er läge sonst im Repo und wäre kein Geheimnis mehr:
+
+```
+# 1. Wert erzeugen
+openssl rand -hex 24
+
+# 2. in .env.local eintragen
+GATE_SECRET=<der erzeugte Wert>
+
+# 3. denselben Wert in der Datenbank hinterlegen
+select private.set_gate_secret('<derselbe Wert>');
+```
+
+Fehlt eine der beiden Hälften, stehen Anmeldung und Registrierung still, und die App schreibt eine
+erklärende Zeile ins Server-Log. Das ist die bewusst gewählte laute Variante (TD-26).
 
 **Einen `service_role`-Schlüssel gibt es in dieser Anwendung weiterhin nicht** — der Schlüssel, der
-Row Level Security aushebelt, ist nirgends im Projekt hinterlegt (siehe TD-6). Das ist auch der
-Grund, warum die offene Frage zu den Toren (TD-25) nicht einfach mit ihm gelöst wird.
+Row Level Security aushebelt, ist nirgends im Projekt hinterlegt (siehe TD-6). Genau deshalb wurde
+die Lücke an den Toren mit einem eigenen Geheimnis geschlossen und nicht mit ihm.
 
 ---
 
@@ -572,6 +591,7 @@ auf ein verknüpftes Projekt übertragen — die Werte oben müssten also nicht 
 | TD-23 | **Beim Registrieren bleibt der gemeinsame Eimer**, auch ohne erkennbare IP | Hier gibt es keine Rückfallregel je Konto — jede Adresse ist neu. Der gemeinsame Zähler ist das Einzige, was massenhaftes Anlegen und das Durchprobieren von Adressen (AC-5) begrenzt, und die Plattform liefert nachweislich keinen Boden | Die Regel wie beim Anmelden entfallen lassen — hieße: gar kein Schutz | Ohne erkennbare IP sind es 10 Registrierungen je Stunde für **alle zusammen**. Trifft niemanden, der schon ein Konto hat; ein zweites Konto am selben Tag geht dann eventuell nicht | 2026-08-28 |
 | TD-24 | Die Drosselungsmeldung der Registrierung spricht von **Versuchen** und nennt nicht „diese Verbindung" | Gezählt werden Versuche — der Code tat das ohnehin. Eine Meldung, die von „angelegten Konten" spricht, wäre unwahr; und ohne erkennbare IP stammen die Versuche gerade **nicht** aus derselben Verbindung | Den Code auf „nur Erfolge zählen" umbauen, damit der alte Wortlaut stimmt | Wer AC-5 nutzt, um Adressen durchzuprobieren, läuft jetzt in dieselbe Sperre — das war der ausschlaggebende Nebennutzen. Der Wortlaut gibt nach, nicht der Code | 2026-08-28 |
 | TD-25 | Die beiden Tore bleiben vorerst für `anon` aufrufbar — **mit benanntem Risiko** | Eine Anmeldung beginnt ohne Sitzung; das Recht lässt sich nicht entziehen, weil die App es selbst braucht. Prüfen und Festhalten zu trennen verlagert das Problem nur, und die Datenbank kann nicht erkennen, ob der Aufruf von der App kommt | Ein Geheimnis, das App und Datenbank teilen und das nicht im Repo liegt (`service_role` scheidet nach TD-6 aus) | **Benanntes Risiko:** Fünf anonyme Aufrufe sperren ein fremdes Konto, zehn einen IP-Topf. Die Kontosperre ist ohnehin über das Formular auslösbar — neu ist nur das Sperren fremder IP-Töpfe. Vor dem ersten öffentlichen Zugang zu schließen | 2026-08-28 |
+| TD-26 | **Beide Tore verlangen ein geteiltes Geheimnis** (`p_secret`), dessen SHA-256-Abdruck in `private.gate_secret` liegt — und die alten zweiargumentigen Signaturen werden gelöscht | Das Ausführungsrecht kann `anon` nicht entzogen werden: eine Anmeldung beginnt ohne Sitzung, die App braucht das Recht selbst. Also entscheidet nicht mehr das **Recht**, sondern das **Wissen**. Der Abdruck statt des Klartexts, damit ein Datenbank-Abzug das Geheimnis nicht preisgibt; Schema `private`, weil PostgREST es gar nicht erst ausliefert | Prüfen und Festhalten trennen; oder auf ein CAPTCHA warten | **Fail closed, ausdrücklich gewählt:** ohne hinterlegtes oder passendes Geheimnis stehen Anmeldung und Registrierung still. Der Preis ist ein Einrichtungsschritt in zwei Hälften (`.env.local` **und** Datenbank); der Gewinn ist, dass die Lücke nicht versehentlich offen bleiben kann. Löst TD-25 ab | 2026-08-29 |
 
 ---
 
@@ -609,10 +629,10 @@ auf ein verknüpftes Projekt übertragen — die Werte oben müssten also nicht 
 
 ## Offene Punkte
 
-- [ ] **Die Tore sind für jede:n mit dem öffentlichen Schlüssel aufrufbar** (TD-25). Fünf anonyme
-      Aufrufe sperren ein fremdes Konto, zehn einen IP-Topf. Der Weg dorthin ist ein Geheimnis, das
-      App und Datenbank teilen und das nicht im Repo liegt — `service_role` scheidet nach TD-6 aus.
-      Vor dem ersten öffentlichen Zugang zu schließen. Kontext: `qa-report.md`, BUG-2.
+- [x] ~~**Die Tore sind für jede:n mit dem öffentlichen Schlüssel aufrufbar** (TD-25).~~
+      **Geschlossen am 29.08.2026 durch TD-26.** Beide Tore verlangen jetzt das geteilte Geheimnis;
+      zehn anonyme Aufrufe hinterlassen **null** Zeilen und sperren nichts mehr. Was bleibt, ist ein
+      Einrichtungsschritt in zwei Hälften — siehe *Umgebungsvariablen*.
 - [ ] **AC-18 verlangt „unter 500 ms je Antwort", unter Last gibt es Ausreißer darüber.** Die
       Untergrenze aus TD-20 verursacht sie nicht — bei 509 ms echter Arbeit wird gar nicht mehr
       geschlafen. Das ist eine Frage an den Vertrag, nicht an den Code: entweder eine Toleranz in
@@ -1021,3 +1041,71 @@ am Server, gegen den getestet wird.**
 Läufen grundlos reißt, wird irgendwann ignoriert — und dann fängt es nichts mehr. Der Wechsel auf
 einen Produktions-Build ist **nicht** Teil dieser Behebung und bewusst offen gelassen; er gehört
 entschieden, nicht nebenbei gemacht.
+
+---
+
+### Nachtrag: Behebung der Befunde aus dem sechsten QA-Durchlauf (29.08.2026)
+
+#### BUG-2 — das Tor entscheidet jetzt nach Wissen, nicht nach Recht
+
+Der Befund stand seit Lauf 4 offen und war als TD-25 bewusst vertagt: Beide Tore waren für `anon`
+aufrufbar, und `anon` steckt als öffentlicher Schlüssel in jedem Browser. Fünf anonyme RPC-Aufrufe
+sperrten die Anmeldung einer fremden Adresse für 15 Minuten.
+
+**Warum das nicht durch einen Rechteentzug zu lösen war** — der Punkt, an dem TD-25 hängen blieb:
+Eine Anmeldung beginnt ohne Sitzung. Die App *muss* die Tore mit dem öffentlichen Schlüssel aufrufen
+können, sonst kann sich niemand mehr anmelden. Und die Datenbank sieht einem Aufruf nicht an, ob er
+von der App kommt oder von einem Skript.
+
+Die Auflösung: Das Recht bleibt, das **Wissen** entscheidet. Beide Tore nehmen ein Geheimnis als
+erstes Argument entgegen; die Datenbank hält davon nur den SHA-256-Abdruck, in einem Schema
+`private`, das PostgREST gar nicht erst ausliefert.
+
+**Zwei Details, ohne die der Fix keiner gewesen wäre:**
+
+1. **Die alten Signaturen mussten weg.** Postgres unterscheidet Funktionen nach Signatur — ohne
+   `drop function public.login_attempt_gate(text, inet)` wäre die zweiargumentige Fassung als eigene
+   Überladung stehen geblieben und weiterhin für `anon` aufrufbar. Die Lücke wäre nicht geschlossen,
+   sondern nur um eine zweite Variante ergänzt worden. Aus demselben Grund bekommt `p_secret` auch
+   **keinen** Vorgabewert.
+2. **`p_secret` steht vorn, nicht hinten.** Ein nachgestelltes Argument mit Vorgabewert hätte die
+   alte Aufrufform weiter zugelassen.
+
+Gemessen nach dem Bau: zehn anonyme Aufrufe gegen eine bekannte Adresse hinterlassen **null** Zeilen
+in `login_attempts`, und die echte Anmeldung derselben Adresse geht danach unverändert durch (HTTP
+303). Vorher genügten fünf für eine 15-Minuten-Sperre.
+
+#### Warum fail closed, obwohl es unbequem ist
+
+Ohne hinterlegtes Geheimnis lehnen die Tore **jeden** Aufruf ab — auch den der App. Anmeldung und
+Registrierung stehen dann still, und die Person liest „Die Anmeldung ist gerade nicht möglich."
+
+Die Alternative wäre gewesen, ohne hinterlegtes Geheimnis weiterzulaufen wie bisher und den Schutz
+erst scharf zu schalten, sobald jemand ihn einrichtet. Das wurde ausdrücklich verworfen: Ein
+Sicherheitsschalter, dessen Fehlen sich wie Normalbetrieb anfühlt, wird nicht bemerkt. Die laute
+Variante kann man nicht übersehen — und sie kann nicht versehentlich in Betrieb gehen.
+
+Damit die Ursache nicht im Dunkeln bleibt, schreibt die App bei fehlendem `GATE_SECRET` eine Zeile
+ins Server-Log. Für die Person am Bildschirm ändert sich nichts — die Meldung bleibt die aus EC-4,
+und sie verrät weiterhin nichts über die Ursache.
+
+#### BUG-1 — die Frist, die vorher fehlte
+
+Bei angehaltener Datenbank kam die richtige Meldung erst nach **60 Sekunden**: Der Tor-Aufruf wartete,
+bis der HTTP-Client von sich aus aufgab. EC-4 verlangt zwar kein Zeitlimit, aber hinter einem
+üblichen vorgelagerten Server mit 30- bis 60-Sekunden-Frist hätte die Person statt der freundlichen
+Meldung einen Gateway-Fehler gesehen — EC-4 hätte im Betrieb nicht mehr gehalten, was es lokal hält.
+
+Jetzt trägt der Aufruf ein `AbortSignal.timeout(2000)`. Gemessen: **60 s → 2,05 s**, bei
+unverändertem Normalbetrieb (Median 362 ms, Maximum 378 ms, kein Wert über 500 ms).
+
+**Warum das AC-18 nicht berührt:** Die Frist greift nur, wenn die Datenbank nicht antwortet. Dann
+gilt EC-4, nicht AC-18 — und die 500-ms-Zusage in den Technical Requirements ist ausdrücklich auf
+„auch bei aktivierter Drosselung" bezogen, nicht auf einen Ausfall. Bei arbeitender Datenbank wird
+die Frist nie erreicht.
+
+**Ein Nebenbefund aus dem Rot-Nachweis, der es wert ist:** Der erste Anlauf der Frist-Tests prüfte
+nur, *dass* ein `AbortSignal` mitgegeben wird. Dieser Test blieb grün, als die Frist testweise durch
+ein Signal ohne Ablauf ersetzt wurde — er hätte die Rückkehr des Befunds nicht bemerkt. Die Tests
+horchen jetzt direkt auf `AbortSignal.timeout` und gehen sowohl bei einem Signal ohne Ablauf rot als
+auch bei einem Rückfall auf 60 Sekunden.
