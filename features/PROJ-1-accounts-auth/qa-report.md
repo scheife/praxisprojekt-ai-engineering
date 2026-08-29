@@ -186,7 +186,12 @@ AC-8 sperrt beim 6. Versuch, AC-17 beim 11., und der Abschluss-Durchstich (Regis
   voll erfüllt — die Antwortzeiten für registrierte und unbekannte Adressen sind mit 0,00 %
   Abweichung ununterscheidbar. Der Kaltstart trifft beide Gruppen gleichermaßen und verrät nichts.
   Was reißt, ist eine Leistungszusage, kein Sicherheitsmerkmal.
-- **Wohin das gehört:** `/refine PROJ-1`. Der Punkt steht schon als offene Frage in `design.md` und
+- **Nachtrag vom 29.08.2026 — erledigt.** Das `/refine` hat AC-18 neu gefasst: Perzentil am
+  eingeschwungenen Produktions-Build (mindestens 95 % unter 500 ms, keine Antwort über 1 Sekunde,
+  erste Anfrage nach einem Serverstart zählt nicht). **Die in diesem Lauf gemessenen Werte erfüllen
+  die neue Fassung bereits** — 48 von 48 unter 500 ms, Maximum 464 ms. Am Code war nichts zu ändern.
+  Damit steht aus diesem Durchlauf **kein** Befund mehr offen.
+- **Wohin das gehörte:** `/refine PROJ-1`. Der Punkt steht schon als offene Frage in `design.md` und
   wurde in Lauf 4 als BUG-3 gemeldet; Lauf 6 hat ihn nicht reproduziert, dieser Lauf schon. Zwei
   saubere Auswege: ein Perzentil statt eines Maximums in AC-18, oder die Messung ausdrücklich am
   eingeschwungenen Produktions-Build festmachen.
