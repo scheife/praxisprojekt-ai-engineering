@@ -274,6 +274,90 @@ describe('Löschen (AC-23, AC-24, EC-2)', () => {
 })
 
 /**
+ * Der Erfassungspfad mit Währung (PROJ-3, AC-2, AC-3, AC-5, TD-13) — ergänzt von `/qa`.
+ *
+ * Die Zusicherung, die AC-2 ausmacht, hatte noch keinen Test: Eine **Euro**-Ausgabe darf den
+ * fremden Dienst gar nicht erst behelligen. Sie ist mehr als eine Sparmaßnahme — sie ist der
+ * Grund, warum ein Ausfall des Kursdienstes die Euro-Erfassung nicht mitreißt.
+ */
+describe('Erfassen mit Währung (PROJ-3, AC-2, AC-3, AC-5)', () => {
+  it('ruft bei EUR keinen Kurs ab (AC-2)', async () => {
+    from.mockReturnValue(builder({ data: { spent_on: '2026-07-14' }, error: null }))
+
+    const state = await createExpense(
+      IDLE,
+      form({ ...VALID, currency: 'EUR', clientToken: TOKEN }),
+    )
+
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(state.status).toBe('saved')
+    expect(argOf(0, 'insert')?.[0]).toMatchObject({
+      currency: 'EUR',
+      amount_cents: 2900,
+      amount_original: 2900,
+      rate_per_eur: null,
+      rate_date: null,
+    })
+  })
+
+  it('ruft auch bei fehlendem Währungsfeld keinen Kurs ab (EC-8)', async () => {
+    // Ein Formular aus PROJ-2 schickt kein `currency` mit. Es muss unverändert funktionieren.
+    from.mockReturnValue(builder({ data: { spent_on: '2026-07-14' }, error: null }))
+
+    await createExpense(IDLE, form({ ...VALID, clientToken: TOKEN }))
+
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(argOf(0, 'insert')?.[0]).toMatchObject({ currency: 'EUR' })
+  })
+
+  it('holt bei Fremdwährung den Kurs zum AUSGABEDATUM und friert ihn ein (AC-3, AC-4)', async () => {
+    from.mockReturnValue(builder({ data: { spent_on: '2026-07-14' }, error: null }))
+    // Der Dienst antwortet mit einem anderen Tag als angefragt — gespeichert wird seiner.
+    fetchRate.mockResolvedValue({ state: 'ok', ratePerEur: 1.1567, rateDate: '2026-07-10' })
+
+    await createExpense(
+      IDLE,
+      form({ ...VALID, currency: 'USD', spentOn: '2026-07-12', clientToken: TOKEN }),
+    )
+
+    expect(fetchRate).toHaveBeenCalledWith('USD', '2026-07-12')
+    expect(argOf(0, 'insert')?.[0]).toMatchObject({
+      currency: 'USD',
+      amount_original: 2900,
+      amount_cents: 2507, // 29,00 USD / 1,1567
+      rate_per_eur: 1.1567,
+      rate_date: '2026-07-10',
+    })
+  })
+
+  it('schreibt GAR NICHTS, wenn der Kurs nicht zu holen ist (AC-5)', async () => {
+    fetchRate.mockResolvedValue({ state: 'unavailable' })
+
+    const state = await createExpense(
+      IDLE,
+      form({ ...VALID, currency: 'USD', clientToken: TOKEN }),
+    )
+
+    expect(state.status).toBe('error')
+    expect(state.formError).toContain('Wechselkurs ist gerade nicht abrufbar')
+    // Kein einziger Zugriff auf die Tabelle — die Reihenfolge aus TD-13 hält.
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('prüft die Eingaberegeln VOR dem Kursabruf (TD-13)', async () => {
+    // Ein unlesbarer Betrag darf keinen Aufruf des fremden Dienstes auslösen.
+    const state = await createExpense(
+      IDLE,
+      form({ ...VALID, amount: 'zwölf', currency: 'USD', clientToken: TOKEN }),
+    )
+
+    expect(state.status).toBe('error')
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalled()
+  })
+})
+
+/**
  * Die Verzweigung beim Ändern (PROJ-3, AC-12 bis AC-16).
  *
  * Der Kurs hängt an genau zwei Angaben — Währung und Datum. Diese Tests halten fest, wann er
