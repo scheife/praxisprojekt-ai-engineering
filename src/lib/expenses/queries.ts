@@ -12,11 +12,20 @@ import { monthBounds } from '@/lib/expenses/month'
 
 export type Expense = {
   id: string
+  /** Der **Euro**-Betrag in ganzen Cent — er trägt jede Summe, auch bei Fremdwährung. */
   amount_cents: number
   category: string
   spent_on: string
   note: string | null
   created_at: string
+  /** ISO-4217-Code. `EUR` heißt: kein Kurs, und `amount_original` ist `amount_cents`. */
+  currency: string
+  /** Der eingegebene Betrag in Hundertsteln **seiner** Währung (PROJ-3, TD-9). */
+  amount_original: number
+  /** Eingefroren: wie viele Einheiten der Währung ein Euro kostet. `null` bei EUR. */
+  rate_per_eur: number | null
+  /** Der Tag, für den der Kurs gilt — nicht zwingend `spent_on` (AC-4). `null` bei EUR. */
+  rate_date: string | null
 }
 
 /**
@@ -30,7 +39,7 @@ export async function listMonth(userId: string, month: string): Promise<Expense[
 
   const { data, error } = await supabase
     .from('expenses')
-    .select('id, amount_cents, category, spent_on, note, created_at')
+    .select('id, amount_cents, category, spent_on, note, created_at, currency, amount_original, rate_per_eur, rate_date')
     .eq('user_id', userId)
     .gte('spent_on', first)
     .lte('spent_on', last)
@@ -68,7 +77,7 @@ export async function listAll(userId: string): Promise<Expense[]> {
 
   const { data, error } = await supabase
     .from('expenses')
-    .select('id, amount_cents, category, spent_on, note, created_at')
+    .select('id, amount_cents, category, spent_on, note, created_at, currency, amount_original, rate_per_eur, rate_date')
     .eq('user_id', userId)
     .order('spent_on', { ascending: false })
     .order('created_at', { ascending: false })

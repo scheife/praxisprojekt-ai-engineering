@@ -1,5 +1,10 @@
 import { categoryLabel } from '@/lib/expenses/categories'
-import { formatAmountPlain, formatDay, formatTimestamp } from '@/lib/expenses/format'
+import {
+  formatAmountPlain,
+  formatDay,
+  formatRatePlain,
+  formatTimestamp,
+} from '@/lib/expenses/format'
 import type { Expense } from '@/lib/expenses/queries'
 
 /**
@@ -69,7 +74,20 @@ export function buildCsv(
     row(['Konto', account.email]),
     row(['Registriert am', formatDay(account.registeredAt.slice(0, 10))]),
     '',
-    row(['Datum', 'Kategorie', 'Betrag (EUR)', 'Notiz', 'Erfasst am']),
+    // Die vier Kursspalten stehen **hinten** (PROJ-3, AC-19): Reihenfolge und Bedeutung der
+    // Spalten aus PROJ-2 bleiben damit unverändert, und wer die Datei schon einmal geöffnet
+    // hat, findet alles an seinem Platz wieder.
+    row([
+      'Datum',
+      'Kategorie',
+      'Betrag (EUR)',
+      'Notiz',
+      'Erfasst am',
+      'Währung',
+      'Betrag (Original)',
+      'Kurs (1 EUR =)',
+      'Kursdatum',
+    ]),
     ...expenses.map((expense) =>
       row([
         formatDay(expense.spent_on),
@@ -77,6 +95,13 @@ export function buildCsv(
         formatAmountPlain(expense.amount_cents),
         expense.note ?? '',
         formatTimestamp(expense.created_at),
+        expense.currency,
+        formatAmountPlain(expense.amount_original),
+        // Bei einer Euro-Ausgabe bleiben beide Kursfelder **leer**, nicht „1,0000": Ein Kurs,
+        // den es nie gab, wäre eine Behauptung — und in einer Auskunft nach Art. 15 DSGVO soll
+        // nur stehen, was wirklich gespeichert ist.
+        expense.rate_per_eur === null ? '' : formatRatePlain(expense.rate_per_eur),
+        expense.rate_date === null ? '' : formatDay(expense.rate_date),
       ]),
     ),
   ]

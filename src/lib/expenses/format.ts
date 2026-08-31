@@ -63,3 +63,49 @@ export function formatMonthLabel(month: string): string {
 export function formatTimestamp(iso: string): string {
   return CREATED_AT.format(new Date(iso)).replace(',', '')
 }
+
+/**
+ * Ein Kurs braucht eine andere Spanne als ein Betrag: `0,8572` für das Pfund, `20.628,08` für
+ * die Rupiah. Zwei Nachkommastellen wären für die eine zu wenig, sechs für die andere unnötig —
+ * deshalb ein Bereich statt einer festen Zahl.
+ */
+const RATE = new Intl.NumberFormat('de-DE', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+})
+
+/**
+ * `125000, 'USD'` → `1.250,00 USD` (PROJ-3, AC-7).
+ *
+ * Der Code steht hinter dem Betrag, wie das Eurozeichen in `formatAmount` — dieselbe Leserichtung
+ * für dieselbe Sache. Bewusst der **Code** und nicht das Symbol: `$` steht für ein gutes Dutzend
+ * verschiedener Währungen, `USD` für genau eine.
+ *
+ * Alle Beträge stehen in Hundertsteln ihrer Währung (design.md, TD-9). Für den Yen heißt das
+ * `1.500,00 JPY` statt `1.500 JPY` — fachlich unschön, aber die Alternative wäre eine Tabelle
+ * der Nachkommastellen für alle 30 Währungen, die gepflegt werden müsste.
+ */
+export function formatForeignAmount(minorUnits: number, code: string): string {
+  return `${DECIMAL.format(minorUnits / 100)}${NBSP}${code}`
+}
+
+/**
+ * `1.1643, 'USD'` → `1 € = 1,1643 USD` (PROJ-3, AC-8).
+ *
+ * Die Richtung ist die der EZB und zugleich die in Europa übliche Leseweise. Sie ist auch die
+ * genauere: In der Gegenrichtung blieben bei Währungen mit großen Zahlen nur zwei signifikante
+ * Stellen übrig (design.md, TD-2). Nachrechnen heißt deshalb **teilen** — Originalbetrag
+ * geteilt durch diesen Kurs ergibt den Euro-Betrag.
+ */
+export function formatRate(ratePerEur: number, code: string): string {
+  return `1${NBSP}€ = ${RATE.format(ratePerEur)}${NBSP}${code}`
+}
+
+/**
+ * `1.1643` → `1,1643` — ohne Tausenderpunkt und ohne Währung, für den CSV-Export (AC-19).
+ * Dieselbe Überlegung wie bei `formatAmountPlain`: So liest eine Tabellenkalkulation mit
+ * deutschsprachigen Einstellungen den Wert als Zahl und nicht als Text.
+ */
+export function formatRatePlain(ratePerEur: number): string {
+  return String(ratePerEur).replace('.', ',')
+}

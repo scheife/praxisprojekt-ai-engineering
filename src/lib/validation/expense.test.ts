@@ -83,7 +83,7 @@ describe('Betrag lesen (AC-5, AC-6)', () => {
   it('meldet den Höchstbetrag (AC-29)', () => {
     expect((parse({ amount: '9999999,99' }) as { data: { amount: number } }).data.amount).toBe(999999999)
     expect(messageFor({ amount: '10000000,00' }, 'amount')).toBe(
-      'Der Betrag darf höchstens 9.999.999,99 € sein.',
+      'Der Betrag darf höchstens 9.999.999,99 sein.',
     )
   })
 })
@@ -170,5 +170,38 @@ describe('Erfassen und Ändern teilen die Regeln (AC-21)', () => {
     expect(!result.success && result.error.issues[0].message).toBe(
       'Der Betrag muss größer als 0 sein.',
     )
+  })
+})
+
+describe('Währung (PROJ-3, AC-1, AC-17)', () => {
+  it('nimmt eine bekannte Währung an', () => {
+    const result = parse({ currency: 'USD' } as never)
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.currency).toBe('USD')
+  })
+
+  it('lehnt eine unbekannte Währung ab — die Oberfläche kann sie gar nicht schicken', () => {
+    const result = parse({ currency: 'XYZ' } as never)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('Diese Währung gibt es nicht.')
+    }
+  })
+
+  it('gilt ohne Währungsfeld als Euro — jeder Weg aus PROJ-2 bleibt gültig (EC-8)', () => {
+    const result = schema().safeParse({ ...VALID })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.currency).toBe('EUR')
+  })
+
+  it('nennt in der Betragsgrenze kein Währungszeichen mehr (AC-17)', () => {
+    // Die Grenze gilt für den eingegebenen Betrag in **seiner** Währung. Ein „€" wäre bei
+    // ausgewähltem Dollar schlicht falsch.
+    const result = parse({ amount: '10.000.000,00', currency: 'USD' } as never)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe('Der Betrag darf höchstens 9.999.999,99 sein.')
+      expect(result.error.issues[0].message).not.toContain('€')
+    }
   })
 })

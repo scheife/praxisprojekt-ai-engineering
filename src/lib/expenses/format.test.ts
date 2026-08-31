@@ -4,7 +4,10 @@ import {
   formatAmount,
   formatAmountPlain,
   formatDay,
+  formatForeignAmount,
   formatMonthLabel,
+  formatRate,
+  formatRatePlain,
   formatTimestamp,
 } from './format'
 
@@ -39,5 +42,37 @@ describe('Datum und Monat', () => {
   it('schreibt Erfassungszeitpunkte in Wiener Zeit', () => {
     // 07:12 UTC im August ist 09:12 in Wien (Sommerzeit).
     expect(formatTimestamp('2026-08-14T07:12:00Z')).toBe('14.08.2026 09:12')
+  })
+})
+
+describe('Fremdwährung und Kurs (PROJ-3, AC-7, AC-8)', () => {
+  it('schreibt den Originalbetrag mit dem Code dahinter', () => {
+    expect(formatForeignAmount(125000, 'USD')).toBe('1.250,00\u00a0USD')
+  })
+
+  it('nutzt den Code und nicht das Symbol', () => {
+    // `$` steht für ein gutes Dutzend Währungen, `USD` für genau eine.
+    expect(formatForeignAmount(125000, 'USD')).not.toContain('$')
+  })
+
+  it('gibt auch einer Währung ohne Untereinheit zwei Nachkommastellen (TD-9)', () => {
+    // Fachlich unschön, aber die Alternative wäre eine Tabelle der Nachkommastellen für alle
+    // 30 Währungen. Der Test hält die Entscheidung fest, statt sie zu verschweigen.
+    expect(formatForeignAmount(150000, 'JPY')).toBe('1.500,00\u00a0JPY')
+  })
+
+  it('schreibt den Kurs in Leserichtung: 1 Euro kostet X (AC-8)', () => {
+    expect(formatRate(1.1593, 'USD')).toBe('1\u00a0€ = 1,1593\u00a0USD')
+  })
+
+  it('kommt mit großen und mit kleinen Kursen zurecht', () => {
+    // Zwei Nachkommastellen wären für das Pfund zu wenig, sechs für die Rupiah unnötig.
+    expect(formatRate(20654.32, 'IDR')).toBe('1\u00a0€ = 20.654,32\u00a0IDR')
+    expect(formatRate(0.8572, 'GBP')).toBe('1\u00a0€ = 0,8572\u00a0GBP')
+  })
+
+  it('schreibt den Kurs für den Export ohne Tausenderpunkt (AC-19)', () => {
+    // So liest ihn eine Tabellenkalkulation mit deutschsprachigen Einstellungen als Zahl.
+    expect(formatRatePlain(1.1593)).toBe('1,1593')
   })
 })

@@ -1,7 +1,13 @@
 'use client'
 
 import { categoryLabel } from '@/lib/expenses/categories'
-import { formatAmount, formatDay, formatMonthLabel } from '@/lib/expenses/format'
+import {
+  formatAmount,
+  formatDay,
+  formatForeignAmount,
+  formatMonthLabel,
+  formatRate,
+} from '@/lib/expenses/format'
 import type { Expense } from '@/lib/expenses/queries'
 import { DeleteExpenseDialog } from '@/components/expenses/delete-expense-dialog'
 import { EditExpenseDialog } from '@/components/expenses/edit-expense-dialog'
@@ -38,7 +44,7 @@ export function ExpenseList({
             <TableHead className="w-24">Datum</TableHead>
             <TableHead className="w-40">Kategorie</TableHead>
             <TableHead>Notiz</TableHead>
-            <TableHead className="w-32 text-right">Betrag</TableHead>
+            <TableHead className="w-56 text-right">Betrag</TableHead>
             <TableHead className="w-36 text-right">
               <span className="sr-only">Aktionen</span>
             </TableHead>
@@ -54,6 +60,20 @@ export function ExpenseList({
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatAmount(expense.amount_cents)}
+                {/* Nur Fremdwährungszeilen bekommen die Beizeile — eine Euro-Ausgabe sieht aus
+                    wie vor PROJ-3 (AC-7, EC-8). Der Euro-Betrag bleibt die Hauptzahl, weil er
+                    die Monatssumme trägt; darunter steht, woraus er entstanden ist, damit die
+                    Umrechnung ohne Klick nachrechenbar ist (AC-8). */}
+                {expense.rate_per_eur !== null && expense.rate_date !== null && (
+                  <span className="mt-0.5 block text-[12px] font-normal leading-snug text-muted-foreground">
+                    {formatForeignAmount(expense.amount_original, expense.currency)}
+                    <span className="block">
+                      {formatRate(expense.rate_per_eur, expense.currency)}
+                      {' · Kurs vom '}
+                      {formatDay(expense.rate_date)}
+                    </span>
+                  </span>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isCategoryKey } from '@/lib/expenses/categories'
+import { DEFAULT_CURRENCY, isCurrencyCode } from '@/lib/expenses/currencies'
 import { EARLIEST_DAY, todayInVienna } from '@/lib/expenses/month'
 
 /**
@@ -16,7 +17,13 @@ import { EARLIEST_DAY, todayInVienna } from '@/lib/expenses/month'
  * Zukunft.
  */
 
-/** 9.999.999,99 € — dieselbe Grenze wie `expenses_amount_cents_range` (AC-29). */
+/**
+ * 9.999.999,99 — dieselbe Grenze wie `expenses_amount_cents_range` (PROJ-2 AC-29).
+ *
+ * Seit PROJ-3 gilt sie **zweimal**: hier auf den eingegebenen Betrag in seiner eigenen Währung
+ * (AC-17) und ein zweites Mal auf den daraus errechneten Euro-Betrag (AC-18) — den prüft
+ * `toEuroCents` in `src/lib/expenses/rate.ts`, weil er erst mit dem Kurs entsteht.
+ */
 export const AMOUNT_MAX_CENTS = 999_999_999
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -86,7 +93,10 @@ function toCents(raw: string, fail: (message: string) => void): number | typeof 
     return z.NEVER
   }
   if (value > AMOUNT_MAX_CENTS) {
-    fail('Der Betrag darf höchstens 9.999.999,99 € sein.')
+    // Ohne Währungszeichen, seit der Betrag auch in USD oder JPY stehen kann (PROJ-3,
+    // AC-17): Die Grenze gilt für den eingegebenen Betrag in **seiner** Währung, und ein
+    // „€" wäre bei ausgewähltem Dollar schlicht falsch.
+    fail('Der Betrag darf höchstens 9.999.999,99 sein.')
     return z.NEVER
   }
   return value
@@ -115,6 +125,20 @@ export function expenseFieldsSchema(now: Date = new Date()) {
       // Über die Oberfläche nicht erreichbar — fängt den direkten Aufruf ab. Die Datenbank
       // lehnt ihn zusätzlich ab (AC-10).
       .refine(isCategoryKey, 'Diese Kategorie gibt es nicht.'),
+
+    /**
+     * Die Währung, in der der Betrag eingegeben wurde (PROJ-3, AC-1).
+     *
+     * Wie bei der Kategorie: über die Oberfläche nicht falsch zu befüllen, die Prüfung fängt
+     * den direkten Aufruf ab, und die Datenbank lehnt zusätzlich ab. Fehlt das Feld ganz —
+     * etwa weil ein älteres Formular es nicht mitschickt —, gilt Euro; damit bleibt jeder Weg
+     * aus PROJ-2 unverändert gültig (AC-2, EC-8).
+     */
+    currency: z
+      .string()
+      .optional()
+      .transform((value) => value ?? DEFAULT_CURRENCY)
+      .refine(isCurrencyCode, 'Diese Währung gibt es nicht.'),
 
     spentOn: z.string().transform((raw, ctx) => {
       if (!isRealDay(raw)) {
@@ -162,4 +186,4 @@ export function updateExpenseSchema(now: Date = new Date()) {
 }
 
 export type ExpenseFields = z.infer<ReturnType<typeof expenseFieldsSchema>>
-export type ExpenseFieldName = 'amount' | 'category' | 'spentOn' | 'note'
+export type ExpenseFieldName = 'amount' | 'currency' | 'category' | 'spentOn' | 'note'

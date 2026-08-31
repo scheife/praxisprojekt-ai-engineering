@@ -1,12 +1,17 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { Fragment, useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { createExpense } from '@/lib/actions/expenses'
 import { IDLE } from '@/lib/expenses/form-state'
 import { CATEGORIES } from '@/lib/expenses/categories'
+import {
+  CURRENCIES,
+  DEFAULT_CURRENCY,
+  PINNED_CURRENCY_COUNT,
+} from '@/lib/expenses/currencies'
 import { formatMonthLabel } from '@/lib/expenses/format'
 import { monthOf } from '@/lib/expenses/month'
 import { Button } from '@/components/ui/button'
@@ -16,6 +21,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -46,6 +52,12 @@ export function ExpenseComposer({
 
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
+  /**
+   * Die Währung wird nach dem Erfassen **nicht** zurückgesetzt (AC-6) — sie verhält sich wie
+   * Kategorie und Datum, nicht wie Betrag und Notiz. Wer einen Stapel Dollar-Belege eintippt,
+   * wählt sie einmal. Der Rücksetz-Effekt weiter unten fasst sie deshalb bewusst nicht an.
+   */
+  const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY)
   const [spentOn, setSpentOn] = useState(defaultDate)
   const [note, setNote] = useState('')
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID())
@@ -114,7 +126,7 @@ export function ExpenseComposer({
 
       <input type="hidden" name="clientToken" value={clientToken} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[7rem_minmax(9rem,1fr)_9.5rem] lg:grid-cols-[7rem_11rem_9.5rem_minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[7rem_6rem_minmax(8rem,1fr)_9.5rem] lg:grid-cols-[7rem_6rem_10.5rem_9.5rem_minmax(0,1fr)_auto]">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="amount" className={LABEL}>
             Betrag
@@ -132,6 +144,36 @@ export function ExpenseComposer({
             aria-describedby={fieldError?.amount ? 'amount-error' : undefined}
             className="h-9 text-right tabular-nums"
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="currency" className={LABEL}>
+            Währung
+          </Label>
+          {/* Steht direkt neben dem Betrag, weil es ihn liest: „1.250,00" heißt erst etwas,
+              wenn danebensteht, worin. Bei EUR — der Vorbelegung — wird kein Kurs geholt und
+              gar kein fremder Dienst aufgerufen (AC-2). */}
+          <Select name="currency" value={currency} onValueChange={setCurrency}>
+            <SelectTrigger
+              id="currency"
+              aria-invalid={Boolean(fieldError?.currency)}
+              aria-describedby={fieldError?.currency ? 'currency-error' : undefined}
+              className="h-9 w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCIES.map((item, index) => (
+                <Fragment key={item.code}>
+                  {index === PINNED_CURRENCY_COUNT && <SelectSeparator />}
+                  <SelectItem value={item.code}>
+                    <span className="tabular-nums">{item.code}</span>
+                    <span className="ml-2 text-muted-foreground">{item.label}</span>
+                  </SelectItem>
+                </Fragment>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -219,6 +261,7 @@ export function ExpenseComposer({
       {fieldError && (
         <div className="flex flex-col gap-1 text-[13px] text-destructive">
           {fieldError.amount && <p id="amount-error">{fieldError.amount}</p>}
+          {fieldError.currency && <p id="currency-error">{fieldError.currency}</p>}
           {fieldError.category && <p id="category-error">{fieldError.category}</p>}
           {fieldError.spentOn && <p id="spentOn-error">{fieldError.spentOn}</p>}
           {fieldError.note && <p id="note-error">{fieldError.note}</p>}

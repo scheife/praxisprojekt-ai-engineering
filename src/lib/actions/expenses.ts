@@ -4,7 +4,10 @@ import { refresh } from 'next/cache'
 
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { currencyLabel, DEFAULT_CURRENCY, isForeign } from '@/lib/expenses/currencies'
+import { formatAmount, formatDay } from '@/lib/expenses/format'
 import { monthOf } from '@/lib/expenses/month'
+import { fetchRate, toEuroCents } from '@/lib/expenses/rate'
 import type { ExpenseFormState } from '@/lib/expenses/form-state'
 import {
   createExpenseSchema,
@@ -38,7 +41,114 @@ const SAVE_FAILED =
 const DELETE_FAILED =
   'Das Löschen hat gerade nicht geklappt. Bitte versuch es in einem Moment noch einmal.'
 
-const FIELDS: ExpenseFieldName[] = ['amount', 'category', 'spentOn', 'note']
+const FIELDS: ExpenseFieldName[] = ['amount', 'currency', 'category', 'spentOn', 'note']
+
+/**
+ * Die beiden Kursmeldungen — und der Unterschied zwischen ihnen ist der Punkt (EC-4).
+ *
+ * Der Dienst antwortet auf „Datum außerhalb", „Währung damals nicht geführt" und „Code
+ * unbekannt" einheitlich mit 404; unterscheidbar sind deshalb genau zwei Klassen. Die eine ist
+ * **dauerhaft** und schickt die Person dorthin, wo sie etwas ändern kann; die andere ist
+ * vorübergehend und bittet um Geduld. Eine Meldung, die einen Ausfall behauptet, wo keiner ist,
+ * lässt jemanden zehn Minuten später dasselbe noch einmal versuchen.
+ */
+function noRateForDate(currency: string, spentOn: string): string {
+  return (
+    `Für ${currencyLabel(currency)} gibt es zum ${formatDay(spentOn)} keinen Kurs. ` +
+    `Bitte prüf das Datum oder wähl eine andere Währung.`
+  )
+}
+
+const RATE_UNAVAILABLE =
+  'Der Wechselkurs ist gerade nicht abrufbar. Bitte versuch es in einem Moment noch einmal — ' +
+  'oder trag den Betrag in Euro ein.'
+
+/** Was aus Währung, Betrag und Datum an Kurswerten in die Zeile geht. */
+type Priced = {
+  amount_cents: number
+  amount_original: number
+  currency: string
+  rate_per_eur: number | null
+  rate_date: string | null
+}
+
+/**
+ * Rechnet einen eingegebenen Betrag in die Spalten der Zeile um — der einzige Ort, an dem das
+ * passiert, damit Erfassen und Ändern nicht auseinanderlaufen können.
+ *
+ * Bei **Euro** kein Außenkontakt und kein Kurs (AC-2, AC-16): Der eingegebene Betrag ist der
+ * Euro-Betrag, und beide Beträge sind gleich — genau das, was die Prüfregel der Datenbank
+ * verlangt.
+ *
+ * Bei **Fremdwährung** wird entweder ein mitgegebener Kurs weiterverwendet (`reuse`, wenn beim
+ * Ändern weder Währung noch Datum sich bewegt haben — AC-13) oder ein neuer geholt.
+ */
+async function price(
+  amount: number,
+  currency: string,
+  spentOn: string,
+  reuse?: { ratePerEur: number; rateDate: string },
+): Promise<{ ok: true; row: Priced } | { ok: false; message: string }> {
+  if (!isForeign(currency)) {
+    return {
+      ok: true,
+      row: {
+        amount_cents: amount,
+        amount_original: amount,
+        currency: DEFAULT_CURRENCY,
+        rate_per_eur: null,
+        rate_date: null,
+      },
+    }
+  }
+
+  let ratePerEur: number
+  let rateDate: string
+
+  if (reuse) {
+    ;({ ratePerEur, rateDate } = reuse)
+  } else {
+    const lookup = await fetchRate(currency, spentOn)
+    if (lookup.state === 'no-rate-for-date') {
+      return { ok: false, message: noRateForDate(currency, spentOn) }
+    }
+    if (lookup.state === 'unavailable') {
+      return { ok: false, message: RATE_UNAVAILABLE }
+    }
+    ;({ ratePerEur, rateDate } = lookup)
+  }
+
+  const converted = toEuroCents(amount, ratePerEur)
+
+  // Die zweite Hälfte der Grenzprüfung (AC-18): Der Betrag war in seiner eigenen Währung
+  // zulässig, der umgerechnete ist es nicht. Die Meldung nennt den umgerechneten Wert, sonst
+  // wirkt die Ablehnung willkürlich.
+  if (converted.state === 'above-maximum') {
+    return {
+      ok: false,
+      message:
+        `Das sind umgerechnet ${formatAmount(converted.amountCents)} — ` +
+        `höchstens 9.999.999,99 € sind möglich.`,
+    }
+  }
+  if (converted.state === 'below-minimum') {
+    return {
+      ok: false,
+      message: 'Umgerechnet ergibt das weniger als 0,01 € — bitte prüf Betrag und Währung.',
+    }
+  }
+
+  return {
+    ok: true,
+    row: {
+      amount_cents: converted.amountCents,
+      amount_original: amount,
+      currency,
+      rate_per_eur: ratePerEur,
+      rate_date: rateDate,
+    },
+  }
+}
 
 /** Feldfehler aus dem Schema in die Form bringen, die das Formular anzeigt. */
 function fieldErrorsFrom(
@@ -53,8 +163,11 @@ function fieldErrorsFrom(
 }
 
 function formValues(formData: FormData) {
+  const currency = formData.get('currency')
   return {
     amount: String(formData.get('amount') ?? ''),
+    // Fehlt das Feld ganz, gilt Euro — damit bleibt jeder Weg aus PROJ-2 gültig (EC-8).
+    currency: currency === null ? undefined : String(currency),
     category: String(formData.get('category') ?? ''),
     spentOn: String(formData.get('spentOn') ?? ''),
     note: String(formData.get('note') ?? ''),
@@ -88,14 +201,22 @@ export async function createExpense(
     return { status: 'error', fieldErrors }
   }
 
-  const { amount, category, spentOn, note } = parsed.data
+  const { amount, currency, category, spentOn, note } = parsed.data
+
+  // Der Kurs kommt **nach** den Eingaberegeln und **vor** der Datenbank (design.md, TD-13):
+  // Ein ungültiger Betrag löst so keinen Aufruf des fremden Dienstes aus, und ein Kursproblem
+  // kann nie als Datenbankproblem erscheinen (EC-9). Scheitert er, entsteht keine Zeile —
+  // die Werte bleiben im Formular stehen (AC-5).
+  const priced = await price(amount, currency, spentOn)
+  if (!priced.ok) return { status: 'error', formError: priced.message }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase
     .from('expenses')
     .insert({
       user_id: user.id,
-      amount_cents: amount,
+      ...priced.row,
       category,
       spent_on: spentOn,
       note,
@@ -152,12 +273,52 @@ export async function updateExpense(
     return { status: 'error', fieldErrors }
   }
 
-  const { amount, category, spentOn, note } = parsed.data
+  const { amount, currency, category, spentOn, note } = parsed.data
   const supabase = await createClient()
+
+  // Der gespeicherte Stand, **bevor** irgendetwas entschieden wird (design.md, TD-10). Nur er
+  // beantwortet verlässlich, ob sich Währung oder Datum bewegt haben — was das Formular
+  // mitschickt, sagt darüber nichts, und ein verstecktes Feld wäre vom Browser beeinflussbar.
+  // Die Abfrage ist zugleich die Zugehörigkeitsprüfung, die es ohnehin braucht.
+  const { data: current, error: readError } = await supabase
+    .from('expenses')
+    .select('currency, spent_on, rate_per_eur, rate_date')
+    .eq('id', parsed.data.id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (readError) return { status: 'error', formError: SAVE_FAILED }
+  if (!current) {
+    refresh()
+    return { status: 'error', formError: GONE }
+  }
+
+  // Der Kurs hängt an genau zwei Angaben. Bleiben beide stehen, bleibt auch der Kurs stehen und
+  // nur der Euro-Betrag wird neu gerechnet (AC-13) — eine korrigierte Rechnungssumme darf den
+  // historischen Kurs nicht verschieben. Kategorie und Notiz lösen gar nichts aus (AC-14).
+  const rateStillValid =
+    currency === current.currency &&
+    spentOn === current.spent_on &&
+    current.rate_per_eur !== null &&
+    current.rate_date !== null
+
+  const priced = await price(
+    amount,
+    currency,
+    spentOn,
+    rateStillValid
+      ? { ratePerEur: Number(current.rate_per_eur), rateDate: current.rate_date! }
+      : undefined,
+  )
+  // Scheitert der Neuabruf, bleibt die gespeicherte Zeile **vollständig** unverändert (AC-15):
+  // Bis hierher wurde nichts geschrieben.
+  if (!priced.ok) return { status: 'error', formError: priced.message }
 
   const { data, error } = await supabase
     .from('expenses')
-    .update({ amount_cents: amount, category, spent_on: spentOn, note })
+    // Alle Felder in **einer** Anweisung — es gibt keine Stelle, an der sich die Währung des
+    // einen Tabs mit dem Kurs eines anderen mischen könnte (EC-7).
+    .update({ ...priced.row, category, spent_on: spentOn, note })
     .eq('id', parsed.data.id)
     .eq('user_id', user.id)
     .select('spent_on')

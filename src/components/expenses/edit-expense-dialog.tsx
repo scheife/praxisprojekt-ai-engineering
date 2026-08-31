@@ -1,12 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { updateExpense } from '@/lib/actions/expenses'
 import { IDLE, type ExpenseFormState } from '@/lib/expenses/form-state'
 import { CATEGORIES } from '@/lib/expenses/categories'
+import {
+  CURRENCIES,
+  PINNED_CURRENCY_COUNT,
+} from '@/lib/expenses/currencies'
 import { formatMonthLabel } from '@/lib/expenses/format'
 import type { Expense } from '@/lib/expenses/queries'
 import { Button } from '@/components/ui/button'
@@ -25,6 +29,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -33,8 +38,8 @@ const LABEL =
   'font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground'
 
 /** Cent zurück in die Schreibweise, die im Betragsfeld steht. */
-function toAmountField(cents: number): string {
-  return (cents / 100).toFixed(2).replace('.', ',')
+function toAmountField(minorUnits: number): string {
+  return (minorUnits / 100).toFixed(2).replace('.', ',')
 }
 
 /**
@@ -57,7 +62,11 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
   const [formError, setFormError] = useState<string | undefined>(undefined)
   const [fieldError, setFieldError] = useState<ExpenseFormState['fieldErrors']>(undefined)
 
-  const [amount, setAmount] = useState(() => toAmountField(expense.amount_cents))
+  // **Der Originalbetrag**, nicht der Euro-Betrag: Wer 1.250,00 USD erfasst hat, muss im
+  // Dialog 1.250,00 sehen und nicht die umgerechneten 1.078,24. Bei einer Euro-Ausgabe sind
+  // beide ohnehin gleich (design.md, TD-12).
+  const [amount, setAmount] = useState(() => toAmountField(expense.amount_original))
+  const [currency, setCurrency] = useState<string>(expense.currency)
   const [category, setCategory] = useState(expense.category)
   const [spentOn, setSpentOn] = useState(expense.spent_on)
   const [note, setNote] = useState(expense.note ?? '')
@@ -136,7 +145,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_6rem_minmax(0,1fr)]">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`amount-${expense.id}`} className={LABEL}>
                 Betrag
@@ -153,6 +162,39 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
               />
               {fieldError?.amount && (
                 <p className="text-[13px] text-destructive">{fieldError.amount}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`currency-${expense.id}`} className={LABEL}>
+                Währung
+              </Label>
+              {/* Ändert sich hier etwas — oder am Datum —, holt die Action einen neuen Kurs
+                  (AC-12). Bleibt beides stehen und nur der Betrag ändert sich, bleibt der
+                  eingefrorene Kurs unangetastet (AC-13). Umstellung auf EUR entfernt ihn
+                  (AC-16). */}
+              <Select name="currency" value={currency} onValueChange={setCurrency}>
+                <SelectTrigger
+                  id={`currency-${expense.id}`}
+                  aria-invalid={Boolean(fieldError?.currency)}
+                  className="h-9 w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((item, index) => (
+                    <Fragment key={item.code}>
+                      {index === PINNED_CURRENCY_COUNT && <SelectSeparator />}
+                      <SelectItem value={item.code}>
+                        <span className="tabular-nums">{item.code}</span>
+                        <span className="ml-2 text-muted-foreground">{item.label}</span>
+                      </SelectItem>
+                    </Fragment>
+                  ))}
+                </SelectContent>
+              </Select>
+              {fieldError?.currency && (
+                <p className="text-[13px] text-destructive">{fieldError.currency}</p>
               )}
             </div>
 

@@ -433,3 +433,47 @@ fremden Verwaltungsoberfläche einzustellen wäre. PROJ-3 fügt der Liste aus PR
   wählt, bekommt die 404-Meldung aus TD-4 — sachlich richtig, aber erst nach dem Absenden. Eine vom
   Datum abhängige Auswahlliste wäre die Alternative; für den Zeitrahmen und die realistische
   Nutzung (Belege der letzten Monate) ist sie nicht vorgesehen.
+
+---
+
+## Notizen aus dem Bau (`/build`, 2026-08-31)
+
+Der Entwurf hat gehalten; die Abweichungen sind klein und benannt.
+
+**Drei Dinge, die der Bau am Entwurf nachgeschärft hat**
+
+1. **`toEuroCents` gibt den umgerechneten Betrag auch bei einer Ablehnung zurück.** AC-18
+   verlangt, dass die Meldung den Wert nennt („Das sind umgerechnet 19.999.999,98 € …"). Ohne ihn
+   wirkt die Ablehnung eines in seiner Währung zulässigen Betrags willkürlich.
+2. **Die Betragsgrenze meldet sich ohne Währungszeichen.** Sie lautete „höchstens 9.999.999,99 €";
+   bei ausgewähltem Dollar ist das schlicht falsch, denn die Grenze gilt für den Betrag in
+   **seiner** Währung (AC-17). Ein bestehender Test aus PROJ-2 prüfte den Wortlaut und wurde
+   mitgezogen. PROJ-2 AC-29 bleibt erfüllt — es beschreibt den Betrag, nicht den Meldungstext.
+3. **Der Änderungsdialog belegte den Betrag aus `amount_cents` vor.** Bei einer
+   Fremdwährungsausgabe hätte dort der **Euro**-Betrag gestanden statt der eingegebenen
+   1.250,00 USD. Jetzt kommt er aus `amount_original`; bei Euro sind beide ohnehin gleich (TD-12).
+
+**Eine Lücke im Aufgabenplan, aufgedeckt beim Bauen**
+
+`tasks.md` sah Tests nur für die drei *neuen* Dateien vor — nicht für `actions/expenses.test.ts`,
+die den von T8 geänderten Code prüft. Aufgefallen ist es, als T8 den bestehenden Test rot machte.
+Nachgetragen als **T16**, samt Lehre für den nächsten Plan (siehe `tasks.md`, Nachtrag).
+
+**Was `/qa` besonders ansehen sollte**
+
+- **Der Fremdwährungsweg durch einen echten Browser ist nicht belegt.** Radix füllt das versteckte
+  native Auswahlfeld erst im Browser; serverseitig steht dort nichts. Für **Euro** ist der Weg
+  durch PROJ-2s E2E-Journey 1 gedeckt (sie erfasst über dieselbe Zeile), für eine **ausgewählte
+  Fremdwährung** nicht. Der Anwendungscode fängt eine fehlende Angabe als Euro ab, ein still nach
+  Euro gekippter Dollar-Beleg wäre aber ein ernster Fehler — gehört in `/e2e-tests`.
+- **Die Beizeile ist als Markup geprüft, nicht als Bild.** Die Betragsspalte wurde von `w-32` auf
+  `w-56` verbreitert, damit Kurs und Kursdatum nicht umbrechen; wie das auf 375 px wirkt, ist offen.
+- **Der Höchstbetrag beißt bei Weichwährungen früh.** 9.999.999,99 IDR sind rund 484 €; größere
+  Rupiah-Beträge lassen sich nicht erfassen. Das ist genau, was AC-17 sagt (die Grenze gilt auf den
+  Originalbetrag), aber es ist eine spürbare Folge, die niemand beim Schreiben der Spec vor Augen
+  hatte.
+
+**Gemessen am Ende des Baus:** 209 Unit- und Integrationstests grün (vorher 164), 18 von 18 E2E
+grün als Regression gegen PROJ-1 und PROJ-2, Lint und Build ohne Befund. Für die neuen Tests wurde
+der Rot-Nachweis geführt: sieben gezielte Brüche an `rate.ts` und `actions/expenses.ts`, jeder von
+genau dem Test gefangen, der ihn verhindern soll.

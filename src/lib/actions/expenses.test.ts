@@ -22,6 +22,13 @@ vi.mock('@/lib/auth', () => ({ requireUser: () => requireUser() }))
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ from }),
 }))
+// Der Abruf wird ersetzt, die **Umrechnung nicht**: So läuft in diesen Tests die echte
+// Division samt Rundung mit, und nur der Gang ins Netz ist gestellt.
+const fetchRate = vi.fn()
+vi.mock('@/lib/expenses/rate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/expenses/rate')>()),
+  fetchRate: (...args: unknown[]) => fetchRate(...args),
+}))
 
 const { createExpense, updateExpense, deleteExpense } = await import('./expenses')
 const { IDLE } = await import('@/lib/expenses/form-state')
@@ -69,6 +76,7 @@ beforeEach(() => {
   refresh.mockReset()
   requireUser.mockReset()
   from.mockReset()
+  fetchRate.mockReset()
   requireUser.mockResolvedValue({ id: 'uid-1', email: 'wer@example.at' })
 })
 
@@ -174,13 +182,26 @@ describe('Ändern (AC-20, AC-21, AC-24, EC-2, EC-3)', () => {
       form({ ...VALID, spentOn: '2026-07-20', id: EXPENSE_ID }),
     )
 
+    // Seit PROJ-3 gehen Währung, Originalbetrag und die beiden Kursfelder in derselben
+    // Anweisung mit — weiterhin in **einer**, damit sich zwei Stände nicht mischen können
+    // (EC-3 hier, EC-7 in PROJ-3). Bei Euro bleiben die Kursfelder leer.
     expect(argOf(0, 'update')?.[0]).toEqual({
       amount_cents: 2900,
+      amount_original: 2900,
+      currency: 'EUR',
+      rate_per_eur: null,
+      rate_date: null,
       category: 'software',
       spent_on: '2026-07-20',
       note: 'Hosting',
     })
+    // Seit PROJ-3 sind es **zwei** Anweisungen: erst wird der gespeicherte Stand gelesen (nur
+    // er sagt, ob Währung oder Datum sich bewegt haben — design.md TD-10), dann geschrieben.
+    // Entscheidend ist, dass **beide** auf die eigene Zeile eingeschränkt sind (AC-24) und die
+    // Nutzer-ID in beiden aus der Sitzung stammt, nie aus dem Formular (AC-25).
     expect(callArgs(0).filter(([name]) => name === 'eq')).toEqual([
+      ['eq', 'id', EXPENSE_ID],
+      ['eq', 'user_id', 'uid-1'],
       ['eq', 'id', EXPENSE_ID],
       ['eq', 'user_id', 'uid-1'],
     ])
@@ -249,5 +270,145 @@ describe('Löschen (AC-23, AC-24, EC-2)', () => {
     requireUser.mockRejectedValue(new Error('redirect:/login'))
     await expect(deleteExpense(IDLE, form({ id: EXPENSE_ID }))).rejects.toThrow('redirect:/login')
     expect(from).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Die Verzweigung beim Ändern (PROJ-3, AC-12 bis AC-16).
+ *
+ * Der Kurs hängt an genau zwei Angaben — Währung und Datum. Diese Tests halten fest, wann er
+ * neu geholt wird und wann **ausdrücklich nicht**: Ein Neuabruf bei jeder Änderung ließe eine
+ * Notizkorrektur an einem fremden Dienst scheitern, gar kein Neuabruf hinterließe nach einer
+ * Datumskorrektur eine Zeile mit widersprüchlichem Kursdatum.
+ */
+describe('Ändern mit Währung (PROJ-3, AC-12 bis AC-16)', () => {
+  /** Der gespeicherte Stand, den die Action zuerst liest — dann das Ergebnis des Schreibens. */
+  function bestand(row: Record<string, unknown>) {
+    from.mockReturnValueOnce(builder({ data: row, error: null }))
+    from.mockReturnValueOnce(builder({ data: [{ spent_on: '2026-07-14' }], error: null }))
+  }
+
+  const USD_BESTAND = {
+    currency: 'USD',
+    spent_on: '2026-07-14',
+    rate_per_eur: 1.1593,
+    rate_date: '2026-07-14',
+  }
+
+  /** Die Felder, die tatsächlich geschrieben wurden. */
+  const geschrieben = () => argOf(1, 'update')?.[0] as Record<string, unknown>
+
+  it('holt einen neuen Kurs, wenn die WÄHRUNG sich ändert (AC-12)', async () => {
+    bestand(USD_BESTAND)
+    fetchRate.mockResolvedValue({ state: 'ok', ratePerEur: 0.9364, rateDate: '2026-07-14' })
+
+    await updateExpense(IDLE, form({ ...VALID, currency: 'CHF', id: EXPENSE_ID }))
+
+    expect(fetchRate).toHaveBeenCalledWith('CHF', '2026-07-14')
+    expect(geschrieben()).toMatchObject({
+      currency: 'CHF',
+      rate_per_eur: 0.9364,
+      amount_original: 2900,
+      amount_cents: 3097, // 29,00 CHF / 0,9364
+    })
+  })
+
+  it('holt einen neuen Kurs, wenn das DATUM sich ändert (AC-12)', async () => {
+    bestand(USD_BESTAND)
+    fetchRate.mockResolvedValue({ state: 'ok', ratePerEur: 1.1567, rateDate: '2026-07-10' })
+
+    await updateExpense(IDLE, form({ ...VALID, currency: 'USD', spentOn: '2026-07-11', id: EXPENSE_ID }))
+
+    expect(fetchRate).toHaveBeenCalledWith('USD', '2026-07-11')
+    expect(geschrieben()).toMatchObject({ rate_per_eur: 1.1567, rate_date: '2026-07-10' })
+  })
+
+  it('holt NICHTS, wenn nur der Betrag sich ändert — rechnet aber neu (AC-13)', async () => {
+    // Eine korrigierte Rechnungssumme darf den historischen Kurs nicht verschieben.
+    bestand(USD_BESTAND)
+
+    await updateExpense(
+      IDLE,
+      form({ ...VALID, amount: '58,00', currency: 'USD', id: EXPENSE_ID }),
+    )
+
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(geschrieben()).toMatchObject({
+      rate_per_eur: 1.1593,
+      rate_date: '2026-07-14',
+      amount_original: 5800,
+      amount_cents: 5003, // 58,00 USD / 1,1593
+    })
+  })
+
+  it('holt NICHTS, wenn nur die Notiz sich ändert (AC-14)', async () => {
+    // Sonst scheiterte eine Tippfehlerkorrektur an der Erreichbarkeit eines fremden Dienstes.
+    bestand(USD_BESTAND)
+
+    await updateExpense(
+      IDLE,
+      form({ ...VALID, note: 'Tippfehler behoben', currency: 'USD', id: EXPENSE_ID }),
+    )
+
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(geschrieben()).toMatchObject({ rate_per_eur: 1.1593, note: 'Tippfehler behoben' })
+  })
+
+  it('entfernt Kurs und Kursdatum bei der Umstellung auf EUR (AC-16)', async () => {
+    bestand(USD_BESTAND)
+
+    await updateExpense(IDLE, form({ ...VALID, currency: 'EUR', id: EXPENSE_ID }))
+
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(geschrieben()).toMatchObject({
+      currency: 'EUR',
+      rate_per_eur: null,
+      rate_date: null,
+      amount_cents: 2900,
+      amount_original: 2900,
+    })
+  })
+
+  it('schreibt GAR NICHT, wenn der nötige Neuabruf scheitert (AC-15)', async () => {
+    // Die gespeicherte Zeile bleibt vollständig unverändert — bis hierher wurde nichts
+    // geschrieben, und es soll auch nichts geschrieben werden.
+    bestand(USD_BESTAND)
+    fetchRate.mockResolvedValue({ state: 'unavailable' })
+
+    const state = await updateExpense(
+      IDLE,
+      form({ ...VALID, currency: 'CHF', id: EXPENSE_ID }),
+    )
+
+    expect(state.status).toBe('error')
+    expect(state.formError).toContain('Wechselkurs ist gerade nicht abrufbar')
+    // Nur der Lesevorgang, keine zweite Anweisung.
+    expect(from).toHaveBeenCalledTimes(1)
+  })
+
+  it('nennt bei fehlendem Kurs für den Tag die dauerhafte Ursache (EC-4)', async () => {
+    bestand(USD_BESTAND)
+    fetchRate.mockResolvedValue({ state: 'no-rate-for-date' })
+
+    const state = await updateExpense(
+      IDLE,
+      form({ ...VALID, currency: 'BRL', spentOn: '2000-01-03', id: EXPENSE_ID }),
+    )
+
+    expect(state.formError).toContain('Brasilianischer Real')
+    expect(state.formError).toContain('03.01.2000')
+    // Kein behaupteter Ausfall — sonst versucht es jemand in zehn Minuten wieder.
+    expect(state.formError).not.toContain('nicht abrufbar')
+    expect(from).toHaveBeenCalledTimes(1)
+  })
+
+  it('meldet eine fremde oder gelöschte Ausgabe, ohne den Kursdienst zu behelligen', async () => {
+    from.mockReturnValueOnce(builder({ data: null, error: null }))
+
+    const state = await updateExpense(IDLE, form({ ...VALID, currency: 'USD', id: EXPENSE_ID }))
+
+    expect(state.formError).toBe('Diese Ausgabe gibt es nicht mehr.')
+    expect(fetchRate).not.toHaveBeenCalled()
+    expect(from).toHaveBeenCalledTimes(1)
   })
 })
