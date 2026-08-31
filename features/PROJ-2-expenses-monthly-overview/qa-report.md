@@ -256,7 +256,51 @@ aktualisiert; alles andere steht unverändert aus dem ursprünglichen Durchlauf.
 
 ## E2E-Tests
 
-- Status: **nicht ausgeführt** (`/e2e-tests` für die kritischen Wege ausführen)
+_Geschrieben von `/e2e-tests` am 2026-08-31 · `tests/PROJ-2-expenses-monthly-overview.spec.ts` ·
+läuft auf **Chromium** und **Mobile Safari (iPhone 13)**._
+
+| Journey | Deckt ab | Ergebnis |
+|---|---|---|
+| **J1** Erfassen, Summen und Filter | AC-1, AC-3, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16 | ✅ grün auf beiden |
+| **J2** Der Monat steht in der Adresse | AC-2, AC-4, AC-17, AC-18, AC-19 | ✅ grün auf beiden |
+| **J3** Ändern und Löschen | AC-20, AC-21, AC-22, AC-23 · EC-11 | ❌ **rot auf beiden — BUG-5** |
+| **J4** Die eigenen Daten als CSV mitnehmen | AC-27 · EC-10 (inkl. Regressionswache für BUG-1) | ✅ grün auf beiden |
+| **J5** Niemand sieht fremde Zahlen | AC-24 | ✅ grün auf beiden |
+
+**Jede Journey wurde rot nachgewiesen** — nacheinander, mit einem gezielten Bruch am Produkt, und
+jedes Mal fiel genau der Schritt, um den es geht:
+
+| Journey | Was gebrochen wurde | Was fiel |
+|---|---|---|
+| J1 | zweiter Klick hebt den Filter nicht mehr auf | `aria-pressed` und die wieder sichtbare Zeile |
+| J2 | `resolveMonth` ignoriert die Adresse | die Ausgabe im Vormonat war nicht auffindbar |
+| J3 | — | fällt derzeit von selbst, an einem echten Fehler (BUG-5) |
+| J4 | Textmarkierung vor der Formel entfernt | `toContain(";\"'=Rest aus Juli\";")` |
+| J5 | **beide** Schichten: `.eq('user_id', …)` raus **und** RLS-Policy auf `using (true)` | die Seite zeigte `1.276,00 €` statt `41,50 €` — also fremdes Geld |
+
+**Was J5 nicht kann, und das mit Absicht:** Fällt nur **eine** der beiden Schichten, bleibt die
+Journey grün — genau das bedeutet Tiefenstaffelung. Einen Bruch allein in Row Level Security fängt
+der PostgREST-Test aus dem Sicherheitsaudit oben, nicht der Browser.
+
+**Was diese Suite bewusst nicht abdeckt:** die Feldregeln und ihre Meldungen (AC-5 bis AC-10 — sie
+hängen an einem einzigen Schema, das direkt geprüft wird), die Datenbankschicht von AC-24 und AC-25
+(dorthin kommt kein Browser), und Darstellungsdetails.
+
+**Zwei Dinge, die am Rand auffielen und behoben wurden:**
+
+1. **`playwright.config.ts` zeigte fest auf `localhost:3000`** mit `reuseExistingServer`. Hielt ein
+   anderes Projekt diesen Port, wich `next dev` auf 3001 aus und die **gesamte Suite prüfte
+   stillschweigend die falsche Anwendung** — auch die von PROJ-1. Sie läuft jetzt auf einem eigenen
+   Port (**3200**, über `E2E_PORT` überschreibbar), dieselbe Logik wie bei Supabase auf 55321.
+2. **Zwei veraltete Zusicherungen in der PROJ-1-Suite**, beide durch PROJ-2 verursacht und beide
+   kein Produktfehler: Journey 1 prüfte auf die Platzhalter-Überschrift „Hier entstehen deine
+   Ausgaben.", die PROJ-2 planmäßig ersetzt hat (jetzt: der Leerzustand der Monatsübersicht), und
+   Journey 3 scheiterte an `strict mode violation` — dazu BUG-3 unten.
+
+**Grenze der Testumgebung:** `supabase/config.toml` erlaubt lokal `sign_in_sign_ups = 30` je
+5 Minuten und IP. Ein Suite-Lauf legt rund 20 Konten an und passt darunter; **zwei Läufe kurz
+hintereinander nicht** — dann scheitert die Registrierung mit „Die Registrierung ist gerade nicht
+möglich." Das ist die Auth-Drosselung von Supabase, nicht die der Anwendung und kein Produktfehler.
 
 ---
 
@@ -302,12 +346,17 @@ aktualisiert; alles andere steht unverändert aus dem ursprünglichen Durchlauf.
 - **Vorschlag:** „<1 %" statt „0 %", und dem Balken eine Mindestbreite geben, sobald der Betrag größer 0 ist
 - **Priorität:** Nächste Runde
 
-### BUG-3: `/konto` zeigt zwei „Abmelden"-Knöpfe
-- **Severity:** Low
-- **Betrifft:** keine AC direkt — PROJ-1 AC-14 ist doppelt erfüllt statt gar nicht
+### BUG-3: `/konto` zeigt zwei gleich benannte „Abmelden"-Schaltflächen
+- **Severity:** ~~Low~~ → **Medium** (hochgestuft am 2026-08-31 durch `/e2e-tests`)
+- **Betrifft:** Bedienbarkeit und Barrierefreiheit; PROJ-1 AC-14 ist doppelt erfüllt statt gar nicht
 - **Schritte zur Reproduktion:** angemeldet `/konto` aufrufen → einer im Header, einer in der Karte „Konto"
+- **Warum nicht mehr nur kosmetisch:** Der E2E-Lauf ist daran gescheitert —
+  `getByRole('button', { name: 'Abmelden' })` löst zu **zwei** Elementen auf. Was einen Testläufer
+  zum Abbruch bringt, trifft Screenreader genauso: zwei identisch benannte Schaltflächen auf einer
+  Seite, ohne unterscheidenden Kontext. Die PROJ-1-Suite musste auf `getByRole('main')` eingegrenzt
+  werden, um überhaupt weiterzulaufen
 - **Ursache:** So entworfen: `design.md` von PROJ-2 schreibt „Card „Konto" unverändert (PROJ-1)" und ergänzt den Header darüber. Die Karte gehört PROJ-1
-- **Priorität:** Nice to have — und es ist eine **Routing-Frage**, kein einfacher Fix: den Knopf aus der Karte zu nehmen ändert PROJ-1s Vertrag und gehört über `/refine PROJ-1`
+- **Priorität:** Eine **Routing-Frage**, kein einfacher Fix — den Knopf aus der Karte zu nehmen ändert PROJ-1s Vertrag und gehört über `/refine PROJ-1`
 
 ### BUG-4: Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert
 - **Severity:** Low
@@ -316,18 +365,34 @@ aktualisiert; alles andere steht unverändert aus dem ursprünglichen Durchlauf.
 - **Tatsächlich:** die Person sieht Next.js' eigene, englische Standardseite „This page couldn't load — A server error occurred." in einer sonst durchgehend deutschsprachigen Anwendung (im `/build`-Durchlauf einmal so beobachtet)
 - **Priorität:** Nächste Runde — eine `error.tsx` mit einem deutschen Satz und einem „Neu laden"-Knopf schließt das
 
+### BUG-5: Nach einer Änderung bleibt der Dialog dauerhaft auf „Moment …" stehen
+- **Severity:** **High**
+- **Betrifft:** AC-20, AC-21 — gefunden von `/e2e-tests`, Journey 3, auf **Chromium und Mobile Safari**
+- **Schritte zur Reproduktion:**
+  1. Eine Ausgabe erfassen
+  2. „Ändern" wählen, den Betrag ändern, „Speichern" — die Änderung wird korrekt gespeichert, der Dialog schließt
+  3. Bei **derselben** Ausgabe erneut „Ändern" wählen
+  4. Erwartet: der Dialog öffnet mit dem gespeicherten Stand und lässt sich wieder speichern (AC-20)
+  5. Tatsächlich: der Dialog öffnet zwar, aber **„Speichern" heißt „Moment …" und ist gesperrt**, „Abbrechen" ebenso. Die Ausgabe lässt sich bis zum Neuladen der Seite nicht mehr ändern
+- **Nachweis:** Schnappschuss aus dem Testlauf — `button "Abbrechen" [disabled]`, `button "Moment …" [disabled]`, während das Datumsfeld den neuen Wert bereits trägt
+- **Ursache:** `src/components/expenses/edit-expense-dialog.tsx` — der Erfolgspfad von `submit()` verlässt die Funktion mit `return`, **ohne `setPending(false)`**. Bleibt die Ausgabe im selben Monat, bleibt die Zeile stehen, die Komponente wird nicht ausgehängt, und `isPending` bleibt für immer `true`. Verschiebt die Änderung die Ausgabe dagegen in einen anderen Monat, verschwindet die Zeile — dann fällt es nicht auf. Der Fehler trifft also genau den häufigen Fall
+- **Warum `/qa` das nicht gefunden hat:** AC-20 stand dort als `[!] NICHT GEPRÜFT` — das Öffnen und Absenden eines Dialogs braucht einen Browser. Genau diese Lücke war der Grund für diese E2E-Runde
+- **Der Lösch-Dialog ist nicht betroffen:** dort verschwindet die Zeile immer, die Komponente wird also stets ausgehängt
+- **Priorität:** Vor dem Deploy beheben
+
 ---
 
 ## Zusammenfassung
 
 - **Acceptance Criteria:** **30 von 30 geprüft** — 29 vollständig bestanden, 1 mit einem offenen Befund (AC-14 → BUG-2). AC-27 und EC-10 sind nach der Behebung von BUG-1 vollständig bestanden. Bei 8 Kriterien ist eine rein browserabhängige Teilzusicherung als `[!]` offen (oben einzeln benannt)
 - **Edge Cases:** 11 von 11 geprüft, alle bestanden
-- **Gefundene Bugs:** 4 (0 Critical, 0 High, 1 Medium, 3 Low) — **BUG-1 (Medium) ist behoben und nachgeprüft**, 3 Low bleiben offen
+- **Gefundene Bugs:** 5 (0 Critical, **1 High**, 2 Medium, 2 Low). BUG-1 (Medium) ist behoben und nachgeprüft. Offen: **BUG-5 (High)**, BUG-3 (Medium, hochgestuft), BUG-2 und BUG-4 (Low)
 - **Sicherheit:** 9 Prüfungen belegt, 4 NICHT GEPRÜFT — Drosselung (bewusst nicht implementiert, TD-22), Brute Force und Kontoaufzählung (in diesem Feature gegenstandslos), CSRF (nur als Indiz belegt)
 - **Regression:** PROJ-1 unverändert funktionsfähig; ein Low-Befund (BUG-3) aus der Header-Ergänzung
 - **Neue Tests:** 18 — 15 im QA-Durchlauf (`src/lib/expenses/queries.test.ts`, `src/components/shell/month-switcher.test.tsx`) und 3 für die Behebung von BUG-1 (`src/lib/expenses/csv.test.ts`). Alle drei Dateien wurden **rot nachgewiesen**: ohne `.eq('user_id', …)`, mit dauerhaft aktivem Vorwärtspfeil bzw. ohne die Textmarkierung fallen genau die Tests, die es dafür gibt. Gesamtstand: **164 Tests, 14 Dateien, alle grün**
-- **Production Ready:** **JA** — kein Critical- und kein High-Bug
-- **Empfehlung:** BUG-1 ist behoben. BUG-2 und BUG-4 in der nächsten Runde, BUG-3 über `/refine PROJ-1` entscheiden — beides ohne Einfluss auf den Deploy
+- **Production Ready:** **NEIN** — BUG-5 ist ein High-Bug (Stand 2026-08-31 nach `/e2e-tests`; der ursprüngliche QA-Durchlauf kam ohne Browser an diesen Fall nicht heran)
+- **Empfehlung:** **BUG-5 über `/build` beheben, dann `/qa` und `/e2e-tests` erneut.** Danach BUG-3 über `/refine PROJ-1` entscheiden; BUG-2 und BUG-4 bleiben ohne Einfluss auf den Deploy
 
-> „Production Ready: JA" heißt *keine Critical-/High-Bugs* — es heißt **nicht**, dass alles geprüft wurde.
-> Jeder `[!]`-Punkt oben ist offen und braucht einen Menschen oder `/e2e-tests`.
+> Die browserabhängigen `[!]`-Punkte oben sind durch die fünf E2E-Journeys inzwischen zu großen
+> Teilen geschlossen — offen bleiben Darstellung in weiteren Browsern und an weiteren
+> Bildschirmbreiten sowie der echte Datenbankausfall (EC-4).

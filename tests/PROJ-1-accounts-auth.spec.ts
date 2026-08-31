@@ -67,8 +67,13 @@ test('Journey 1: Registrieren führt aus dem gesperrten Bereich direkt hinein (A
   })
 
   // AC-1 — angelegt, sofort angemeldet, auf der Startseite.
+  //
+  // Geprüft wird der Leerzustand der Monatsübersicht. Bis PROJ-2 gebaut war, stand hier die
+  // Platzhalterüberschrift „Hier entstehen deine Ausgaben." — `docs/app-shell.md` hat die
+  // Seite immer als vorläufig geführt, PROJ-2 hat sie planmäßig ersetzt. Was PROJ-1 hier
+  // zusichert, ist unverändert: **angemeldet und drin**, nicht ein bestimmter Satz.
   await expect(page).toHaveURL('/', AKTION)
-  await expect(page.getByRole('heading', { name: 'Hier entstehen deine Ausgaben.' })).toBeVisible()
+  await expect(page.getByText('ist noch nichts erfasst.')).toBeVisible()
 
   // EC-1 — und zwar genau EIN Konto, nicht zwei.
   expect(countAccounts(email)).toBe(1)
@@ -113,7 +118,10 @@ test('Journey 3: Abmelden schließt den geschützten Bereich wieder (AC-14, AC-1
   await registriere(page, email)
 
   await page.goto('/konto')
-  await page.getByRole('button', { name: 'Abmelden' }).click()
+  // Auf die Karte eingegrenzt: Seit PROJ-2 den gemeinsamen Header ergänzt hat, gibt es auf
+  // `/konto` **zwei** gleich benannte Abmelde-Schaltflächen (QA-Bericht von PROJ-2, BUG-3).
+  // AC-14 gehört zu der in der Konto-Karte — die im Header ist die Zugabe von PROJ-2.
+  await page.getByRole('main').getByRole('button', { name: 'Abmelden' }).click()
 
   // AC-14 — Sitzung beendet, zurück auf der Anmeldeseite.
   await expect(page).toHaveURL(/\/login/, AKTION)
