@@ -24,7 +24,7 @@ Rahmen laufen über `/refine PROJ-2`, nicht über das `design.md` eines anderen 
 | Anmelden (`/login`) | Mit E-Mail und Passwort anmelden | abgemeldet | PROJ-1 |
 | Registrieren (`/signup`) | Konto anlegen | abgemeldet | PROJ-1 |
 | Ausgaben & Monatsübersicht (`/`) | Ausgaben erfassen, bearbeiten, löschen; Monatssummen sehen | angemeldet | PROJ-2 |
-| Konto (`/konto`) | Abmelden, Konto löschen · Ausgaben als CSV mitnehmen | angemeldet | PROJ-1 (Bereich) · PROJ-2 (Export-Abschnitt) |
+| Konto (`/konto`) | Angemeldete Adresse sehen, Konto löschen · Ausgaben als CSV mitnehmen | angemeldet | PROJ-1 (Bereich) · PROJ-2 (Export-Abschnitt) |
 
 Mehr Bereiche gibt es nicht. **Keine Navigationsliste** — bei zwei angemeldeten Bereichen, von denen
 einer selten aufgerufen wird, hätte sie nichts zu zeigen. `/konto` wird aus dem Header verlinkt.
@@ -33,6 +33,12 @@ einer selten aufgerufen wird, hätte sie nichts zu zeigen. `/konto` wird aus dem
 AC-15 (Konto löschen) einen Ort brauchen, den Header aber PROJ-2 baut — und PROJ-1 ausgeliefert wird,
 bevor es PROJ-2 gibt. Die Abmelde-Aktion selbst gehört PROJ-1; der Header von PROJ-2 ruft **dieselbe**
 Aktion auf, statt eine zweite zu bauen.
+
+**Abmelden steht seit `/refine PROJ-1` (2026-08-31) nur noch im Header** — genau eine Schaltfläche je
+angemeldeter Seite, festgeschrieben als **PROJ-1 AC-19**. Solange es den Header nicht gab, war die
+Konto-Karte der einzige Ort; danach standen zwei identisch benannte Schaltflächen auf derselben Seite,
+für Screenreader nicht unterscheidbar (QA-Bericht von PROJ-2, BUG-3). Die Karte auf `/konto` trägt
+jetzt nur noch die E-Mail-Adresse. **Die Aktion bleibt PROJ-1**, nur ihr Ort liegt im Rahmen.
 
 **Der Export-Abschnitt auf `/konto`** (ergänzt von `/architecture PROJ-2`): Die Karte „Deine Daten
 mitnehmen" und die Route `/konto/export`, die die CSV-Datei bei jedem Abruf erzeugt, gehören **PROJ-2** —
@@ -94,8 +100,8 @@ Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
 | Komponente | Datei | Zweck | Gebaut von |
 |---|---|---|---|
 | `Wordmark` | `src/components/wordmark.tsx` | `auslage.` mit olivem Punkt — auch auf Login/Signup | **PROJ-1** |
-| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler (optional), Link auf `/konto`, Abmelden | PROJ-2 |
-| `MonthSwitcher` | `src/components/month-switcher.tsx` | `‹ August 2026 ›` als echte Links mit `?monat=`, Grenzen aus den Daten | PROJ-2 |
+| `AppHeader` | `src/components/shell/app-header.tsx` | Wortmarke, Monatswechsler (optional), Link auf `/konto`, Abmelden | PROJ-2 |
+| `MonthSwitcher` | `src/components/shell/month-switcher.tsx` | `‹ August 2026 ›` als echte Links mit `?monat=`, Grenzen aus den Daten | PROJ-2 |
 
 **`PageHeader` entfällt** (entschieden von `/architecture PROJ-2`, TD-21): Bei zwei angemeldeten
 Seiten, von denen eine gar keine hervorgehobene Hauptaktion hat, gäbe es nichts zu teilen. Kommt eine
