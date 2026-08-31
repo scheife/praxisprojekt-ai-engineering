@@ -634,3 +634,46 @@ Punkte* und in `docs/privacy.md`.
       erfasste Ausgaben trügen dann einen Schlüssel, den es nicht mehr gibt. Vor einer Änderung der
       Liste zu klären.
 
+
+---
+
+## Notizen aus dem Bau (`/build`, 2026-08-31)
+
+Fünf Stellen, an denen die Umsetzung vom Entwurf abweicht oder ihn präzisiert. Alle sind
+Umsetzungsdetails, keine Änderungen am Verhalten — die Acceptance Criteria bleiben, wie sie sind.
+
+1. **Zahlen werden mit `de-DE` formatiert, nicht mit `de-AT`.** ICU trennt Tausender in `de-AT`
+   inzwischen mit einem schmalen geschützten Leerzeichen (`1 284,50`). AC-6 und
+   `docs/design-system.md` §5 verlangen aber den Punkt. `de-DE` liefert ihn und ist sonst
+   identisch; **Datum und Monatsname bleiben `de-AT`**, weil nur die den *Jänner* kennen.
+
+2. **`ExpenseFormState` und `IDLE` liegen in `src/lib/expenses/form-state.ts`**, nicht in der
+   Action-Datei. Eine `'use server'`-Datei darf ausschließlich async-Funktionen exportieren; ein
+   exportiertes Objekt bricht **zur Laufzeit** ab („A 'use server' file can only export async
+   functions, found object"). `next build` meldet das nicht — der Fehler fiel erst im laufenden
+   Browser auf.
+
+3. **Änderungs- und Lösch-Dialog behandeln das Ergebnis im Absendeweg, nicht in einem
+   `useEffect`.** Beide hängen in der Tabellenzeile ihrer Ausgabe. Nach `refresh()` ist die Zeile
+   weg — beim Löschen immer, beim Ändern dann, wenn die Ausgabe in einen anderen Monat rutscht —
+   und mit ihr die Komponente. Ein Effect käme nie zum Zug: die Rückmeldung aus AC-23 bliebe aus,
+   der Monatswechsel aus EC-11 ebenso. Die Fortsetzung nach dem `await` läuft dagegen weiter, ob
+   die Komponente noch im Baum steht oder nicht. Die **Erfassungszeile** behält `useActionState`
+   samt Effect: sie wird nie ausgehängt.
+
+4. **Kein `key={month}` an der Suspense-Grenze.** Ein Schlüssel am Monat baut den Teilbaum bei
+   jedem Wechsel neu auf; die Erfassungszeile verlöre dabei ihren Zustand, und das eingegebene
+   Datum fiele auch dann auf die Vorbelegung zurück, wenn es im nun angezeigten Monat liegt —
+   genau das verbietet die Regel, die AC-2 und AC-3 zusammen erfüllt (nachgewiesen im Durchstich
+   für AC-4). Das Gerüst zeigt sich damit beim ersten Aufbau der Seite, nicht bei jedem
+   Monatswechsel.
+
+5. **`MonthSwitcher` ist eine Server-Komponente**, nicht wie im Komponentenbaum notiert eine
+   Client-Komponente. Die Pfeile sind reine Links und der Monatsname reiner Text — es gibt keinen
+   Zustand zu halten. Verhalten unverändert, nur kein JavaScript dafür im Browser.
+
+**Außerhalb des Features aufgefallen:** `playwright.config.ts` zeigt fest auf
+`http://localhost:3000` mit `reuseExistingServer`. Hält ein anderes Projekt diesen Port besetzt
+(beim Bau: der Dev-Server von alexmacht.at), weicht `next dev` auf 3001 aus, und die E2E-Suite
+prüft **stillschweigend die falsche Anwendung** — auch die von PROJ-1. Der Durchstich lief
+deshalb gegen 3001. Gehört zu `/e2e-tests` bzw. in die Konfiguration, nicht in dieses Feature.
