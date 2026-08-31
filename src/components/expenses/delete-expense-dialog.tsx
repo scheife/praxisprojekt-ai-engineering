@@ -42,16 +42,22 @@ export function DeleteExpenseDialog({ expense }: { expense: Expense }) {
     setPending(true)
     setFormError(undefined)
 
-    const result = await deleteExpense(IDLE, formData)
+    try {
+      const result = await deleteExpense(IDLE, formData)
 
-    if (result.status === 'saved') {
-      setOpen(false)
-      toast('Ausgabe gelöscht.')
-      return
+      if (result.status === 'saved') {
+        setOpen(false)
+        toast('Ausgabe gelöscht.')
+        return
+      }
+
+      setFormError(result.formError)
+    } finally {
+      // Dieselbe Vorsichtsmaßnahme wie im Änderungs-Dialog (BUG-5). Hier verschwindet die
+      // Zeile nach dem Löschen immer, die Komponente wird also ohnehin ausgehängt — die Falle
+      // war nur verdeckt, nicht abwesend. Ein `finally` kann man nicht vergessen.
+      setPending(false)
     }
-
-    setFormError(result.formError)
-    setPending(false)
   }
 
   return (

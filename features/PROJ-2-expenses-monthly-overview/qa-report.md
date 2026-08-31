@@ -263,7 +263,7 @@ läuft auf **Chromium** und **Mobile Safari (iPhone 13)**._
 |---|---|---|
 | **J1** Erfassen, Summen und Filter | AC-1, AC-3, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16 | ✅ grün auf beiden |
 | **J2** Der Monat steht in der Adresse | AC-2, AC-4, AC-17, AC-18, AC-19 | ✅ grün auf beiden |
-| **J3** Ändern und Löschen | AC-20, AC-21, AC-22, AC-23 · EC-11 | ❌ **rot auf beiden — BUG-5** |
+| **J3** Ändern und Löschen | AC-20, AC-21, AC-22, AC-23 · EC-11 | ✅ grün auf beiden (nach der Behebung von BUG-5) |
 | **J4** Die eigenen Daten als CSV mitnehmen | AC-27 · EC-10 (inkl. Regressionswache für BUG-1) | ✅ grün auf beiden |
 | **J5** Niemand sieht fremde Zahlen | AC-24 | ✅ grün auf beiden |
 
@@ -274,7 +274,7 @@ jedes Mal fiel genau der Schritt, um den es geht:
 |---|---|---|
 | J1 | zweiter Klick hebt den Filter nicht mehr auf | `aria-pressed` und die wieder sichtbare Zeile |
 | J2 | `resolveMonth` ignoriert die Adresse | die Ausgabe im Vormonat war nicht auffindbar |
-| J3 | — | fällt derzeit von selbst, an einem echten Fehler (BUG-5) |
+| J3 | nichts — sie fiel **von selbst** | Der Klick auf Speichern lief in die Zeitüberschreitung, weil der Knopf dauerhaft Moment … hieß (BUG-5) — auf beiden Engines. Ein stärkerer Nachweis als ein künstlicher Bruch |
 | J4 | Textmarkierung vor der Formel entfernt | `toContain(";\"'=Rest aus Juli\";")` |
 | J5 | **beide** Schichten: `.eq('user_id', …)` raus **und** RLS-Policy auf `using (true)` | die Seite zeigte `1.276,00 €` statt `41,50 €` — also fremdes Geld |
 
@@ -297,10 +297,19 @@ hängen an einem einzigen Schema, das direkt geprüft wird), die Datenbankschich
    Ausgaben.", die PROJ-2 planmäßig ersetzt hat (jetzt: der Leerzustand der Monatsübersicht), und
    Journey 3 scheiterte an `strict mode violation` — dazu BUG-3 unten.
 
-**Grenze der Testumgebung:** `supabase/config.toml` erlaubt lokal `sign_in_sign_ups = 30` je
-5 Minuten und IP. Ein Suite-Lauf legt rund 20 Konten an und passt darunter; **zwei Läufe kurz
-hintereinander nicht** — dann scheitert die Registrierung mit „Die Registrierung ist gerade nicht
-möglich." Das ist die Auth-Drosselung von Supabase, nicht die der Anwendung und kein Produktfehler.
+**Grenze der Testumgebung — behoben.** `supabase/config.toml` erlaubte lokal `sign_in_sign_ups = 30` je
+5 Minuten und IP. Die Suite legt je Lauf rund 25 Konten an und lief knapp 6 Minuten, kippte also
+über die Kante: drei Tests scheiterten an der Registrierung statt an einer Zusicherung. Der lokale
+Wert steht jetzt auf **200**.
+
+**Wichtig:** Das ist die Drosselung der **Auth-Plattform** und gilt nur für den lokalen
+Docker-Stack. Die **eigene** Drosselung der Anwendung — `login_attempts`, je IP und je Konto,
+PROJ-1 AC-8, AC-9 und AC-17 — ist unberührt und bleibt scharf. Genau die meinen die
+Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört dieser Wert dort
+**nicht** angehoben.
+
+**Endstand:** `npm run test:e2e` → **18 von 18 grün in 1,2 Minuten** (9 Journeys × 2 Engines:
+4 aus PROJ-1, 5 aus PROJ-2).
 
 ---
 
@@ -365,8 +374,9 @@ möglich." Das ist die Auth-Drosselung von Supabase, nicht die der Anwendung und
 - **Tatsächlich:** die Person sieht Next.js' eigene, englische Standardseite „This page couldn't load — A server error occurred." in einer sonst durchgehend deutschsprachigen Anwendung (im `/build`-Durchlauf einmal so beobachtet)
 - **Priorität:** Nächste Runde — eine `error.tsx` mit einem deutschen Satz und einem „Neu laden"-Knopf schließt das
 
-### BUG-5: Nach einer Änderung bleibt der Dialog dauerhaft auf „Moment …" stehen
+### BUG-5: Nach einer Änderung blieb der Dialog dauerhaft auf „Moment …" stehen — **BEHOBEN**
 - **Severity:** **High**
+- **Status:** behoben am 2026-08-31, nachgeprüft — Journey 3 läuft auf beiden Engines grün
 - **Betrifft:** AC-20, AC-21 — gefunden von `/e2e-tests`, Journey 3, auf **Chromium und Mobile Safari**
 - **Schritte zur Reproduktion:**
   1. Eine Ausgabe erfassen
@@ -377,8 +387,9 @@ möglich." Das ist die Auth-Drosselung von Supabase, nicht die der Anwendung und
 - **Nachweis:** Schnappschuss aus dem Testlauf — `button "Abbrechen" [disabled]`, `button "Moment …" [disabled]`, während das Datumsfeld den neuen Wert bereits trägt
 - **Ursache:** `src/components/expenses/edit-expense-dialog.tsx` — der Erfolgspfad von `submit()` verlässt die Funktion mit `return`, **ohne `setPending(false)`**. Bleibt die Ausgabe im selben Monat, bleibt die Zeile stehen, die Komponente wird nicht ausgehängt, und `isPending` bleibt für immer `true`. Verschiebt die Änderung die Ausgabe dagegen in einen anderen Monat, verschwindet die Zeile — dann fällt es nicht auf. Der Fehler trifft also genau den häufigen Fall
 - **Warum `/qa` das nicht gefunden hat:** AC-20 stand dort als `[!] NICHT GEPRÜFT` — das Öffnen und Absenden eines Dialogs braucht einen Browser. Genau diese Lücke war der Grund für diese E2E-Runde
-- **Der Lösch-Dialog ist nicht betroffen:** dort verschwindet die Zeile immer, die Komponente wird also stets ausgehängt
-- **Priorität:** Vor dem Deploy beheben
+- **Der Fix:** `setPending(false)` steht in beiden Dialogen jetzt in einem `finally`, nicht am Ende des Fehlerpfads — so kann kein künftiger Pfad das Zurücksetzen wieder vergessen, auch keiner, der eine Ausnahme wirft
+- **Der Lösch-Dialog trug dieselbe Falle**, nur verdeckt: dort verschwindet die Zeile immer, die Komponente wird also stets ausgehängt. Mitgefixt, weil verdeckt nicht abwesend heißt
+- **Nachweis:** `npm run test:e2e` → 18 von 18 grün; vorher fiel Journey 3 auf **beiden** Engines an genau diesem Schritt
 
 ---
 
@@ -386,12 +397,12 @@ möglich." Das ist die Auth-Drosselung von Supabase, nicht die der Anwendung und
 
 - **Acceptance Criteria:** **30 von 30 geprüft** — 29 vollständig bestanden, 1 mit einem offenen Befund (AC-14 → BUG-2). AC-27 und EC-10 sind nach der Behebung von BUG-1 vollständig bestanden. Bei 8 Kriterien ist eine rein browserabhängige Teilzusicherung als `[!]` offen (oben einzeln benannt)
 - **Edge Cases:** 11 von 11 geprüft, alle bestanden
-- **Gefundene Bugs:** 5 (0 Critical, **1 High**, 2 Medium, 2 Low). BUG-1 (Medium) ist behoben und nachgeprüft. Offen: **BUG-5 (High)**, BUG-3 (Medium, hochgestuft), BUG-2 und BUG-4 (Low)
+- **Gefundene Bugs:** 5 (0 Critical, 1 High, 2 Medium, 2 Low). **Behoben und nachgeprüft: BUG-1 (Medium) und BUG-5 (High).** Offen: BUG-3 (Medium, hochgestuft), BUG-2 und BUG-4 (Low)
 - **Sicherheit:** 9 Prüfungen belegt, 4 NICHT GEPRÜFT — Drosselung (bewusst nicht implementiert, TD-22), Brute Force und Kontoaufzählung (in diesem Feature gegenstandslos), CSRF (nur als Indiz belegt)
 - **Regression:** PROJ-1 unverändert funktionsfähig; ein Low-Befund (BUG-3) aus der Header-Ergänzung
 - **Neue Tests:** 18 — 15 im QA-Durchlauf (`src/lib/expenses/queries.test.ts`, `src/components/shell/month-switcher.test.tsx`) und 3 für die Behebung von BUG-1 (`src/lib/expenses/csv.test.ts`). Alle drei Dateien wurden **rot nachgewiesen**: ohne `.eq('user_id', …)`, mit dauerhaft aktivem Vorwärtspfeil bzw. ohne die Textmarkierung fallen genau die Tests, die es dafür gibt. Gesamtstand: **164 Tests, 14 Dateien, alle grün**
-- **Production Ready:** **NEIN** — BUG-5 ist ein High-Bug (Stand 2026-08-31 nach `/e2e-tests`; der ursprüngliche QA-Durchlauf kam ohne Browser an diesen Fall nicht heran)
-- **Empfehlung:** **BUG-5 über `/build` beheben, dann `/qa` und `/e2e-tests` erneut.** Danach BUG-3 über `/refine PROJ-1` entscheiden; BUG-2 und BUG-4 bleiben ohne Einfluss auf den Deploy
+- **Production Ready:** **JA** — kein offener Critical- oder High-Bug. BUG-5 hat `/e2e-tests` gefunden, wo der QA-Durchlauf ohne Browser nicht hinkam, und er wurde am selben Tag behoben
+- **Empfehlung:** Deploy möglich. Offen bleiben BUG-3 (über `/refine PROJ-1` entscheiden, weil die Konto-Karte PROJ-1 gehört) sowie BUG-2 und BUG-4 — alle drei ohne Einfluss auf den Deploy
 
 > Die browserabhängigen `[!]`-Punkte oben sind durch die fünf E2E-Journeys inzwischen zu großen
 > Teilen geschlossen — offen bleiben Darstellung in weiteren Browsern und an weiteren

@@ -67,22 +67,33 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
     setFormError(undefined)
     setFieldError(undefined)
 
-    const result = await updateExpense(IDLE, formData)
+    try {
+      const result = await updateExpense(IDLE, formData)
 
-    if (result.status === 'saved') {
-      setOpen(false)
-      // Verschiebt die Änderung die Ausgabe in einen anderen Monat, folgt die Ansicht mit —
-      // sonst verschwände sie kommentarlos aus der Liste (EC-11).
-      if (result.month && result.month !== month) {
-        toast(`Gespeichert — die Ausgabe liegt jetzt im ${formatMonthLabel(result.month)}.`)
-        router.push(`/?monat=${result.month}`)
+      if (result.status === 'saved') {
+        setOpen(false)
+        // Verschiebt die Änderung die Ausgabe in einen anderen Monat, folgt die Ansicht mit —
+        // sonst verschwände sie kommentarlos aus der Liste (EC-11).
+        if (result.month && result.month !== month) {
+          toast(`Gespeichert — die Ausgabe liegt jetzt im ${formatMonthLabel(result.month)}.`)
+          router.push(`/?monat=${result.month}`)
+        }
+        return
       }
-      return
-    }
 
-    setFormError(result.formError)
-    setFieldError(result.fieldErrors)
-    setPending(false)
+      setFormError(result.formError)
+      setFieldError(result.fieldErrors)
+    } finally {
+      // **Auch auf dem Erfolgsweg** zurücksetzen, und deshalb in `finally`.
+      //
+      // Bleibt die Ausgabe im selben Monat, bleibt ihre Zeile stehen — diese Komponente hängt
+      // in der Zeile und wird also **nicht** ausgehängt. Ohne das Zurücksetzen behielte sie
+      // `isPending` für immer: beim nächsten Öffnen hieße „Speichern" dauerhaft „Moment …",
+      // und die Ausgabe wäre bis zum Neuladen der Seite nicht mehr änderbar (BUG-5).
+      // Verschiebt die Änderung sie dagegen in einen anderen Monat, verschwindet die Zeile —
+      // dann fiel es nicht auf, was genau der Grund war, warum der Fehler den häufigen Fall traf.
+      setPending(false)
+    }
   }
 
   /** Beim Öffnen wieder auf den gespeicherten Stand — nicht auf den letzten Tippversuch. */

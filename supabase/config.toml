@@ -205,7 +205,17 @@ anonymous_users = 30
 # Number of sessions that can be refreshed in a 5 minute interval per IP address.
 token_refresh = 150
 # Number of sign up and sign-in requests that can be made in a 5 minute interval per IP address (excludes anonymous users).
-sign_in_sign_ups = 30
+#
+# Angehoben von 30 auf 200 fuer die E2E-Suite: Sie legt je Lauf rund 25 Konten an und laeuft
+# knapp 6 Minuten, kippt also ueber die Standardgrenze — mit Fehlschlaegen, die nichts mit dem
+# Produkt zu tun haben ("Die Registrierung ist gerade nicht moeglich").
+#
+# Das ist die Drosselung der **Auth-Plattform** und gilt nur fuer diesen lokalen Docker-Stack.
+# Die eigene Drosselung der Anwendung — login_attempts, je IP und je Konto, PROJ-1 AC-8, AC-9
+# und AC-17 — ist davon voellig unberuehrt. Genau die meinen die Sicherheitsregeln, und genau
+# sie bleibt scharf. Entstuende spaeter doch ein gehostetes Projekt, gehoert dieser Wert dort
+# NICHT angehoben.
+sign_in_sign_ups = 200
 # Number of OTP / Magic link verifications that can be made in a 5 minute interval per IP address.
 token_verifications = 30
 # Number of Web3 logins that can be made in a 5 minute interval per IP address.
