@@ -19,12 +19,11 @@ export default function KontoLoading() {
           <CardHeader>
             <Skeleton className="h-6 w-24" />
           </CardHeader>
-          <CardContent className="flex flex-col gap-5">
+          <CardContent>
             <div className="flex flex-col gap-2">
               <Skeleton className="h-3 w-28" />
               <Skeleton className="h-5 w-52" />
             </div>
-            <Skeleton className="h-9 w-28" />
           </CardContent>
         </Card>
 

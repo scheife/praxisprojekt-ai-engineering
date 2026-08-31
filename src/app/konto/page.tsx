@@ -3,7 +3,6 @@ import Link from 'next/link'
 
 import { requireUser } from '@/lib/auth'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
-import { LogoutButton } from '@/components/account/logout-button'
 import { AppHeader } from '@/components/shell/app-header'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,7 +16,7 @@ import {
 export const metadata: Metadata = { title: 'Konto · auslage.' }
 
 /**
- * Der angemeldete Bereich für Abmelden und Kontolöschung — **gehört PROJ-1**.
+ * Der angemeldete Bereich für die eigene Adresse und die Kontolöschung — **gehört PROJ-1**.
  *
  * PROJ-2 ergänzt genau zwei Dinge (docs/app-shell.md): den gemeinsamen Header (ohne
  * Monatswechsler, weil es hier keinen Monat zu wechseln gibt) und die Karte „Deine Daten
@@ -35,14 +34,18 @@ export default async function KontoPage() {
           <CardHeader>
             <CardTitle className="font-grotesk text-xl">Konto</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-5">
+          {/* Bewusst **ohne** Abmelde-Knopf (AC-19): Der steht seit PROJ-2 im gemeinsamen
+              Header, und der ist auf beiden angemeldeten Seiten da. Zwei gleich benannte
+              Schaltflächen auf einer Seite sind für Screenreader nicht unterscheidbar
+              (design.md, TD-27). Was bleibt, ist die Frage, für die es diese Karte gibt:
+              mit welchem Konto bin ich hier. */}
+          <CardContent>
             <div className="flex flex-col gap-1">
               <span className="font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 E-Mail-Adresse
               </span>
               <span>{user.email}</span>
             </div>
-            <LogoutButton />
           </CardContent>
         </Card>
 

@@ -111,17 +111,23 @@ test('Journey 2: Anmelden bringt die eigene Adresse auf die Kontoseite (AC-6, AC
   await expect(page).toHaveURL('/')
 })
 
-test('Journey 3: Abmelden schließt den geschützten Bereich wieder (AC-14, AC-11)', async ({
+test('Journey 3: Genau ein Abmelden, und es schließt den geschützten Bereich wieder (AC-14, AC-19, AC-11)', async ({
   page,
 }) => {
   const email = uniqueEmail('journey3')
   await registriere(page, email)
 
+  // AC-19 — auf **jeder** angemeldeten Seite genau eine Abmelde-Schaltfläche, und zwar die
+  // im Header. Vorher standen auf `/konto` zwei gleich benannte nebeneinander: für
+  // Screenreader nicht unterscheidbar, und dieser Test musste auf `main` eingegrenzt werden,
+  // um überhaupt zu laufen (QA-Bericht von PROJ-2, BUG-3 · `/refine PROJ-1` vom 31.08.2026).
+  await expect(page.getByRole('button', { name: 'Abmelden' })).toHaveCount(1)
   await page.goto('/konto')
-  // Auf die Karte eingegrenzt: Seit PROJ-2 den gemeinsamen Header ergänzt hat, gibt es auf
-  // `/konto` **zwei** gleich benannte Abmelde-Schaltflächen (QA-Bericht von PROJ-2, BUG-3).
-  // AC-14 gehört zu der in der Konto-Karte — die im Header ist die Zugabe von PROJ-2.
-  await page.getByRole('main').getByRole('button', { name: 'Abmelden' }).click()
+  await expect(page.getByRole('button', { name: 'Abmelden' })).toHaveCount(1)
+  await expect(page.getByRole('main').getByRole('button', { name: 'Abmelden' })).toHaveCount(0)
+
+  // AC-14 — die eine Schaltfläche beendet die Sitzung.
+  await page.getByRole('button', { name: 'Abmelden' }).click()
 
   // AC-14 — Sitzung beendet, zurück auf der Anmeldeseite.
   await expect(page).toHaveURL(/\/login/, AKTION)

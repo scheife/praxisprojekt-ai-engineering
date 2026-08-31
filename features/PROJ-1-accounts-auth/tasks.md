@@ -170,6 +170,21 @@ Datei nicht schreiben.
 
 ---
 
+## Level 13 — Umsetzung des `/refine` vom 31.08.2026
+
+<!-- Ergänzt am 31.08.2026. AC-19 ist neu: genau eine Abmelde-Schaltfläche je angemeldeter
+     Seite. Auslöser war BUG-3 aus dem QA-Bericht von PROJ-2 — seit PROJ-2 den gemeinsamen
+     Header ergänzt hat, standen auf `/konto` zwei gleich benannte nebeneinander. Kein
+     neues Design nötig: die Action bleibt, nur ihr Ort im Rahmen ist jetzt festgeschrieben
+     (design.md, TD-27). Drei Dateien, nacheinander statt [P], weil zwei davon dieselbe
+     Seite betreffen. -->
+
+- [x] **T37**  Den `LogoutButton` aus der Karte „Konto" entfernen. Die Karte trägt danach nur noch die E-Mail-Adresse — die Frage, für die es eine Kontoseite gibt. Die Komponente selbst und die `logout()`-Action bleiben unverändert; der Header ruft schon heute dieselbe auf  · files: `src/app/konto/page.tsx`  · → AC-19
+- [x] **T38**  Den Ladezustand mitziehen: der Platzhalter für den entfallenen Knopf verschwindet, sonst zeigt das Gerüst etwas, das danach nicht kommt  · files: `src/app/konto/loading.tsx`  · → AC-19
+- [x] **T39**  Journey 3 prüft AC-19 mit: auf `/` **und** auf `/konto` genau eine Schaltfläche „Abmelden", und keine mehr im Inhaltsbereich. Die Eingrenzung auf `getByRole('main')`, die der Test wegen der Doppelung brauchte, entfällt  · files: `tests/PROJ-1-accounts-auth.spec.ts`  · → AC-19, AC-14
+
+---
+
 ## Abdeckung
 
 | AC / EC | Aufgaben |
