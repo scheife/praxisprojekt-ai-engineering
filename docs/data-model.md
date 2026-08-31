@@ -37,6 +37,19 @@ und ein Feld, das niemand liest, ist trotzdem eine Aufzeichnung über das Verhal
 **PROJ-2 ist vollständig in Euro.** Währung, eingefrorener Kurs und Kursdatum kommen mit PROJ-3 als
 zusätzliche Felder derselben Tabelle dazu — additiv, ohne eine Festlegung von PROJ-2 umzukehren.
 
+**Entworfen von `/architecture PROJ-3`:** Jede Ausgabe trägt jetzt zusätzlich eine **Währung**, ihren
+**Originalbetrag** und — nur wenn die Währung nicht Euro ist — den **eingefrorenen Kurs** samt
+**Kursdatum**. Der Euro-Betrag bleibt das Feld, das jede Summe trägt; bei einer Fremdwährungsausgabe
+ist er ein beim Erfassen errechneter Wert. Zwei Festlegungen sind für spätere Features wichtig:
+
+- **Es gibt keine Ausgabe ohne Euro-Betrag.** Die Datenbank erzwingt das Paar: Euro ⇒ kein Kurs ·
+  Fremdwährung ⇒ Kurs **und** Kursdatum. Ein Zustand „Kurs wird nachgeholt" existiert nicht.
+- **Das Kursdatum ist nicht zwingend das Ausgabedatum.** Für Wochenenden und Feiertage gilt der
+  letzte Werktag davor, und festgehalten wird der Tag, an dem der Kurs tatsächlich galt.
+
+Die Währung ist — wie die Kategorie — eine **Prüfregel** gegen eine feste Liste, keine eigene Tabelle:
+in den Daten steht der ISO-Code, der Anzeigename lebt im Code.
+
 **Zu `login_attempts`** (eingeführt von PROJ-1): Die Tabelle gehört niemandem und hängt an keinem Profil.
 Sie hält zweierlei fest, unterschieden durch ein Merkmal `kind`: einen **Anmeldeversuch** zu einer
 E-Mail-Adresse — auch wenn die Adresse gar kein Konto hat — und einen **Registrierungsversuch** je
@@ -70,8 +83,10 @@ Marketing & Werbung · Gebühren & Beiträge · Sonstiges
   Ausgaben mit. Die Kette `auth.users → profiles → expenses` ist der Grund, warum die Kontolöschung
   aus PROJ-1 für PROJ-2 nicht angefasst werden muss.
 - Jede Ausgabe trägt **genau eine** Kategorie aus der festen Liste.
+- Jede Ausgabe trägt **genau eine** Währung aus der festen Liste.
 - Eine Ausgabe hält **ihren eigenen Wechselkurs fest**. Es gibt keinen separaten Kurs-Datensatz und
-  keine Kurs-Tabelle.
+  keine Kurs-Tabelle. Bestätigt von `/architecture PROJ-3`: Kurse werden zur Laufzeit höchstens
+  **zwischengespeichert** (24 Stunden, je Datum und Währung), nie als eigene Entität abgelegt.
 - `login_attempts` steht **außerhalb** dieser Kette: kein Fremdschlüssel, keine Zugehörigkeit, kein
   Bezug zu einem Profil. Die Verbindung besteht nur über die E-Mail-Adresse als Text, absichtlich lose.
 
@@ -101,9 +116,11 @@ Datenbankrollen. Wer nichts sehen darf, bekommt keine Policy, die etwas erlaubt.
 auth.users                    Supabase Auth — E-Mail, Passwort-Hash
    └─ 1:1  profiles           Konto · Anker für spätere Einstellungen
               └─ 1:n  expenses        (Löschweitergabe · bis zur Kontolöschung)
-                        PROJ-2: Betrag · Kategorie · Datum · Notiz · Vorgangskennung
-                        PROJ-3: Währung · eingefrorener Kurs + Kursdatum
+                        PROJ-2: Euro-Betrag · Kategorie · Datum · Notiz · Vorgangskennung
+                        PROJ-3: Währung · Originalbetrag
+                                · eingefrorener Kurs + Kursdatum (nur bei Fremdwährung)
                               └─ Kategorie aus fester Werteliste (Prüfregel)
+                              └─ Währung  aus fester Werteliste (Prüfregel)
 
 login_attempts                daneben, ohne Verbindung — Art · E-Mail · IP · Zeitpunkt
                               Art: Anmeldeversuch oder Registrierungsversuch

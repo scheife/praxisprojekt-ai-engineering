@@ -87,8 +87,9 @@
   Währung, den verwendeten Kurs und das Kursdatum; eine Ausgabe in Euro wird unverändert einzeilig
   dargestellt wie in PROJ-2
 - [ ] **AC-8** — Angenommen der Kurs wird angezeigt, wenn er gelesen wird, dann steht er in der
-  Richtung, in der sich die Umrechnung nachrechnen lässt: Originalbetrag × Kurs ergibt den
-  angezeigten Euro-Wert
+  Richtung **„1 EUR = X Fremdwährung"**, sodass sich die Umrechnung nachrechnen lässt:
+  Originalbetrag **geteilt durch** Kurs ergibt den angezeigten Euro-Wert *(Rechenart geändert am
+  31.08.2026, siehe Decision Log)*
 - [ ] **AC-9** — Angenommen ein Monat enthält Ausgaben in mehreren Währungen, wenn Monatsübersicht,
   Kategoriesummen und Gesamtsumme angezeigt werden, dann sind sie **ausschließlich in Euro** und
   enthalten jede Ausgabe mit ihrem eingefrorenen Euro-Wert
@@ -154,8 +155,11 @@
   wird, dann wird kaufmännisch auf ganze Cent gerundet, und ein Betrag größer 0 wird dabei **nie zu
   0,00 €** — er wird gegebenenfalls nach AC-18 abgelehnt statt still auf null gerundet
 - **EC-6** — Angenommen zwei Ausgaben mit **derselben** Währung und **demselben** Ausgabedatum werden
-  nacheinander erfasst, wenn beide gespeichert sind, dann tragen sie denselben Kurs und dasselbe
-  Kursdatum
+  nacheinander erfasst, wenn für dieses Datum bereits ein Kurs veröffentlicht ist, dann tragen beide
+  denselben Kurs und dasselbe Kursdatum. Wird eine davon erfasst, **bevor** der Kurs des Tages
+  veröffentlicht ist, dann trägt sie den Kurs des letzten Werktags davor — die beiden Kursdaten
+  unterscheiden sich dann sichtbar, und **keine der beiden Ausgaben ist falsch**
+  *(präzisiert am 31.08.2026, siehe Decision Log)*
 - **EC-7** — Angenommen dieselbe Ausgabe ist in zwei Browser-Tabs offen und wird in Tab A auf eine
   andere Währung umgestellt, wenn Tab B danach mit seinem alten Stand speichert, dann gilt der zuletzt
   gespeicherte Stand **vollständig** — es entsteht keine Mischung aus der Währung des einen und dem
@@ -186,21 +190,26 @@
 
 ## Open Questions
 
-- [ ] **Deckt der Kursdienst jede angebotene Währung über den ganzen zulässigen Datumsbereich ab?**
-  PROJ-2 lässt Ausgabedaten ab dem 01.01.2000 zu (AC-30). Nicht jede heute geführte Währung wurde
-  damals schon von der EZB veröffentlicht. Wo das auseinanderfällt, greift AC-5 und EC-4 — die Frage
-  ist, ob das oft genug vorkommt, um die Währungsliste vom gewählten Datum abhängig zu machen. Vor
-  `/build` an einer Stichprobe zu prüfen.
-- [ ] **Verlässlichkeit und Grenzen von frankfurter.app.** Der Dienst ist kostenlos und ohne
-  zugesicherte Verfügbarkeit. Wie oft er ausfällt und ob er die Zahl der Aufrufe begrenzt, ist nicht
-  bekannt. AC-5 fängt den Ausfall sauber ab; sollte er häufig sein, wäre das ein Grund, die
-  Entscheidung gegen einen Kurs von Hand noch einmal aufzurufen.
-- [ ] **Wie viele Kursaufrufe darf eine angemeldete Person auslösen?** Jede Erfassung und jede
-  Änderung von Währung oder Datum ruft den Dienst auf. Das ist kein Zugangsdaten-Pfad und braucht
-  darum keine Drosselung nach dem Muster von PROJ-1 — aber wer das Formular schnell genug bedient,
-  erzeugt auf Kosten eines fremden, kostenlosen Dienstes Last, und ein Aussperren unserer Anwendung
-  träfe alle Nutzer:innen zugleich. Ob eine Obergrenze nötig ist und welche, gehört zu
-  `/architecture`; im normalen Gebrauch (eine Handvoll Belege im Monat) stellt sich die Frage nicht.
+- [x] **AC-8 trifft die Rechenart nicht.** ~~Er sagt „Originalbetrag × Kurs ergibt den Euro-Wert" …
+  → `/refine PROJ-3` vor `/build`.~~ **Erledigt am 31.08.2026:** AC-8 ist neu gefasst und verlangt die
+  Richtung „1 EUR = X Fremdwährung" mit Division. Bei der Gelegenheit wurde **EC-6** präzisiert, der
+  für den laufenden Tag ein Versprechen gab, das die Veröffentlichungspraxis der EZB nicht hält.
+- [x] **Deckt der Kursdienst jede angebotene Währung über den ganzen zulässigen Datumsbereich ab?**
+  ~~Vor `/build` an einer Stichprobe zu prüfen.~~ **Gemessen von `/architecture PROJ-3` (31.08.2026):
+  nein.** Zum 03.01.2000 fehlen BRL, CNY, ILS und INR; zum 04.01.2010 fehlt ISK. Solche Kombinationen
+  laufen in AC-5 mit der dauerhaften Fehlerklasse aus EC-4. Die Auswahlliste bleibt bewusst
+  datumsunabhängig — Begründung und Preis im `design.md` unter *Offene Punkte*.
+- [x] **Verlässlichkeit und Grenzen von frankfurter.app.** ~~Wie oft er ausfällt und ob er die Zahl der
+  Aufrufe begrenzt, ist nicht bekannt.~~ **Geprüft:** Der Dienst nennt in seinen Antworten keine
+  Drosselungs-Kopfzeilen und empfiehlt selbst 24 Stunden Zwischenspeicherung
+  (`Cache-Control: public, max-age=86400`). Nebenbefund: Der Host **`api.frankfurter.app` ist
+  umgezogen** und antwortet mit HTTP 301 auf `api.frankfurter.dev/v1` (design.md, TD-1). Über die
+  Ausfallhäufigkeit sagt eine Momentaufnahme nichts — AC-5 fängt sie ab.
+- [x] **Wie viele Kursaufrufe darf eine angemeldete Person auslösen?** ~~Ob eine Obergrenze nötig ist
+  und welche, gehört zu `/architecture`.~~ **Beantwortet:** keine eigene Drosselung. Kurse werden 24
+  Stunden je Datum und Währung wiederverwendet (design.md, TD-11), womit zehn Belege desselben Tages
+  einen einzigen Aufruf auslösen. Der Erfassungspfad prüft außerdem erst die Eingaberegeln und ruft
+  erst danach den Dienst (TD-13), sodass ungültige Eingaben gar keine Last erzeugen.
 - [ ] **Rundung und Steuerberatung.** EC-5 legt kaufmännisches Runden auf ganze Cent fest. Ob eine
   österreichische Steuerberatung dieselbe Rundung erwartet, ist nicht geprüft — für den Zweck von
   `auslage.` (Überblick, keine Buchhaltung) ist es unkritisch, vor einem DATEV-Export wäre es zu
@@ -228,3 +237,5 @@
 | Kursdatum **immer** nennen, nicht nur bei Abweichung | Eine Zeile ohne Kursdatum wäre zweideutig — „gleicher Tag" oder „weggelassen"? Eine Darstellung statt zweier ist außerdem einfacher zu prüfen | 2026-08-31 |
 | Die gewählte Währung bleibt nach dem Erfassen stehen | Folgt der Regel aus PROJ-2 (AC-3): Betrag und Notiz werden geleert, Kategorie und Datum bleiben. Wer einen Stapel Dollar-Belege eingibt, wählt die Währung damit einmal statt jedes Mal | 2026-08-31 |
 | Betragsgrenzen gelten **doppelt** — auf Originalbetrag und Euro-Wert | Die Grenze aus PROJ-2 hängt an der gespeicherten Euro-Zahl; ein zulässiger Fremdwährungsbetrag kann sie nach der Umrechnung reißen. Beide Prüfungen sind nötig, und die Meldung muss sagen, welche griff | 2026-08-31 |
+| **AC-8: der Kurs steht als „1 EUR = X Fremdwährung", gerechnet wird mit Division** | `/architecture` hat gemessen, dass die umgekehrte Richtung bei Währungen mit großen Zahlen rund **1 % Fehler** erzeugt: 10.000.000 IDR ergeben 480,00 € statt 484,78 €, weil der Kurs dort nur zwei signifikante Stellen hat. Der Vertrag gibt nach, nicht die Genauigkeit. Nebeneffekt, der die Wahl bestätigt: „1 € = 1,1643 USD" ist in Europa ohnehin die übliche Leseweise | 2026-08-31 |
+| **EC-6 gilt je Kurstag, nicht je Ausgabetag** | Der ursprüngliche Wortlaut versprach: gleiche Währung + gleiches Ausgabedatum ⇒ gleicher Kurs. Für abgeschlossene Tage stimmt das, für **heute** nicht: Die EZB veröffentlicht nachmittags, also bekommt eine vormittags erfasste Ausgabe den Kurs des Vortags und eine abends erfasste den des laufenden Tages. Das ist keine Unsauberkeit, sondern dieselbe Regel, die schon fürs Wochenende entschieden wurde — und das Kursdatum macht den Unterschied sichtbar. Ein Kriterium, das etwas anderes verspricht, wäre bei der Prüfung rot, ohne dass am Code etwas falsch wäre | 2026-08-31 |
