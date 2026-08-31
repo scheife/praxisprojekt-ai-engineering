@@ -24,7 +24,7 @@ Rahmen laufen über `/refine PROJ-2`, nicht über das `design.md` eines anderen 
 | Anmelden (`/login`) | Mit E-Mail und Passwort anmelden | abgemeldet | PROJ-1 |
 | Registrieren (`/signup`) | Konto anlegen | abgemeldet | PROJ-1 |
 | Ausgaben & Monatsübersicht (`/`) | Ausgaben erfassen, bearbeiten, löschen; Monatssummen sehen | angemeldet | PROJ-2 |
-| Konto (`/konto`) | Abmelden, Konto löschen | angemeldet | PROJ-1 |
+| Konto (`/konto`) | Abmelden, Konto löschen · Ausgaben als CSV mitnehmen | angemeldet | PROJ-1 (Bereich) · PROJ-2 (Export-Abschnitt) |
 
 Mehr Bereiche gibt es nicht. **Keine Navigationsliste** — bei zwei angemeldeten Bereichen, von denen
 einer selten aufgerufen wird, hätte sie nichts zu zeigen. `/konto` wird aus dem Header verlinkt.
@@ -34,27 +34,45 @@ AC-15 (Konto löschen) einen Ort brauchen, den Header aber PROJ-2 baut — und P
 bevor es PROJ-2 gibt. Die Abmelde-Aktion selbst gehört PROJ-1; der Header von PROJ-2 ruft **dieselbe**
 Aktion auf, statt eine zweite zu bauen.
 
+**Der Export-Abschnitt auf `/konto`** (ergänzt von `/architecture PROJ-2`): Die Karte „Deine Daten
+mitnehmen" und die Route `/konto/export`, die die CSV-Datei bei jedem Abruf erzeugt, gehören **PROJ-2** —
+sie betreffen Ausgabendaten. Der **Bereich `/konto` selbst und sein Zugriffsschutz bleiben bei PROJ-1**.
+Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
+
 **Bis PROJ-2 gebaut ist**, ist `/` eine geschützte Platzhalterseite mit einem Satz und einem Link auf
 `/konto`. PROJ-2 ersetzt ihren Inhalt — der Zugriffsschutz der Route bleibt, wie PROJ-1 ihn gelegt hat.
 
 ## Layout-Regionen
 
-- **Header (56px):** durchgehend auf der angemeldeten Seite. Wortmarke `auslage.` links · Monatswechsler
-  (`‹ August 2026 ›`) mittig · Abmelden rechts.
+- **Header (56px):** durchgehend auf **beiden** angemeldeten Seiten. Wortmarke `auslage.` links ·
+  Monatswechsler (`‹ August 2026 ›`) mittig · Link „Konto" und Abmelden rechts.
+  **Auf `/konto` ohne Monatswechsler** — dort gibt es keinen Monat zu wechseln (festgelegt von
+  `/architecture PROJ-2`, TD-20).
+  Der Header wird **von jeder Seite selbst gerendert**, nicht von einem gemeinsamen Layout: ein Layout
+  bekommt in Next.js 16 keine Adressparameter, könnte den angezeigten Monat also gar nicht kennen
+  (PROJ-2, TD-10).
 - **Inhalt:** max. 1180px, zentriert.
 - **Keine Sidebar.**
 - **Login und Signup tragen keinen Rahmen:** zentrierte Karte, nur die Wortmarke darüber. Hinter der
   Karte liegt ein weicher Schein in Olive — er trennt sie vom Grund, der sonst fast dieselbe
   Helligkeit hat (Details im `design.md` von PROJ-1, dem beide Seiten gehören).
-  **`/konto` folgt demselben Muster**, solange es den Header noch nicht gibt — **ohne** den Schein:
-  den Hintergrund des angemeldeten Bereichs entscheidet PROJ-2 mit dem Header.
+  **`/konto` folgte demselben Muster, solange es den Header noch nicht gab** — **ohne** den Schein.
+  Mit PROJ-2 bekommt `/konto` den Header und damit den Hintergrund des angemeldeten Bereichs; die
+  beiden Konto-Karten von PROJ-1 bleiben inhaltlich unverändert darunter stehen.
 - **Mobil (unter `md`):** Header bleibt, der Monatswechsler rückt in eine zweite Zeile. Kein Burger —
   es gibt nichts zu verbergen.
 
 ## Seitenmuster
 
-- **Seitenkopf:** Titel links, **genau eine** hervorgehobene Hauptaktion rechts (Olive).
+- **Seitenkopf:** Titel links, **höchstens eine** hervorgehobene Hauptaktion rechts (Olive).
+  _Präzisiert von `/architecture PROJ-2`:_ Die Regel galt ursprünglich als „genau eine". Sie gilt für
+  Seiten, die eine Hauptaktion **haben**. Auf `/` ist das Erfassen die Hauptaktion und steht als
+  dauerhaft sichtbare Zeile im Inhalt statt als Knopf im Seitenkopf — so in `spec.md` von PROJ-2
+  entschieden, weil ein Dialog pro Ausgabe einen Klick und einen Kontextwechsel kostet.
 - **Ladezustand:** Skeletons in `--muted` an der Stelle des künftigen Inhalts. Kein Spinner-Overlay.
+  Wo eine Ladedatei (`loading.tsx`) auch fremde Seiten träfe, wird stattdessen eine Suspense-Grenze
+  **in der Seite** gesetzt — so auf `/`, weil eine Ladedatei unter `src/app/` auch für `/login` und
+  `/signup` gälte (PROJ-2, TD-12).
 - **Leerzustand:** ausformuliert — ein Satz, was hier stehen wird, plus die Hauptaktion. Nie eine leere
   Tabelle.
 - **Fehlerzustand:** Feldfehler direkt am verursachenden Feld in `--destructive`; bei mehreren Feldern
@@ -76,11 +94,12 @@ Aktion auf, statt eine zweite zu bauen.
 | Komponente | Datei | Zweck | Gebaut von |
 |---|---|---|---|
 | `Wordmark` | `src/components/wordmark.tsx` | `auslage.` mit olivem Punkt — auch auf Login/Signup | **PROJ-1** |
-| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler, Abmelden, Link auf `/konto` | PROJ-2 |
-| `PageHeader` | `src/components/page-header.tsx` | Titel + eine Hauptaktion, das gemeinsame Seitenmuster | PROJ-2 |
+| `AppHeader` | `src/components/app-header.tsx` | Wortmarke, Monatswechsler (optional), Link auf `/konto`, Abmelden | PROJ-2 |
+| `MonthSwitcher` | `src/components/month-switcher.tsx` | `‹ August 2026 ›` als echte Links mit `?monat=`, Grenzen aus den Daten | PROJ-2 |
 
-_Die Pfade sind der Vorschlag von `/init`; festgelegt werden `AppHeader` und `PageHeader` im `design.md`
-von PROJ-2._
+**`PageHeader` entfällt** (entschieden von `/architecture PROJ-2`, TD-21): Bei zwei angemeldeten
+Seiten, von denen eine gar keine hervorgehobene Hauptaktion hat, gäbe es nichts zu teilen. Kommt eine
+dritte Seite dazu, wird die Komponente aus echten Aufrufern gebaut statt aus einer Vermutung.
 
 **Das Fundament unter dem Rahmen legt PROJ-1**, weil es das erste Feature mit Oberfläche ist: das
 Wurzel-Layout (`lang="de"`, Dark fest gesetzt, Schriften über `next/font/google`), die Farb-Tokens in

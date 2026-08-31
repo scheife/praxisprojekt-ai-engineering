@@ -23,6 +23,20 @@ da, weil `auth.users` in einem Schema liegt, das der Client nicht direkt abfrage
 an ihr das RLS-Muster samt Signup-Trigger etabliert, das `expenses` danach eins zu eins kopiert. Spätere
 Einstellungen (etwa eine Standardwährung) landen hier, ohne dass am Auth-Schema gearbeitet werden muss.
 
+**Zu `expenses`** (eingeführt von PROJ-2): Eine Zeile je Ausgabe, mit Betrag, Kategorie, Datum und
+optionaler Notiz. Sie gehört **genau einer** Person und hängt mit Löschweitergabe an deren Profil —
+wird das Konto gelöscht, verschwinden die Ausgaben mit, ohne dass eine Löschroutine daran denken
+müsste. **Aufbewahrung: bis zur Kontolöschung**, kein automatischer Ablauf. Der Zugriff folgt dem
+Muster von `profiles`: RLS mit einer Policy je Operation, dazu die Prüfung im Anwendungscode.
+
+Zusätzlich trägt jede Ausgabe eine **Vorgangskennung** — die Kennung des Erfassungsvorgangs, über die
+ein doppelt abgeschickter Klick nur zu einer Zeile wird. Sie ist ein technisches Merkmal ohne Aussage
+über die Person. Ein Änderungszeitpunkt wird **bewusst nicht** geführt: ihn braucht kein Kriterium,
+und ein Feld, das niemand liest, ist trotzdem eine Aufzeichnung über das Verhalten der Person.
+
+**PROJ-2 ist vollständig in Euro.** Währung, eingefrorener Kurs und Kursdatum kommen mit PROJ-3 als
+zusätzliche Felder derselben Tabelle dazu — additiv, ohne eine Festlegung von PROJ-2 umzukehren.
+
 **Zu `login_attempts`** (eingeführt von PROJ-1): Die Tabelle gehört niemandem und hängt an keinem Profil.
 Sie hält zweierlei fest, unterschieden durch ein Merkmal `kind`: einen **Anmeldeversuch** zu einer
 E-Mail-Adresse — auch wenn die Adresse gar kein Konto hat — und einen **Registrierungsversuch** je
@@ -40,17 +54,21 @@ Entität mit einer eigenen Aufbewahrungsfrist. Details im `design.md` von PROJ-1
 `docs/privacy.md`.
 
 **Kategorien** sind eine feste Liste, keine verwaltbare Entität — eigene Kategorienverwaltung ist
-ausdrücklich Non-Goal. Ob daraus ein Enum, ein Check-Constraint oder eine kleine Nachschlagetabelle
-wird, entscheidet das `design.md` von PROJ-2.
+ausdrücklich Non-Goal. **Entschieden von `/architecture PROJ-2`:** keine eigene Tabelle und kein
+Aufzählungstyp, sondern eine **Prüfregel** an der Ausgabe. In den Daten steht ein stabiler
+Schlüssel, der Anzeigename lebt im Code — so lässt sich eine Kategorie umbenennen, ohne eine einzige
+gespeicherte Zeile anzufassen. Begründung im `design.md` von PROJ-2 (TD-2).
 
-Startvorschlag für die Liste (`/write-spec` darf sie anpassen):
+Die Liste, unverändert seit `/init` und von `/write-spec PROJ-2` bestätigt:
 Büromaterial · Software & Abos · Hardware & Geräte · Reise & Fahrt · Bewirtung · Fortbildung ·
 Marketing & Werbung · Gebühren & Beiträge · Sonstiges
 
 ## Beziehungen
 
 - Ein Profil hat viele Ausgaben.
-- Jede Ausgabe gehört **genau einem** Profil.
+- Jede Ausgabe gehört **genau einem** Profil — **mit Löschweitergabe**: fällt das Profil, fallen die
+  Ausgaben mit. Die Kette `auth.users → profiles → expenses` ist der Grund, warum die Kontolöschung
+  aus PROJ-1 für PROJ-2 nicht angefasst werden muss.
 - Jede Ausgabe trägt **genau eine** Kategorie aus der festen Liste.
 - Eine Ausgabe hält **ihren eigenen Wechselkurs fest**. Es gibt keinen separaten Kurs-Datensatz und
   keine Kurs-Tabelle.
@@ -82,10 +100,10 @@ Datenbankrollen. Wer nichts sehen darf, bekommt keine Policy, die etwas erlaubt.
 ```
 auth.users                    Supabase Auth — E-Mail, Passwort-Hash
    └─ 1:1  profiles           Konto · Anker für spätere Einstellungen
-              └─ 1:n  expenses
-                        Betrag · Währung · eingefrorener Kurs + Kursdatum
-                        Kategorie · Datum · Notiz
-                              └─ Kategorie aus fester Werteliste
+              └─ 1:n  expenses        (Löschweitergabe · bis zur Kontolöschung)
+                        PROJ-2: Betrag · Kategorie · Datum · Notiz · Vorgangskennung
+                        PROJ-3: Währung · eingefrorener Kurs + Kursdatum
+                              └─ Kategorie aus fester Werteliste (Prüfregel)
 
 login_attempts                daneben, ohne Verbindung — Art · E-Mail · IP · Zeitpunkt
                               Art: Anmeldeversuch oder Registrierungsversuch
