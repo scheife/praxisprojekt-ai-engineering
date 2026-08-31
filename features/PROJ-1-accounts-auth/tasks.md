@@ -164,9 +164,10 @@ Datei nicht schreiben.
 - [x] **T35**  Tests für beides: dass die Frist eine **echte** Frist ist (auf `AbortSignal.timeout` gehorcht, nicht nur auf „irgendein Signal"), dass das Geheimnis aus der Umgebung tatsächlich mitgeht, dass ein fehlender Wert zum leeren Text wird statt zu `undefined`, und dass die Ablehnung der Datenbank als Störung gilt  · files: `src/lib/rate-limit.test.ts`  · → EC-4, AC-8, AC-9, AC-17
 - [x] **T36** `[user]`  Das Geheimnis in **beiden** Hälften hinterlegen  · **where:** (a) `GATE_SECRET=<wert>` in `.env.local`, (b) `select private.set_gate_secret('<derselbe wert>');` in der Datenbank · Der Schreibzugriff auf `.env.local` ist für Claude gesperrt; der Wert steht im Build-Bericht. **Ohne diesen Schritt sind Anmeldung und Registrierung gesperrt** — das ist die bewusst gewählte laute Variante  · → AC-8, AC-9, AC-17
 
-> **Zur Erinnerung, weil es leicht übersehen wird:** `T24` (`TRUSTED_PROXY_HOPS=0` in
-> `.env.local.example`) ist weiterhin nicht überprüfbar — die Datei ist für Claude nicht lesbar.
-> `GATE_SECRET` gehört als Platzhalter in dieselbe Datei und damit in dieselbe Hand-off.
+> **Erledigt, Stand 31.08.2026.** `T24` (`TRUSTED_PROXY_HOPS=0` in `.env.local.example`) ist in
+> QA-Lauf 8 erstmals **verifiziert** — die Zeile steht drin. Dabei fiel auf, dass die zweite Hälfte
+> dieser Hand-off nie erledigt wurde: `GATE_SECRET` fehlte in derselben Datei, obwohl `design.md:512`
+> es verlangt. Nachgetragen als **T40** (Ebene 14).
 
 ---
 
@@ -182,6 +183,15 @@ Datei nicht schreiben.
 - [x] **T37**  Den `LogoutButton` aus der Karte „Konto" entfernen. Die Karte trägt danach nur noch die E-Mail-Adresse — die Frage, für die es eine Kontoseite gibt. Die Komponente selbst und die `logout()`-Action bleiben unverändert; der Header ruft schon heute dieselbe auf  · files: `src/app/konto/page.tsx`  · → AC-19
 - [x] **T38**  Den Ladezustand mitziehen: der Platzhalter für den entfallenen Knopf verschwindet, sonst zeigt das Gerüst etwas, das danach nicht kommt  · files: `src/app/konto/loading.tsx`  · → AC-19
 - [x] **T39**  Journey 3 prüft AC-19 mit: auf `/` **und** auf `/konto` genau eine Schaltfläche „Abmelden", und keine mehr im Inhaltsbereich. Die Eingrenzung auf `getByRole('main')`, die der Test wegen der Doppelung brauchte, entfällt  · files: `tests/PROJ-1-accounts-auth.spec.ts`  · → AC-19, AC-14
+
+### Ebene 14 — die vergessene Hälfte der Hand-off (BUG-1 aus QA-Lauf 8)
+
+<!-- Kein Feature-Bau, sondern das Nachtragen einer Dokumentationszeile, die `design.md:512` und
+     die Notiz unter T36 beide verlangt hatten und für die nie eine Aufgabe angelegt wurde. T24
+     hat seinerzeit nur `TRUSTED_PROXY_HOPS` abgedeckt. Verhaltensneutral: die Beispieldatei wird
+     zur Laufzeit von niemandem gelesen. -->
+
+- [x] **T40**  `GATE_SECRET` als Platzhalter in `.env.local.example` dokumentieren, mit beiden Hälften im Kommentar (Wert in `.env.local`, derselbe Wert per `select private.set_gate_secret('…');` in der Datenbank), dem Hinweis auf das bewusste Zufallen ohne Geheimnis und der Begründung, warum das `NEXT_PUBLIC_`-Präfix hier fehlen muss  · files: `.env.local.example`  · → AC-8, AC-9, AC-17 (BUG-1 aus Lauf 8)
 
 ---
 

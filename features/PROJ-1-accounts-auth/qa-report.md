@@ -185,7 +185,7 @@ PROJ-1 gegen sich selbst: alle 19 AC und 7 EC in diesem Lauf neu geprüft, nicht
 
 ### BUG-1: `GATE_SECRET` fehlt in `.env.local.example`
 
-- **Severity:** Medium · **Status:** offen · **Betrifft:** AC-8, AC-9, AC-17 (Einrichtung, nicht Laufzeit)
+- **Severity:** Medium · **Status:** **behoben am 31.08.2026** · **Betrifft:** AC-8, AC-9, AC-17 (Einrichtung, nicht Laufzeit)
 - **Was passiert:** `src/lib/rate-limit.ts:128` liest `process.env.GATE_SECRET`. Die Variable ist
   **nicht** in `.env.local.example` dokumentiert — dort steht nur `TRUSTED_PROXY_HOPS=0` (aus T24).
   Wer das Projekt frisch auscheckt und der Beispieldatei folgt, bekommt eine Anwendung, in der
@@ -217,10 +217,17 @@ PROJ-1 gegen sich selbst: alle 19 AC und 7 EC in diesem Lauf neu geprüft, nicht
 - **Warum nicht Low:** Die Folge ist kein Schönheitsfehler, sondern der vollständige Ausfall des
   Feature-Kerns in einer frischen Umgebung, und eine ausdrücklich formulierte Projektregel wird
   verletzt.
-- **Wie es zu beheben wäre:** eine Platzhalter-Zeile in `.env.local.example`, im selben Stil wie
-  `TRUSTED_PROXY_HOPS=0`, plus der Hinweis, dass derselbe Wert per
-  `select private.set_gate_secret('…');` in der Datenbank hinterlegt werden muss. Die Datei ist für
-  Claude schreibgeschützt — das ist eine `[user]`-Aufgabe, so wie T24 und T36 es waren.
+- **Nachtrag vom 31.08.2026 — behoben (T40).** `.env.local.example` trägt jetzt die
+  Platzhalter-Zeile `GATE_SECRET=your_gate_secret_here`, darüber als Kommentar: dass beide Hälften
+  nötig sind (Wert in `.env.local`, derselbe Wert per `select private.set_gate_secret('…');` in der
+  Datenbank), dass ohne sie Anmeldung und Registrierung absichtlich stillstehen, und warum das
+  `NEXT_PUBLIC_`-Präfix hier fehlen muss. Damit steht die Variable dort, wo `design.md:512`,
+  `tasks.md:167` und `.claude/rules/security.md` sie verlangen.
+- **Am Code war nichts zu ändern, und an der Umgebung nichts nachzutragen.** Die Beispieldatei wird
+  zur Laufzeit von niemandem gelesen; sie dokumentiert nur. Dass die bestehende Installation den Wert
+  bereits hat, ist in diesem Lauf zusätzlich belegt: `GATE_SECRET` ist **nicht** in der
+  Shell-Umgebung gesetzt, und die Anmeldung ging trotzdem durch — der Wert kann also nur aus
+  `.env.local` stammen (Datei zuletzt am 29.08.2026 geändert, dem Tag von TD-26).
 
 ---
 
@@ -247,20 +254,17 @@ nicht beurteilt werden (siehe *Not Verified*). Eine Frage ans Produkt, kein Fehl
 
 - **Acceptance Criteria:** **19 von 19 erfüllt**, 0 nicht verifiziert
 - **Edge Cases:** **7 von 7 erfüllt**
-- **Bugs:** 0 Critical · 0 High · **1 Medium** (BUG-1, fehlende Dokumentation einer Pflichtvariablen) · 0 Low
+- **Bugs:** 0 Critical · 0 High · 1 Medium · 0 Low — **BUG-1 noch am selben Tag behoben** (T40), damit steht aus diesem Durchlauf **kein** Befund mehr offen
 - **Geschlossen:** BUG-1 Low aus Lauf 7 (AC-18) — durch das `/refine`, die Messung erfüllt die neue Fassung
 - **Security:** **14 Prüfungen verifiziert, 1 NOT VERIFIED**, keine negativ
 - **Tests:** 164 Unit-/Integrationstests grün · 18 von 18 E2E grün · Lint und Build grün · Rot-Nachweis für AC-19 in diesem Lauf geführt
-- **Production Ready:** **JA** — kein Critical- und kein High-Befund, und alle 19 AC wurden in diesem
-  Lauf gegen die laufende Anwendung ausgeführt. **Mit einer Auflage:** BUG-1 (Medium) sollte als
-  Nächstes erledigt werden — es ist eine Zeile in `.env.local.example` und eine `[user]`-Aufgabe.
+- **Production Ready:** **JA** — kein Critical- und kein High-Befund, alle 19 AC in diesem Lauf gegen
+  die laufende Anwendung ausgeführt, und der eine Medium-Befund ist behoben.
 
 **Das „JA" ist eine Aussage über gefundene Fehler, nicht über vollständige Abdeckung.**
 
-- **Ein Medium-Befund steht offen.** Nach der Severity-Regel dieses Kits blockieren nur Critical und
-  High die Freigabe — BUG-1 tut das nicht, weil keine laufende Installation betroffen ist und keine
-  Sicherheitslücke besteht. Er ist damit nicht erledigt, sondern **eingeplant**: Wer das Projekt neu
-  aufsetzt, bekommt ohne diese Zeile ein totes Anmeldeformular.
+- **Der Medium-Befund ist geschlossen** (BUG-1, T40) — nachgewiesen ist die ergänzte Zeile in
+  `.env.local.example`, nicht ein erneut durchgespieltes Aufsetzen aus dem leeren Verzeichnis.
 - **Die Liste unter *Not Verified In This Run* ist nicht leer.** Insbesondere wurde **nicht geprüft,
   wie die Seiten aussehen** — weder auf verschiedenen Bildschirmbreiten noch in anderen Browsern als
   Chromium und WebKit. Gerade bei AC-19 ist das relevant: Dass **genau eine** Schaltfläche im Markup
