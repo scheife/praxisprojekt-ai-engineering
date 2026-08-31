@@ -58,6 +58,43 @@ describe('Export-Datei (AC-27)', () => {
     )
   })
 
+  it('nimmt einer Formel den Anfang, statt sie in die Datei zu schreiben (BUG-1)', () => {
+    const rows = buildCsv(ACCOUNT, [
+      expense({ note: '=Rest aus Juli' }),
+      expense({ note: '-50% Rabatt Parkhaus' }),
+      expense({ note: '+Nachtrag' }),
+      expense({ note: '@Kunde' }),
+      expense({ note: "=cmd|' /C calc'!A0" }),
+    ]).split('\r\n')
+
+    // Ein vorangestelltes Hochkomma markiert den Inhalt als Text; die gängigen
+    // Tabellenkalkulationen zeigen ihn danach an, statt ihn zu rechnen.
+    expect(rows[4]).toContain(';"\'=Rest aus Juli";')
+    expect(rows[5]).toContain(';"\'-50% Rabatt Parkhaus";')
+    expect(rows[6]).toContain(";\"'+Nachtrag\";")
+    expect(rows[7]).toContain(";\"'@Kunde\";")
+    expect(rows[8]).toContain(";\"'=cmd|' /C calc'!A0\";")
+
+    // Kein Feld beginnt mehr unbegrenzt mit einem Formelzeichen.
+    for (const row of rows.slice(4)) {
+      for (const cell of row.split(';')) {
+        expect(cell.startsWith('=') || cell.startsWith('@')).toBe(false)
+      }
+    }
+  })
+
+  it('lässt gewöhnliche Notizen unangetastet', () => {
+    const lines = buildCsv(ACCOUNT, [expense({ note: 'Hosting 50% Anteil' })]).split('\r\n')
+    expect(lines[4]).toBe('14.08.2026;Software & Abos;29,00;Hosting 50% Anteil;14.08.2026 09:12')
+  })
+
+  it('rührt Datum, Kategorie und Betrag nicht an', () => {
+    const lines = buildCsv(ACCOUNT, [expense()]).split('\r\n')
+    // Beträge sind laut AC-5 immer größer 0, beginnen also nie mit einem Minus.
+    expect(lines[4].split(';')[2]).toBe('29,00')
+    expect(lines[4].split(';')[0]).toBe('14.08.2026')
+  })
+
   it('lässt eine fehlende Notiz als leeres Feld stehen', () => {
     const lines = buildCsv(ACCOUNT, [expense({ note: null })]).split('\r\n')
     expect(lines[4]).toBe('14.08.2026;Software & Abos;29,00;;14.08.2026 09:12')

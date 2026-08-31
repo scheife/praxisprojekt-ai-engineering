@@ -427,6 +427,11 @@ Datum;Kategorie;Betrag (EUR);Notiz;Erfasst am
   ihn jede Tabellenkalkulation mit deutschsprachigen Einstellungen als Zahl.
 - **Kategorie als deutscher Anzeigename**, nicht als Schlüssel — die Datei ist für Menschen und für
   Steuerberater:innen, nicht für unseren Code.
+- **Ein Feld, das mit `=`, `+`, `-`, `@`, Tabulator oder Wagenrücklauf beginnt, bekommt ein
+  vorangestelltes Hochkomma** und wird begrenzt. Sonst liest jede Tabellenkalkulation den
+  Inhalt als Formel: aus der Notiz `-50% Rabatt Parkhaus` wird `#NAME?`, und `=cmd|' /C calc'!A0`
+  ist der bekannte CSV-Injection-Weg. **Begrenzen allein genügt nicht** — die Anführungszeichen
+  fallen beim Einlesen zuerst weg, die Formel wird danach gesehen. _(Ergänzt nach `/qa`, BUG-1.)_
 - **Erfassungszeitpunkt** als `TT.MM.JJJJ hh:mm` in Europe/Vienna.
 - Wer noch keine Ausgabe hat, bekommt die Datei mit Kopfblock und Spaltenüberschriften — eine leere
   Auskunft ist auch eine Auskunft.

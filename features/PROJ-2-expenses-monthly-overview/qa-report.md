@@ -13,7 +13,11 @@ laufende Anwendung über HTTP mit echten Sitzungs-Cookies zweier Konten, (b) die
 Dialoge, Toasts, Filterklicks, Darstellung auf verschiedenen Bildschirmbreiten — steht unter
 *Nicht geprüft in diesem Durchlauf*.
 
-**Testsuite:** `npm test` → **161 Tests, 14 Dateien, alle grün** (vorher 146; `/qa` hat 15 ergänzt).
+**Testsuite:** `npm test` → **164 Tests, 14 Dateien, alle grün** (vorher 146; `/qa` hat 15 ergänzt, die Behebung von BUG-1 weitere 3).
+
+**Nachtrag 2026-08-31:** BUG-1 wurde nach diesem Durchlauf behoben und die Behebung mit echten
+Abrufen gegen den Produktions-Build nachgeprüft. Die betroffenen Zeilen unten sind entsprechend
+aktualisiert; alles andere steht unverändert aus dem ursprünglichen Durchlauf.
 
 ---
 
@@ -152,7 +156,7 @@ Dialoge, Toasts, Filterklicks, Darstellung auf verschiedenen Bildschirmbreiten �
 - [x] **Vollständig über alle Monate:** 407 Zeilen in der Datenbank (August plus ein März-Beleg) → 411 Zeilen in der Datei = 3 Kopf + 1 Leerzeile + 407 Daten; der März-Beleg ist enthalten
 - [x] **Nur die eigenen Daten:** Bs Export enthält Kopfblock und Überschriften, aber keine einzige Zeile von A
 - [x] Ohne Ausgaben bleibt der Kopfblock stehen — `src/lib/expenses/csv.test.ts`
-- [ ] **BUG-1 (Medium):** Notizen, die mit `=`, `+`, `-` oder `@` beginnen, werden unquotiert geschrieben und von Tabellenkalkulationen als Formel gelesen — siehe Bugs
+- [x] Notizen mit führendem `=`, `+`, `-`, `@` werden als Text markiert statt als Formel geschrieben — **BUG-1, behoben und am 2026-08-31 nachgeprüft:** echter Export gegen den Produktions-Build zeigt `"'-50% Rabatt Parkhaus"`, `"'=Rest aus Juli"`, `"'+Nachtrag"`, `"'@Kunde Meier"`, `"'=cmd|' /C calc'!A0"`; `Hosting 50% Anteil` bleibt unverändert und unbegrenzt
 
 #### AC-28 — Hinweis am Notizfeld
 - [x] Dauerhaft sichtbar im Markup, nicht erst im Fehlerfall: „Keine Namen anderer Personen und nichts Sensibles wie Gesundheitsangaben — eine kurze Beschreibung reicht." — HTTP auf `/`, und das Notizfeld verweist per `aria-describedby` darauf
@@ -211,7 +215,7 @@ Dialoge, Toasts, Filterklicks, Darstellung auf verschiedenen Bildschirmbreiten �
 
 #### EC-10 — Sonderzeichen im Export
 - [x] Zur Laufzeit im echten Export: Semikolon → `"Rechnung; storniert ""zitiert"""` (begrenzt, innere Anführungszeichen verdoppelt); ein Komma bleibt unbegrenzt, weil das Trennzeichen das Semikolon ist; Zeilenumbruch bleibt im begrenzten Feld und die Spalten verrutschen nicht — `src/lib/expenses/csv.test.ts`
-- [ ] **BUG-1 (Medium):** führendes `=`, `+`, `-`, `@` wird **nicht** begrenzt — siehe Bugs
+- [x] Führendes `=`, `+`, `-`, `@`, Tabulator und Wagenrücklauf bekommen die Textmarkierung — `src/lib/expenses/csv.test.ts` („nimmt einer Formel den Anfang…", „lässt gewöhnliche Notizen unangetastet", „rührt Datum, Kategorie und Betrag nicht an"), rot nachgewiesen
 
 #### EC-11 — Änderung verschiebt die Ausgabe in einen anderen Monat
 - [x] Die Änderungs-Action liefert den Monat **nach** der Änderung — `src/lib/actions/expenses.test.ts` („meldet den neuen Monat, wenn die Änderung die Ausgabe verschiebt": `2026-06`)
@@ -277,17 +281,14 @@ Dialoge, Toasts, Filterklicks, Darstellung auf verschiedenen Bildschirmbreiten �
 
 ## Gefundene Bugs
 
-### BUG-1: Notizen mit führendem `=`, `+`, `-` oder `@` werden im CSV als Formel gelesen
+### BUG-1: Notizen mit führendem `=`, `+`, `-` oder `@` wurden im CSV als Formel gelesen — **BEHOBEN**
 - **Severity:** Medium
 - **Betrifft:** AC-27, EC-10
-- **Schritte zur Reproduktion:**
-  1. Eine Ausgabe mit der Notiz `-50% Rabatt Parkhaus` erfassen, eine zweite mit `=Rest aus Juli`, eine dritte mit `+Nachtrag`
-  2. Auf `/konto` „Ausgaben als CSV herunterladen" wählen
-  3. Erwartet: die Notizen stehen so in der Datei, dass jede Tabellenkalkulation sie als Text zeigt — AC-27 verspricht, dass sich die Datei „ohne Nacharbeit" öffnen lässt
-  4. Tatsächlich: die Felder werden **unbegrenzt** geschrieben (`…;3,50;-50% Rabatt Parkhaus;…`). Excel, LibreOffice und Numbers lesen sie als Formel und zeigen `#NAME?` statt der Notiz
-- **Zweite Seite davon:** Das ist die klassische CSV-Injection. Mit der DDE-Form (`=cmd|' /C calc'!A0`, im Test gespeichert und unbegrenzt exportiert) kann eine Tabellenkalkulation zum Ausführen eines Befehls gebracht werden. Fremde können hier nichts hineinschreiben — RLS lässt niemanden an fremde Notizen —, aber `design.md` nennt Steuerberater:innen ausdrücklich als Empfänger der Datei, und damit ist Schreiber und Öffner nicht zwingend dieselbe Person
-- **Wo:** `src/lib/expenses/csv.ts:26` — `field()` begrenzt nur bei `"`, `;`, `\r`, `\n`
-- **Priorität:** Vor dem Deploy beheben — die Ursache ist eine Zeile, und die Datei ist eine Auskunft nach Art. 15 DSGVO
+- **Status:** behoben am 2026-08-31, nachgeprüft in diesem Bericht
+- **Was war:** Eine Ausgabe mit der Notiz `-50% Rabatt Parkhaus`, `=Rest aus Juli` oder `+Nachtrag` landete **unbegrenzt** in der Datei (`…;3,50;-50% Rabatt Parkhaus;…`). Excel, LibreOffice und Numbers lesen das als Formel und zeigen `#NAME?` statt der Notiz — AC-27 verspricht eine Datei, die sich „ohne Nacharbeit" öffnen lässt. In der DDE-Form (`=cmd|' /C calc'!A0`) ist es zugleich der bekannte CSV-Injection-Weg; fremde Notizen kann zwar niemand schreiben (RLS), aber `design.md` nennt Steuerberater:innen ausdrücklich als Empfänger — Schreiber und Öffner sind also nicht zwingend dieselbe Person
+- **Der Fix:** `src/lib/expenses/csv.ts` — Felder, die mit `=`, `+`, `-`, `@`, Tabulator oder Wagenrücklauf beginnen, bekommen ein vorangestelltes Hochkomma (die übliche Textmarkierung, die die gängigen Programme beim Anzeigen schlucken) und werden zusätzlich begrenzt. **Begrenzen allein hätte nicht gereicht:** die Tabellenkalkulation entfernt die Anführungszeichen zuerst und sieht die Formel danach. Die Regel steht jetzt auch in `design.md` → *Der Export*
+- **Nachweis:** drei neue Tests in `src/lib/expenses/csv.test.ts`, rot nachgewiesen (ohne die Markierung fällt der Formeltest). Dazu ein echter Abruf von `/konto/export` gegen den Produktions-Build mit genau den Notizen, die den Bug ausgelöst haben — alle fünf jetzt markiert, `Hosting 50% Anteil` unverändert, die Semikolon-Begrenzung aus EC-10 unberührt
+- **Nebenwirkungen geprüft:** Datum, Kategorie und Betrag werden nicht angefasst (Beträge sind laut AC-5 immer größer 0, beginnen also nie mit einem Minus)
 
 ### BUG-2: Kategorien unter 0,5 % Anteil erscheinen als „0 %" mit unsichtbarem Balken
 - **Severity:** Low
@@ -319,14 +320,14 @@ Dialoge, Toasts, Filterklicks, Darstellung auf verschiedenen Bildschirmbreiten �
 
 ## Zusammenfassung
 
-- **Acceptance Criteria:** **30 von 30 geprüft** — 28 vollständig bestanden, 2 mit einem Befund (AC-14 → BUG-2, AC-27 → BUG-1). Bei 8 Kriterien ist eine rein browserabhängige Teilzusicherung als `[!]` offen (oben einzeln benannt)
-- **Edge Cases:** 11 von 11 geprüft, alle bestanden; EC-10 mit dem Zusatzbefund BUG-1
-- **Gefundene Bugs:** 4 (0 Critical, 0 High, 1 Medium, 3 Low)
+- **Acceptance Criteria:** **30 von 30 geprüft** — 29 vollständig bestanden, 1 mit einem offenen Befund (AC-14 → BUG-2). AC-27 und EC-10 sind nach der Behebung von BUG-1 vollständig bestanden. Bei 8 Kriterien ist eine rein browserabhängige Teilzusicherung als `[!]` offen (oben einzeln benannt)
+- **Edge Cases:** 11 von 11 geprüft, alle bestanden
+- **Gefundene Bugs:** 4 (0 Critical, 0 High, 1 Medium, 3 Low) — **BUG-1 (Medium) ist behoben und nachgeprüft**, 3 Low bleiben offen
 - **Sicherheit:** 9 Prüfungen belegt, 4 NICHT GEPRÜFT — Drosselung (bewusst nicht implementiert, TD-22), Brute Force und Kontoaufzählung (in diesem Feature gegenstandslos), CSRF (nur als Indiz belegt)
 - **Regression:** PROJ-1 unverändert funktionsfähig; ein Low-Befund (BUG-3) aus der Header-Ergänzung
-- **Neue Tests in diesem Durchlauf:** 15 (`src/lib/expenses/queries.test.ts`, `src/components/shell/month-switcher.test.tsx`). Beide Dateien wurden **rot nachgewiesen**: ohne `.eq('user_id', …)` bzw. mit dauerhaft aktivem Vorwärtspfeil fallen genau die Tests, die es dafür gibt
+- **Neue Tests:** 18 — 15 im QA-Durchlauf (`src/lib/expenses/queries.test.ts`, `src/components/shell/month-switcher.test.tsx`) und 3 für die Behebung von BUG-1 (`src/lib/expenses/csv.test.ts`). Alle drei Dateien wurden **rot nachgewiesen**: ohne `.eq('user_id', …)`, mit dauerhaft aktivem Vorwärtspfeil bzw. ohne die Textmarkierung fallen genau die Tests, die es dafür gibt. Gesamtstand: **164 Tests, 14 Dateien, alle grün**
 - **Production Ready:** **JA** — kein Critical- und kein High-Bug
-- **Empfehlung:** BUG-1 vor dem Deploy beheben (eine Zeile in `csv.ts`), BUG-2 und BUG-4 in der nächsten Runde, BUG-3 über `/refine PROJ-1` entscheiden
+- **Empfehlung:** BUG-1 ist behoben. BUG-2 und BUG-4 in der nächsten Runde, BUG-3 über `/refine PROJ-1` entscheiden — beides ohne Einfluss auf den Deploy
 
 > „Production Ready: JA" heißt *keine Critical-/High-Bugs* — es heißt **nicht**, dass alles geprüft wurde.
 > Jeder `[!]`-Punkt oben ist offen und braucht einen Menschen oder `/e2e-tests`.

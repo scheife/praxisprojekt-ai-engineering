@@ -22,10 +22,39 @@ import type { Expense } from '@/lib/expenses/queries'
 const BOM = '\ufeff'
 const CRLF = '\r\n'
 
-/** Ein Feld nach RFC 4180 begrenzen — nur dort, wo es nötig ist. */
+/**
+ * Zeichen, bei denen eine Tabellenkalkulation den Zellinhalt als **Formel** liest.
+ *
+ * `=` und `+` beginnen eine Formel, `-` ebenso (als Vorzeichen), `@` ruft in Excel eine
+ * Funktion auf, und Tabulator wie Wagenrücklauf können den Beginn verschieben.
+ */
+const FORMEL_ANFANG = /^[=+\-@\t\r]/
+
+/**
+ * Ein Feld für die Datei aufbereiten — zwei getrennte Aufgaben in einer Funktion.
+ *
+ * **1. Begrenzen nach RFC 4180**, damit die Spalten nicht verrutschen (EC-10).
+ *
+ * **2. Einer Formel den Anfang nehmen.** Eine Notiz wie `-50% Rabatt Parkhaus` oder
+ * `=Rest aus Juli` ist für uns Text, für Excel, LibreOffice und Numbers aber eine Formel:
+ * angezeigt wird dann `#NAME?` statt der Notiz — AC-27 verspricht das Gegenteil, nämlich eine
+ * Datei, die sich „ohne Nacharbeit" öffnen lässt. In der Form `=cmd|' /C calc'!A0` ist es
+ * darüber hinaus der bekannte CSV-Injection-Weg, und `design.md` nennt Steuerberater:innen
+ * ausdrücklich als Empfänger dieser Datei — Schreiber und Öffner sind also nicht zwingend
+ * dieselbe Person.
+ *
+ * **Begrenzen allein hilft dagegen nicht.** Die Tabellenkalkulation entfernt die
+ * Anführungszeichen zuerst und sieht die Formel danach. Was hilft, ist das vorangestellte
+ * **Hochkomma** — die übliche Textmarkierung, die die gängigen Programme beim Anzeigen
+ * schlucken. Zusätzlich wird das Feld begrenzt, damit im Datei-Inhalt sichtbar ist, dass hier
+ * bewusst etwas voransteht.
+ */
 function field(value: string): string {
-  if (/[";\r\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`
-  return value
+  const entschaerft = FORMEL_ANFANG.test(value) ? `'${value}` : value
+  if (entschaerft !== value || /[";\r\n]/.test(entschaerft)) {
+    return `"${entschaerft.replaceAll('"', '""')}"`
+  }
+  return entschaerft
 }
 
 function row(values: string[]): string {
