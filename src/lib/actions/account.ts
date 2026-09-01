@@ -31,7 +31,16 @@ export async function deleteAccount(
   _prevState: DeleteAccountState,
   _formData: FormData,
 ): Promise<DeleteAccountState> {
-  await requireUser()
+  const session = await requireUser()
+  // EC-12: Ohne feststellbare Anmeldung wird kein Konto gelöscht — und die Person bekommt
+  // gesagt, warum. Der Aufruf ist ohnehin unwiderruflich; ihn „auf Verdacht" zu wagen, wäre
+  // die schlechteste aller Möglichkeiten.
+  if (session.state === 'unavailable') {
+    return {
+      formError:
+        'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.',
+    }
+  }
 
   const supabase = await createClient()
   const { error } = await supabase.rpc('delete_own_account')

@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+import { DEADLINE_CLIENT_OPTIONS } from '@/lib/supabase/deadline'
+
 /**
  * Supabase-Client für Server Components, Server Actions und Route Handler.
  *
@@ -15,6 +17,9 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Frist von zwei Sekunden auf **jeden** Aufruf, Auth eingeschlossen, und die eingebauten
+      // Wiederholversuche aus — sonst wäre die Frist je Versuch wirksam (EC-4, design.md TD-27/28).
+      ...DEADLINE_CLIENT_OPTIONS,
       cookies: {
         getAll() {
           return cookieStore.getAll()

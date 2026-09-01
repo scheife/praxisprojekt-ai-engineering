@@ -51,7 +51,7 @@ beforeEach(() => {
   rpc.mockReset()
   signOut.mockReset()
   requireUser.mockReset()
-  requireUser.mockResolvedValue({ id: 'uid-1', email: 'wer@example.com' })
+  requireUser.mockResolvedValue({ state: 'signed-in', user: { id: 'uid-1', email: 'wer@example.com' } })
 })
 
 describe('Abmelden (AC-14)', () => {

@@ -788,3 +788,46 @@ Umsetzungsdetails, keine Änderungen am Verhalten — die Acceptance Criteria bl
 (beim Bau: der Dev-Server von alexmacht.at), weicht `next dev` auf 3001 aus, und die E2E-Suite
 prüft **stillschweigend die falsche Anwendung** — auch die von PROJ-1. Der Durchstich lief
 deshalb gegen 3001. Gehört zu `/e2e-tests` bzw. in die Konfiguration, nicht in dieses Feature.
+
+---
+
+## Notizen aus dem Bau der Ebenen 6–9 (`/build`, 01.09.2026)
+
+**Der Entwurf hat gehalten** — TD-27 bis TD-30 sind unverändert umgesetzt. Drei Dinge, die erst
+beim Bauen sichtbar wurden und die der nächste Leser wissen sollte:
+
+**1. Die Fehlerklassifizierung beruht auf einer eigenen Markierung, nicht auf den Fehlerobjekten
+der Bibliotheken.** Gemessen wurde, was der Datenbankpfad bei Fristablauf liefert: ein blankes
+Objekt **ohne `name`**, mit leerem `code` und der Meldung `TimeoutError: The operation was aborted
+due to timeout`. Auf ein leeres `code`-Feld eine Zusicherung zu bauen, wäre eine schlechte Wette —
+es entsteht auch, wenn der Server mit unlesbarem Rumpf antwortet. Wer den Fehler **auslöst**, weiß
+dagegen sicher, was passiert ist: `deadlineFetch` markiert ihn selbst. Auf der Auth-Seite kommt
+`AuthRetryableFetchError` dazu — die Bibliothek vergibt ihn für geworfene `fetch`-Fehler **und**
+für 5xx und kommentiert ihn selbst mit „infrastructure errors … should not cause session
+invalidation". Genau diese Lesart wird gebraucht.
+
+**2. Der Rückgabetyp erzwingt die Behandlung — und das war der Sinn.** Nach der Änderung an
+`requireUser()` meldete TypeScript **zehn** Fehler an sieben Aufrufstellen. Das ist kein Kollateral­
+schaden, sondern der Mechanismus aus TD-30: Ein dritter Zustand, den man vergessen kann, ist keiner.
+
+**3. Ohne Sitzungs-Cookie ist der Ausfall gar nicht spürbar.** `getClaims()` fragt niemanden, wenn
+nichts zu prüfen ist — eine abgemeldete Person wird also auch bei stehender Datenbank in 17 ms
+korrekt auf `/login` geleitet. Der Fall aus EC-12 trifft **nur angemeldete** Personen. Das war beim
+Prüfen zunächst irreführend und ist beim nächsten Nachmessen mitzudenken.
+
+**Gemessen am echten Ausfall** (`docker pause` auf den Datenbank-Container, angemeldete Sitzung):
+
+| | vorher (QA-Lauf PROJ-3) | jetzt |
+|---|---|---|
+| `/` mit Sitzung | **50,4 s**, HTTP 500, kein Text | **2,3 s**, HTTP 200, Meldung + „Erneut versuchen" |
+| Weiterleitung auf `/login` | ja („Sitzung abgelaufen") | **nein** — die Adresse bleibt `/?monat=2026-08` |
+| Kopfzeile / Rahmen | weg | steht |
+| `/konto/export` | HTTP 500 | **HTTP 503** mit deutschsprachigem Klartext |
+| nach `docker unpause` | — | normale Ansicht sofort zurück |
+
+**Prüfstand:** 242 Unit- und Integrationstests grün (vorher 214), 28 von 28 E2E grün in Chromium
+und Mobile Safari, Lint und Build ohne Befund. Für die neuen Tests wurde der Rot-Nachweis geführt —
+sechs gezielte Rückbauten (Frist entfernt · Wiederholversuche wieder an · `isUnreachable` immer
+`false` · Durchlassen in der Vorprüfung entfernt · Nichterreichen wieder als „abgemeldet" ·
+Unerreichbar-Zweig der Actions entfernt), jeder von genau den Tests gefangen, die ihn verhindern
+sollen, danach alle wieder grün.

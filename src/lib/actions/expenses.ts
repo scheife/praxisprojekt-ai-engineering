@@ -38,6 +38,15 @@ import {
 const GONE = 'Diese Ausgabe gibt es nicht mehr.'
 const SAVE_FAILED =
   'Das Speichern hat gerade nicht geklappt. Bitte versuch es in einem Moment noch einmal.'
+/**
+ * Die Meldung, wenn Datenbank oder Auth-Server binnen zwei Sekunden nicht antworten (EC-4).
+ *
+ * Sie sagt ausdrücklich, dass es **nicht an der Eingabe** liegt — sonst sucht die Person den
+ * Fehler bei sich und ändert Werte, die richtig waren. Die Eingaben bleiben dabei stehen, weil
+ * die Action nichts leert, was sie nicht gespeichert hat.
+ */
+const UNREACHABLE_MESSAGE =
+  'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.'
 const DELETE_FAILED =
   'Das Löschen hat gerade nicht geklappt. Bitte versuch es in einem Moment noch einmal.'
 
@@ -186,7 +195,12 @@ export async function createExpense(
   _prevState: ExpenseFormState,
   formData: FormData,
 ): Promise<ExpenseFormState> {
-  const user = await requireUser()
+  const session = await requireUser()
+  // EC-12: Ist die Anmeldung nicht feststellbar, wird nichts geschrieben und nichts behauptet.
+  if (session.state === 'unavailable') {
+    return { status: 'error', formError: UNREACHABLE_MESSAGE }
+  }
+  const { user } = session
 
   const clientToken = String(formData.get('clientToken') ?? '')
   const parsed = createExpenseSchema().safeParse({ ...formValues(formData), clientToken })
@@ -260,7 +274,12 @@ export async function updateExpense(
   _prevState: ExpenseFormState,
   formData: FormData,
 ): Promise<ExpenseFormState> {
-  const user = await requireUser()
+  const session = await requireUser()
+  // EC-12: Ist die Anmeldung nicht feststellbar, wird nichts geschrieben und nichts behauptet.
+  if (session.state === 'unavailable') {
+    return { status: 'error', formError: UNREACHABLE_MESSAGE }
+  }
+  const { user } = session
 
   const id = String(formData.get('id') ?? '')
   const parsed = updateExpenseSchema().safeParse({ ...formValues(formData), id })
@@ -339,7 +358,12 @@ export async function deleteExpense(
   _prevState: ExpenseFormState,
   formData: FormData,
 ): Promise<ExpenseFormState> {
-  const user = await requireUser()
+  const session = await requireUser()
+  // EC-12: Ist die Anmeldung nicht feststellbar, wird nichts geschrieben und nichts behauptet.
+  if (session.state === 'unavailable') {
+    return { status: 'error', formError: UNREACHABLE_MESSAGE }
+  }
+  const { user } = session
 
   const id = String(formData.get('id') ?? '')
   const supabase = await createClient()

@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { DEADLINE_CLIENT_OPTIONS, isUnreachable } from '@/lib/supabase/deadline'
+
 /**
  * Die Vorprüfung vor jeder Seitenanfrage.
  *
@@ -39,6 +41,10 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Dieselbe Frist wie auf den Seiten. Sie ist hier besonders wichtig: Die Vorprüfung läuft
+      // vor **jeder** Anfrage, und ohne Frist hängt sie, bevor irgendeine Seite rendern kann —
+      // gemessen wurden 50,4 Sekunden (EC-4).
+      ...DEADLINE_CLIENT_OPTIONS,
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -61,7 +67,22 @@ export async function proxy(request: NextRequest) {
 
   // Früh aufrufen: Ein Auffrischen, das erst nach dem Abschicken der Antwort fertig wird,
   // kann seine Cookies nicht mehr loswerden.
-  const { data } = await supabase.auth.getClaims()
+  const { data, error } = await supabase.auth.getClaims()
+
+  // **Nicht feststellbar: durchlassen, nicht umleiten** (EC-12, design.md TD-29).
+  //
+  // Ist der Auth-Server nicht erreichbar, weiß die Vorprüfung nicht, wer da ist. Früher fiel
+  // `signedIn` dann auf `false` und sie leitete auf `/login?reason=session-expired` — eine
+  // Behauptung über die Sitzung, die nie geprüft wurde, und eine Seite, die denselben
+  // Auth-Server braucht.
+  //
+  // **Das schwächt den Zugriffsschutz nicht.** Die Vorprüfung war nie die Zugriffskontrolle,
+  // sondern eine Vorfilterung (TD-2): Die echte Prüfung sitzt auf jeder geschützten Seite, kommt
+  // zum selben Ergebnis und zeigt statt der Daten den Nicht-erreichbar-Zustand. Zu holen sind
+  // ohnehin keine — steht der Weg zur Datenbank, liefert auch Row Level Security nichts.
+  // Fail-open hier, fail-closed auf der Seite dahinter.
+  if (error && isUnreachable(error)) return noStore(response)
+
   const signedIn = Boolean(data?.claims?.sub)
 
   const { pathname } = request.nextUrl

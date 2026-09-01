@@ -77,7 +77,7 @@ beforeEach(() => {
   requireUser.mockReset()
   from.mockReset()
   fetchRate.mockReset()
-  requireUser.mockResolvedValue({ id: 'uid-1', email: 'wer@example.at' })
+  requireUser.mockResolvedValue({ state: 'signed-in', user: { id: 'uid-1', email: 'wer@example.at' } })
 })
 
 describe('Erfassen (AC-1, AC-4, AC-25)', () => {
@@ -494,5 +494,41 @@ describe('Ändern mit Währung (PROJ-3, AC-12 bis AC-16)', () => {
     expect(state.formError).toBe('Diese Ausgabe gibt es nicht mehr.')
     expect(fetchRate).not.toHaveBeenCalled()
     expect(from).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Wenn die Anmeldung nicht feststellbar ist (EC-4, EC-12)', () => {
+  const NICHT_ERREICHBAR = { state: 'unavailable' as const }
+  const MELDUNG =
+    'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.'
+
+  it('erfasst nichts und sagt, dass es nicht an der Eingabe liegt', async () => {
+    requireUser.mockResolvedValue(NICHT_ERREICHBAR)
+
+    const state = await createExpense(IDLE, form({ ...VALID, clientToken: TOKEN }))
+
+    expect(state).toEqual({ status: 'error', formError: MELDUNG })
+    // **Nichts geschrieben, nichts abgerufen.** Ohne feststellbare Anmeldung gibt es keine
+    // Person, der eine Zeile gehören könnte — und keinen Grund, einen fremden Dienst zu rufen.
+    expect(from).not.toHaveBeenCalled()
+    expect(fetchRate).not.toHaveBeenCalled()
+  })
+
+  it('ändert nichts', async () => {
+    requireUser.mockResolvedValue(NICHT_ERREICHBAR)
+
+    const state = await updateExpense(IDLE, form({ ...VALID, id: EXPENSE_ID }))
+
+    expect(state).toEqual({ status: 'error', formError: MELDUNG })
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('löscht nichts', async () => {
+    requireUser.mockResolvedValue(NICHT_ERREICHBAR)
+
+    const state = await deleteExpense(IDLE, form({ id: EXPENSE_ID }))
+
+    expect(state).toEqual({ status: 'error', formError: MELDUNG })
+    expect(from).not.toHaveBeenCalled()
   })
 })

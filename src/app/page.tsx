@@ -2,6 +2,8 @@ import { Suspense } from 'react'
 import type { Metadata } from 'next'
 
 import { requireUser } from '@/lib/auth'
+import { AppHeader } from '@/components/shell/app-header'
+import { UnavailableNotice } from '@/components/shell/unavailable-notice'
 import { resolveMonth } from '@/lib/expenses/month'
 import { MonthView } from '@/components/expenses/month-view'
 import { MonthViewSkeleton } from '@/components/expenses/month-view-skeleton'
@@ -23,9 +25,27 @@ export default async function Home({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const user = await requireUser()
+  const session = await requireUser()
   const { monat } = await searchParams
   const month = resolveMonth(typeof monat === 'string' ? monat : undefined)
+
+  // **Nicht feststellbar, also nicht weiterleiten** (EC-12): Statt auf `/login` — wo dieselbe
+  // Gegenstelle gebraucht würde — bleibt die Person hier und sieht, was los ist. Der Rahmen
+  // bleibt stehen, damit die App nicht abgestürzt wirkt.
+  //
+  // Der Monatswechsler bleibt dabei **weg**: Seine Grenzen kommen aus den Daten (AC-18), und
+  // genau die sind gerade nicht lesbar. Ein Wechsler mit geratenen Grenzen wäre eine Behauptung
+  // mehr, die niemand geprüft hat.
+  if (session.state === 'unavailable') {
+    return (
+      <>
+        <AppHeader />
+        <main className="mx-auto w-full max-w-[1180px] px-5 py-8">
+          <UnavailableNotice />
+        </main>
+      </>
+    )
+  }
 
   return (
     // Bewusst **ohne** `key={month}`: Ein Schlüssel am Monat hängt beim Wechsel den ganzen
@@ -35,7 +55,7 @@ export default async function Home({
     // erfüllt. Ohne Schlüssel bleibt die vorige Ansicht während des Wechsels stehen, und das
     // Gerüst zeigt sich dort, wo es hingehört: beim ersten Aufbau der Seite.
     <Suspense fallback={<MonthViewSkeleton />}>
-      <MonthView userId={user.id} month={month} />
+      <MonthView userId={session.user.id} month={month} />
     </Suspense>
   )
 }

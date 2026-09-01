@@ -132,14 +132,14 @@
      deshalb beide [P]. Kein `[user]`-Task: `design.md` → Settings the user makes hält „Keine" fest,
      und daran ändert die Frist nichts. -->
 
-- [ ] T17 [P]  Ein eigenes Modul für die Frist: der `fetch`, der jede Anfrage nach **2 Sekunden**
+- [x] T17 [P]  Ein eigenes Modul für die Frist: der `fetch`, der jede Anfrage nach **2 Sekunden**
       abbricht; die Client-Optionen, die die **eingebauten Wiederholversuche abschalten** (seit
       `supabase-js` 2.102.0 aktiv, installiert ist 2.112.4 — sonst wirkte die Frist je Versuch und die
       zugesagten 2 Sekunden wären ein Vielfaches, TD-28); dazu die Prüffunktion „war das eine **Antwort**
       oder ein **Nichterreichen**". Eigenes Modul und nicht `server.ts`, weil `proxy.ts` dieselbe Frist
       braucht, aber `next/headers` nicht mitziehen darf  · files: src/lib/supabase/deadline.ts
       · → EC-4
-- [ ] T18 [P]  Rahmen-Komponente `UnavailableNotice`: ein Satz, was gerade nicht geht, plus „Erneut
+- [x] T18 [P]  Rahmen-Komponente `UnavailableNotice`: ein Satz, was gerade nicht geht, plus „Erneut
       versuchen". Kein automatischer Neuversuch — er belastet eine ohnehin überlastete Gegenstelle und
       verändert die Seite unter den Händen der Person. Gehört zum Rahmen, den PROJ-2 besitzt
       · files: src/components/shell/unavailable-notice.tsx  · → EC-4, EC-12
@@ -149,13 +149,13 @@
 <!-- Alle drei importieren T17, keine schreibt in die Datei einer anderen. `auth.ts` importiert
      `server.ts`, ohne es anzufassen — die Import-Richtung ist geprüft, nicht nur die Schreibrichtung. -->
 
-- [ ] T19 [P]  Der Client für Seiten und Actions bekommt Frist und abgeschaltete Wiederholversuche aus
+- [x] T19 [P]  Der Client für Seiten und Actions bekommt Frist und abgeschaltete Wiederholversuche aus
       T17  · files: src/lib/supabase/server.ts  · → EC-4
-- [ ] T20 [P]  Sitzungsprüfung mit **drei** Ausgängen statt zwei: „angemeldet", „nicht angemeldet" (der
+- [x] T20 [P]  Sitzungsprüfung mit **drei** Ausgängen statt zwei: „angemeldet", „nicht angemeldet" (der
       Auth-Server hat **geantwortet**) und „nicht feststellbar" (Frist, Netzwerkfehler, 5xx).
       Unterschieden an der **Art des Fehlers**, nicht am Fehlen der Person. Nur der zweite Fall leitet
       auf `/login` — der dritte nie  · files: src/lib/auth.ts  · → EC-12, EC-5
-- [ ] T21 [P]  Die Vorprüfung bekommt dieselbe Frist an ihrem eigenen Client und **lässt bei „nicht
+- [x] T21 [P]  Die Vorprüfung bekommt dieselbe Frist an ihrem eigenen Client und **lässt bei „nicht
       feststellbar" durch**, statt umzuleiten. Sie läuft vor jeder Anfrage; ohne das wäre der Zustand aus
       T18 nie erreichbar. Fail-open hier, fail-closed auf der Seite dahinter (TD-29)
       · files: src/proxy.ts  · → EC-12
@@ -164,13 +164,13 @@
 
 <!-- Drei disjunkte Sätze. Sie liegen hinter Ebene 7, weil sie den dritten Ausgang aus T20 behandeln. -->
 
-- [ ] T22 [P]  Beide geschützten Seiten zeigen `UnavailableNotice` an der Stelle des Inhalts; Kopfzeile
+- [x] T22 [P]  Beide geschützten Seiten zeigen `UnavailableNotice` an der Stelle des Inhalts; Kopfzeile
       und Rahmen bleiben stehen, damit die App nicht abgestürzt wirkt  · files: src/app/page.tsx,
       src/app/konto/page.tsx  · → EC-4, EC-12
-- [ ] T23 [P]  Die Export-Route antwortet mit **HTTP 503** und kurzem deutschsprachigem Text — eine
+- [x] T23 [P]  Die Export-Route antwortet mit **HTTP 503** und kurzem deutschsprachigem Text — eine
       Route, die eine Datei liefert, kann keine Karte zeigen  · files: src/app/konto/export/route.ts
       · → EC-4
-- [ ] T24 [P]  Die Actions melden das Nichterreichen als **formularweite** Zeile; **alle Eingaben bleiben
+- [x] T24 [P]  Die Actions melden das Nichterreichen als **formularweite** Zeile; **alle Eingaben bleiben
       stehen** (EC-4). `account.ts` zieht mechanisch mit, weil `requireUser()` nicht mehr in jedem Fall
       umleitet — PROJ-1s Kriterien kehren sich dadurch nicht um  · files: src/lib/actions/expenses.ts,
       src/lib/actions/account.ts  · → EC-4
@@ -180,13 +180,24 @@
 <!-- Zwei disjunkte Sätze. Drei der vier Dateien sind neu: für `auth.ts` und `proxy.ts` gab es bisher
      keine Tests, obwohl beide auf jedem Weg durch die App liegen. -->
 
-- [ ] T25 [P]  Die Frist greift **wirklich** nach 2 Sekunden · die Wiederholversuche sind aus (sonst wäre
+- [x] T25 [P]  Die Frist greift **wirklich** nach 2 Sekunden · die Wiederholversuche sind aus (sonst wäre
       die Frist ein Vielfaches — der Test, der TD-28 absichert) · „Antwort" wird von „Nichterreichen"
       unterschieden · die drei Ausgänge der Sitzungsprüfung, jeder einzeln  · files:
       src/lib/supabase/deadline.test.ts, src/lib/auth.test.ts  · → EC-4, EC-12
-- [ ] T26 [P]  Die Vorprüfung lässt bei „nicht feststellbar" durch, statt umzuleiten — und leitet bei
+- [x] T26 [P]  Die Vorprüfung lässt bei „nicht feststellbar" durch, statt umzuleiten — und leitet bei
       „nicht angemeldet" weiterhin um · der Unerreichbar-Zweig der Actions, mit stehen bleibenden
       Eingaben  · files: src/proxy.test.ts, src/lib/actions/expenses.test.ts  · → EC-12, EC-4
+
+**Nachtrag aus dem Bau (01.09.2026): `account.test.ts` fehlte in T26.** Ebene 9 hatte die
+Testdateien aufgezählt, deren Prüfgegenstand sich ändert — `expenses.test.ts` war dabei,
+`account.test.ts` nicht. Beide mocken aber `requireUser()`, und dessen Rückgabetyp hat sich
+geändert. `expenses.test.ts` wurde davon rot (22 Tests) und fiel sofort auf; `account.test.ts`
+blieb **grün**, weil `deleteAccount` den Rückgabewert vorher gar nicht las — sein Mock lieferte
+danach still eine Form, die es in Wirklichkeit nicht mehr gibt. Berichtigt.
+
+Das ist dieselbe Lehre wie bei PROJ-3s T16, eine Stufe schärfer: Eine Aufgabe, die einen
+**Vertrag** ändert, erbt die Tests **jeder** Datei, die diesen Vertrag mockt — auch der, die
+davon nicht rot wird. Ein grüner Test auf einem veralteten Mock ist gefährlicher als ein roter.
 
 **Kein E2E-Test, und das ist eine Entscheidung.** Ihn zu schreiben hieße, die Datenbank mitten im Lauf
 anzuhalten — dieselbe Instanz, gegen die die übrigen 28 E2E-Tests laufen. Das macht die Suite flockig

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
 import { AppHeader } from '@/components/shell/app-header'
+import { UnavailableNotice } from '@/components/shell/unavailable-notice'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,7 +25,21 @@ export const metadata: Metadata = { title: 'Konto · auslage.' }
  * bleiben unangetastet.
  */
 export default async function KontoPage() {
-  const user = await requireUser()
+  const session = await requireUser()
+
+  // Wie auf `/` (EC-12): kein Weiterleiten, wenn die Anmeldung nicht feststellbar ist. Hier
+  // kommt hinzu, dass die E-Mail-Adresse aus genau der Sitzung stammt, die nicht zu lesen war —
+  // die Karte hätte nichts zu zeigen.
+  if (session.state === 'unavailable') {
+    return (
+      <>
+        <AppHeader />
+        <main className="mx-auto flex w-full max-w-[560px] flex-col gap-6 px-5 py-10">
+          <UnavailableNotice />
+        </main>
+      </>
+    )
+  }
 
   return (
     <>
@@ -44,7 +59,7 @@ export default async function KontoPage() {
               <span className="font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 E-Mail-Adresse
               </span>
-              <span>{user.email}</span>
+              <span>{session.user.email}</span>
             </div>
           </CardContent>
         </Card>
