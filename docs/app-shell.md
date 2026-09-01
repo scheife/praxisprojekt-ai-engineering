@@ -83,6 +83,12 @@ Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
   Tabelle.
 - **Fehlerzustand:** Feldfehler direkt am verursachenden Feld in `--destructive`; bei mehreren Feldern
   zusätzlich eine zusammenfassende Zeile über dem Formular.
+- **Nicht-erreichbar-Zustand:** _Ergänzt von `/refine PROJ-2` (01.09.2026, EC-4 und EC-12)._ Antwortet
+  die Datenbank oder der Auth-Server binnen **2 Sekunden** nicht, zeigt die geschützte Seite an der
+  Stelle des Inhalts einen eigenen Zustand — ein Satz, was gerade nicht geht, plus die Möglichkeit,
+  es erneut zu versuchen. Er ist **weder** der Leerzustand („hier steht noch nichts") **noch** der
+  Fehlerzustand am Feld: Beide behaupten, die App habe die Lage verstanden. Hier hat sie es
+  ausdrücklich nicht.
 - **Rückmeldungen:** Toast unten rechts, `--popover` als Fläche, 180ms.
 
 ## Anmeldezustände
@@ -92,6 +98,11 @@ Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
 - **Angemeldet:** erreichbar sind `/` und `/konto`. Der Aufruf von `/login` oder `/signup` leitet auf `/`.
 - **Wer das durchsetzt:** die Vorprüfung in `proxy.ts` (in Next.js 16 die frühere `middleware.ts`) **und**
   zusätzlich jede geschützte Seite selbst. Beides gehört PROJ-1 und gilt für jedes spätere Feature mit.
+- **Nicht prüfbar:** _Ergänzt von `/refine PROJ-2` (01.09.2026, EC-12)._ Ein dritter Zustand neben
+  an- und abgemeldet: Die Sitzungsprüfung läuft in die Frist, die App **weiß nicht**, wer da ist. Sie
+  behandelt das **nicht** als abgemeldet und leitet **nicht** auf `/login` — dort bräuchte es denselben
+  Auth-Server, die angebotene Handlung könnte also gar nicht gelingen. Stattdessen der
+  Nicht-erreichbar-Zustand oben.
 - **Rollen:** keine. Alle angemeldeten Personen sehen dieselbe Oberfläche, jeweils nur mit den eigenen
   Daten.
 

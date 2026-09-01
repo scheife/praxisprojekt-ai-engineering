@@ -184,9 +184,11 @@
 - **EC-3** — Angenommen dieselbe Ausgabe wird in zwei Tabs gleichzeitig geändert, wenn beide
   speichern, dann gilt der zuletzt gespeicherte Stand vollständig, und beide Tabs zeigen nach ihrer
   nächsten Aktion denselben Stand — es entsteht keine Mischung aus beiden Eingaben
-- **EC-4** — Angenommen die Datenbank ist nicht erreichbar, wenn eine Ausgabe erfasst oder geändert
-  wird, dann erscheint eine verständliche Meldung und die eingegebenen Werte bleiben im Formular
-  stehen, damit die Eingabe nicht verloren ist
+- **EC-4** — Angenommen die Datenbank **oder der Auth-Server** antwortet nicht, wenn eine geschützte
+  Seite geladen oder eine Ausgabe erfasst, geändert, gelöscht oder exportiert wird, dann gibt die App
+  **nach höchstens 2 Sekunden** auf und zeigt eine verständliche Meldung, statt weiter zu warten;
+  beim Erfassen und Ändern bleiben die eingegebenen Werte im Formular stehen, damit die Eingabe nicht
+  verloren ist
 - **EC-5** — Angenommen die Sitzung ist abgelaufen, wenn eine Ausgabe erfasst, geändert oder gelöscht
   werden soll, dann erfolgt die Weiterleitung auf `/login` mit dem Hinweis aus PROJ-1 (EC-3) statt
   einer stummen Fehlermeldung
@@ -207,6 +209,12 @@
 - **EC-11** — Angenommen eine Ausgabe wird geändert und dabei in einen anderen Monat verschoben, wenn
   gespeichert wird, dann verschwindet sie aus der Liste des angezeigten Monats, die Summen dort
   stimmen weiterhin, und die Rückmeldung nennt den neuen Monat
+- **EC-12** — Angenommen die Prüfung der Anmeldung läuft in die Frist aus EC-4, wenn dadurch unbekannt
+  bleibt, ob jemand angemeldet ist, dann wird das **nicht** als abgelaufene Sitzung behandelt: Es
+  erfolgt **keine** Weiterleitung auf `/login`, sondern die geschützte Seite zeigt einen eigenen
+  Zustand „gerade nicht erreichbar" mit der Möglichkeit, es erneut zu versuchen, und eine Server
+  Action meldet dasselbe am Formular. Der Unterschied ist nicht kosmetisch: `/login` braucht denselben
+  Auth-Server, die dort angebotene Handlung könnte also gar nicht gelingen
 
 ## Technical Requirements
 
@@ -220,6 +228,10 @@
   eingeschwungenen Produktions-Build mindestens 95 % der Antworten unter 500 ms, keine über 1 Sekunde
   — gemessen bei bis zu 300 Ausgaben im Monat
 - Der Export aus AC-27 wird bei jedem Abruf erzeugt und nicht dauerhaft auf dem Server abgelegt
+- Jeder Aufruf an Datenbank und Auth-Server trägt eine **Frist von 2 Sekunden** — dieselbe Zahl, die
+  PROJ-1 seinen Drosselungs-Toren gibt, statt einer zweiten daneben. Der Mechanismus sitzt an der
+  gemeinsamen Stelle, an der der Datenbank-Client erzeugt wird, und gilt damit auch für die Wege von
+  PROJ-1; er widerspricht dort keinem Kriterium
 
 ## Open Questions
 
@@ -243,6 +255,11 @@
   klären.
 - [ ] **Datenschutzerklärung** (Art. 13 DSGVO) muss den Export und die Speicherung der Ausgaben
   abdecken — fällig vor dem ersten öffentlichen Zugang, nicht vorher.
+- [ ] **Hält die 2-Sekunden-Frist auch außerhalb des lokalen Stacks?** Gewählt wurde sie am lokalen
+  Supabase in Docker, wo die Datenbank nebenan läuft. Ein gehostetes Projekt mit kalten Verbindungen
+  über das Netz kann legitim länger brauchen — dann schlägt die Frist zu, wo nichts kaputt ist. Vor
+  einem echten Deployment nachzumessen; laut `docs/PRD.md` ist keines vorgesehen, deshalb bleibt es
+  eine Frage und keine Aufgabe.
 
 ## Decision Log
 
@@ -265,3 +282,5 @@
 | Hinweis am Notizfeld statt Einwilligungsdialog | In einem österreichischen Ausgabenkontext sind Kirchenbeitrag, Gewerkschaftsbeitrag und Apotheke gängige Positionen — also Art.-9-Daten. Die Person tippt sie über sich selbst; ein Einwilligungsdialog wäre unverhältnismäßig, ein Feld, das solche Angaben gar nicht erst einlädt, ist das billigere Mittel (Art. 5 Abs. 1 lit. c) | 2026-08-29 |
 | „Letzter gewinnt" bei gleichzeitiger Änderung (EC-3) | Eine Ausgabe hat vier Felder und genau eine:n Eigentümer:in — zwei Personen können sie nicht gleichzeitig bearbeiten, nur eine Person in zwei Tabs. Ein Sperrmechanismus oder eine Konfliktauflösung wäre mehr Bauwerk als der Fall wert; entscheidend ist nur, dass keine Mischung aus beiden Ständen entsteht | 2026-08-29 |
 | Höchstbetrag 9.999.999,99 € und frühestes Datum 01.01.2000 werden Kriterien (AC-29, AC-30) | Beide Grenzen waren im Entwurf längst gebaut, standen aber in keinem Kriterium — QA hätte sie zu Recht als Abweichung gemeldet. Die Datumsgrenze ist dabei keine Kosmetik: ein vertippter Jahrgang wie `0202` macht aus der Rückwärtsgrenze von AC-18 eine Navigation über 1.800 Jahre. Beide melden sich mit einem eigenen Satz, statt still zu scheitern | 2026-08-31 |
+| Eine **Frist von 2 Sekunden** auf jeden Datenbank- und Auth-Aufruf, und EC-4 gilt künftig auch fürs Lesen | `/qa PROJ-3` hat gemessen, was EC-4 bisher nur behauptete: Bei angehaltener Datenbank antwortet die Erfassung erst nach **50,4 Sekunden** mit HTTP 500 und ohne jede Meldung — und das bloße Laden der Seite ebenso. Es fehlte nicht die Meldung, es fehlte der Punkt, an dem die App aufgibt. 2 Sekunden ist dieselbe Zahl, die PROJ-1 seinen Drosselungs-Toren gibt (`GATE_TIMEOUT_MS`), statt einer zweiten Zahl daneben, und sie lässt gegenüber der zugesagten Obergrenze von 1 Sekunde das Doppelte an Luft. Dass EC-4 nur Erfassen und Ändern nannte, war die eigentliche Lücke: Gemessen wurde der Fehler auf dem **Lese**weg, den der Vertrag nicht abdeckte | 2026-09-01 |
+| „Nicht erreichbar" wird von „nicht angemeldet" unterschieden und führt **nicht** auf `/login` (EC-12) | Eine Frist allein hätte den Fehler nur schneller falsch gemacht: `getUser()` liefert bei Zeitüberschreitung `null`, und `requireUser()` leitet dann auf `/login?reason=session-expired`. Die App behauptete damit „deine Sitzung ist abgelaufen", obwohl sie es gar nicht wusste — und schickte die Person auf eine Seite, die denselben Auth-Server braucht. Die einzige angebotene Handlung könnte nicht gelingen. Verworfen wurde deshalb auch die mildere Variante, weiterhin auf `/login` zu leiten und nur den Grund ehrlicher zu benennen | 2026-09-01 |
