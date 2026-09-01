@@ -407,3 +407,47 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 > Die browserabhängigen `[!]`-Punkte oben sind durch die fünf E2E-Journeys inzwischen zu großen
 > Teilen geschlossen — offen bleiben Darstellung in weiteren Browsern und an weiteren
 > Bildschirmbreiten sowie der echte Datenbankausfall (EC-4).
+
+---
+
+# Nachtrag: zweiter Durchlauf am 01.09.2026
+
+**Anlass:** `/e2e-tests` von PROJ-3 hat einen Fehler gefunden, der **PROJ-2 gehört** — die Kategorie
+verlor nach dem Speichern ihren Wert und verletzte damit **AC-3**. Der Status ging deshalb von
+*Approved* zurück auf *In Review*.
+
+## AC-3 — erstmals im Browser belegt
+
+- [x] **AC-3** — nach dem Speichern sind Betrag und Notiz geleert, **Kategorie** und Datum stehen
+  unverändert, der Fokus liegt im Betragsfeld · *Evidenz: `tests/PROJ-2-expenses-monthly-overview.spec.ts`,
+  Journey 1 — die Zusicherung `expect(page.getByLabel('Kategorie')).toHaveText('Software & Abos')`
+  ist neu und grün in Chromium **und** Mobile Safari. Nimmt man die Behebung zurück, wird sie rot*
+
+**Der erste Durchlauf führte AC-3 als `[!] NICHT GEPRÜFT: reine Browser-Interaktion`** — und die
+E2E-Journey prüfte unter derselben Überschrift Betrag, Notiz, Datum und Fokus, **nur die Kategorie
+nicht**. Genau diese eine fehlende Zusicherung hat den Fehler über den gesamten Lebenslauf des
+Features getragen. Sie steht jetzt da.
+
+**Ursache und Behebung** stehen im `design.md` von PROJ-3 (TD-14): React 19 setzt ein Formular nach
+einer Server Action zurück, Radix reicht das über sein verstecktes Auswahlfeld in den React-Zustand
+zurück. Behoben in `expense-composer.tsx` — einer Datei, die PROJ-2 gehört.
+
+## Ein neuer Befund, der ebenfalls PROJ-2 gehört
+
+- [ ] **BUG-6 (High): Die Erfassungszeile sendet ohne JavaScript per GET.** Die Behebung oben hat
+  `action={formAction}` durch `onSubmit` ersetzt; damit trägt das Formular kein `method="POST"` mehr.
+  Ohne JavaScript landen Betrag, Kategorie, Datum und **Notiz** in der Adresszeile, und die Ausgabe
+  wird nicht gespeichert. Vollständige Beschreibung als **BUG-5** im `qa-report.md` von PROJ-3 —
+  dort ist sie entstanden, die betroffene Datei gehört aber hierher.
+
+## Regression
+
+Alle **24 E2E-Journeys grün** in beiden Browsern, darunter die fünf von PROJ-2: Erfassen, Summen und
+Filter, Monatsnavigation, Ändern und Löschen, CSV-Export und die Kontotrennung. 214 Unit-Tests grün.
+Der Export, die Summen und der Zugriffsschutz sind von der Änderung nicht berührt.
+
+## Stand
+
+**PROJ-2 bleibt `In Review`.** AC-3 ist repariert und erstmals dauerhaft abgesichert; offen ist
+BUG-6 in derselben Datei. Beide gehören in denselben `/build`-Lauf wie BUG-5 aus PROJ-3 — es ist
+derselbe Code.

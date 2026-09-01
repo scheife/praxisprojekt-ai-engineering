@@ -1,6 +1,6 @@
 # QA-Bericht — PROJ-3: Fremdwährung & Wechselkurs
 
-**Getestet:** 2026-08-31 (erster Durchlauf)
+**Getestet:** 2026-08-31 (erster Durchlauf) · **2026-09-01 (zweiter Durchlauf, nach den Behebungen aus `/e2e-tests`)**
 **Gemessen gegen:** Produktions-Build (`npm run build && npm run start`), lokaler Supabase-Stack auf Port 55321, Kursdienst `api.frankfurter.dev` **live**
 **App-URL:** `http://localhost:3100` — **nicht** die 3000 aus `.ai-eng-kit`
 **Grundlage:** `spec.md` (19 AC, 9 EC) in der Fassung vom 31.08.2026 nach dem `/refine` · `design.md` mit 13 TD
@@ -16,6 +16,18 @@
 
 ---
 
+## Was der zweite Durchlauf ändert (01.09.2026)
+
+| Befund aus Lauf 1 | Stand jetzt |
+|---|---|
+| **BUG-1 High** — der Änderungsdialog belegte den Betrag mit dem Euro-Betrag vor | **geschlossen.** `edit-expense-dialog.tsx` liest jetzt `amount_original` und setzt die Währung mit zurück · *Evidenz: E2E Journey 2 grün in beiden Browsern; Rückbau der Behebung macht sie wieder rot („unexpected value 1078,24")* |
+| **BUG-2 High** — Währung und Kategorie verloren nach dem Speichern ihren Wert | **geschlossen.** Ursache benannt und behoben: React 19 setzt das Formular nach der Server Action zurück, Radix reicht das über sein verstecktes Auswahlfeld in den Zustand zurück · *Evidenz: E2E Journeys 1 und 3 grün; PROJ-2s Journey 1 prüft jetzt auch die Kategorie und wird beim Rückbau rot* |
+| **BUG-4 Low** — zugänglicher Name „USDUS-Dollar" | **geschlossen** · *Evidenz: die Auswahl liest sich jetzt „EUR Euro"* |
+| **BUG-3 Medium** — Datenbankausfall hängt 50 s | **unverändert offen.** Gehört nach PROJ-2 (`/refine` auf EC-4), nicht in diesen Lauf |
+| — | **Neu: BUG-5 High.** Die Behebung von BUG-2 hat die Erfassungszeile ohne JavaScript unbrauchbar gemacht **und ihre Daten in die Adresszeile gelegt** |
+
+---
+
 ## Acceptance Criteria
 
 ### Währung wählen und erfassen
@@ -28,7 +40,7 @@
   - *Sonntag 16.08.2026 → Kursdatum **14.08.2026***
   - *Samstag 01.01.2000 (die Untergrenze aus PROJ-2 AC-30) → Kursdatum **30.12.1999***
 - [x] **AC-5** — ohne Kurs keine Ausgabe, Meldung nennt beides · *Evidenz: BRL zum 03.01.2000 → „Für Brasilianischer Real gibt es zum 03.01.2000 keinen Kurs. Bitte prüf das Datum oder wähl eine andere Währung."; Zeilenzahl vorher = nachher. Der Ausfallfall zusätzlich als Test („schreibt GAR NICHTS, wenn der Kurs nicht zu holen ist") mit `from` **nie** aufgerufen*
-- [ ] **AC-6** — **BUG-2, im Browser widerlegt.** Nach dem Speichern steht die Währung wieder auf `EUR`. Die Schlussfolgerung aus dem Code war richtig **und trotzdem falsch**: Der Wert geht nicht über den Rücksetz-Effekt verloren, sondern über das Auswahlfeld selbst. Gefunden von `/e2e-tests`. Alte, überholte Begründung: *Evidenz: der Rücksetz-Effekt in `expense-composer.tsx` fasst `setCurrency` **null**-mal an, während `setAmount('')` und `setNote('')` laufen. **Im Browser nicht nachgestellt** — siehe Not Verified*
+- [x] **AC-6** — die Währung bleibt nach dem Erfassen stehen · *Evidenz: E2E Journey 1 wählt USD, erfasst, und prüft danach `toHaveText(/USD/)` — grün in Chromium **und** Mobile Safari. Beim Rückbau der Behebung wird genau diese Zusicherung wieder rot. In Lauf 1 war das Kriterium aus dem Quelltext als erfüllt abgeleitet und damit **falsch** belegt*
 
 ### Anzeigen
 
@@ -39,7 +51,7 @@
 
 ### Ändern
 
-- [x] **AC-11** — der Dialog zeigt die Währung, vorbelegt mit der gespeicherten · *Evidenz: `edit-expense-dialog.tsx:69` (`useState(expense.currency)`), `:176` (`<Select name="currency">`). **Der Dialog wird erst im Browser gerendert** und steht nicht im ausgelieferten HTML — siehe Not Verified*
+- [x] **AC-11** — der Dialog zeigt die Währung, vorbelegt mit der gespeicherten, **und den Originalbetrag** · *Evidenz: E2E Journey 2 öffnet den Dialog und prüft `Betrag = 1250,00` und `Währung = USD` — grün in beiden Browsern*
 - [x] **AC-12** — Neuabruf bei Währungs- **oder** Datumswechsel · *Evidenz: zwei Zusicherungen in `expenses.test.ts`, beide rot nachgewiesen (Bruch „friert den Kurs für immer ein" lässt genau sie fallen)*
 - [x] **AC-13** — nur Betrag geändert ⇒ Kurs bleibt, Euro-Wert neu gerechnet · *Evidenz: Test „holt NICHTS, wenn nur der Betrag sich ändert" — `fetchRate` nicht aufgerufen, `rate_per_eur` unverändert 1,1593, `amount_cents` neu 5003*
 - [x] **AC-14** — nur Kategorie oder Notiz ⇒ kein Abruf · *Evidenz: Test „holt NICHTS, wenn nur die Notiz sich ändert"*
@@ -55,7 +67,7 @@
 
 - [x] **AC-19** — der Export trägt Währung, Originalbetrag, Kurs und Kursdatum · *Evidenz: `GET /konto/export` mit echter Sitzung → **9 Spalten**, die fünf aus PROJ-2 unverändert an Position 1–5, die vier neuen hinten. BOM vorhanden, CRLF durchgehend, **null** einzelne Zeilenumbrüche ohne Wagenrücklauf. Euro-Zeilen lassen Kurs und Kursdatum **leer**, nicht „1,0000"*
 
-**18 von 19 Acceptance Criteria erfüllt.** **AC-6 ist widerlegt** (BUG-2, von `/e2e-tests` im Browser gefunden). AC-11 bleibt am Code belegt — die Journey erreicht die Stelle nicht, weil BUG-1 vorher zuschlägt.
+**19 von 19 Acceptance Criteria erfüllt.** AC-6 ist seit der Behebung von BUG-2 im Browser belegt; AC-11 ebenso, weil Journey 2 den Dialog jetzt erreicht.
 
 ---
 
@@ -184,7 +196,7 @@ sind beide von PROJ-3 berührt — die Ausgaben-Tabelle, die Erfassungszeile, di
 
 ### BUG-1: Der Änderungsdialog belegt den Betrag mit dem EURO-Betrag vor — Speichern verfälscht die Ausgabe
 
-- **Severity:** High · **Status:** offen · **Betrifft:** PROJ-2 AC-20 (Dialog öffnet mit dem gespeicherten Stand) · gefunden von `/e2e-tests`
+- **Severity:** High · **Status:** **behoben am 01.09.2026** · verifiziert durch E2E Journey 2 in beiden Browsern, Rückbau macht sie wieder rot · **Betrifft:** PROJ-2 AC-20 (Dialog öffnet mit dem gespeicherten Stand) · gefunden von `/e2e-tests`
 - **Was passiert:** Bei einer Ausgabe über **1.250,00 USD** zeigt das Betragsfeld im Änderungsdialog
   **1078,24** — den umgerechneten Euro-Betrag. Wer dort irgendetwas speichert, und sei es nur eine
   Notizkorrektur, schreibt **1.078,24 USD** als Originalbetrag zurück; der Euro-Betrag schrumpft
@@ -204,7 +216,7 @@ sind beide von PROJ-3 berührt — die Ausgaben-Tabelle, die Erfassungszeile, di
 
 ### BUG-2: Nach dem Speichern verlieren Währung **und** Kategorie ihren Wert
 
-- **Severity:** High · **Status:** offen · **Betrifft:** PROJ-3 AC-6 **und PROJ-2 AC-3** · gefunden von `/e2e-tests`
+- **Severity:** High · **Status:** **behoben am 01.09.2026** · verifiziert durch E2E Journeys 1 und 3 sowie PROJ-2s Journey 1 · **Betrifft:** PROJ-3 AC-6 **und PROJ-2 AC-3** · gefunden von `/e2e-tests`
 - **Was passiert:** Unmittelbar vor dem Absenden steht das Währungsfeld auf `USD`, unmittelbar danach
   wieder auf `EUR`. Dasselbe trifft die **Kategorie**, die auf „Wählen" zurückfällt. Betrag und Notiz
   werden geleert (richtig), das **Datum bleibt** (richtig) — es sind genau die beiden Auswahlfelder,
@@ -261,7 +273,7 @@ sind beide von PROJ-3 berührt — die Ausgaben-Tabelle, die Erfassungszeile, di
 
 ### BUG-4: Der zugängliche Name der Währungsoptionen läuft zusammen
 
-- **Severity:** Low · **Status:** offen · **Betrifft:** AC-1 (Zugänglichkeit) · gefunden von `/e2e-tests`
+- **Severity:** Low · **Status:** **behoben am 01.09.2026** · die Auswahl liest sich jetzt „EUR Euro" · **Betrifft:** AC-1 (Zugänglichkeit) · gefunden von `/e2e-tests`
 - **Was passiert:** Eine Option der Währungsauswahl heißt maschinell **„USDUS-Dollar"** — Code und
   Anzeigename stehen ohne Trennzeichen nebeneinander. Optisch trennt sie ein Rand, im Textinhalt
   fehlt jedes Leerzeichen. Ein Screenreader liest ein Wortmonster vor.
@@ -270,33 +282,66 @@ sind beide von PROJ-3 berührt — die Ausgaben-Tabelle, die Erfassungszeile, di
   Option. Der E2E-Test ist bewusst so geschrieben, dass er **vor und nach** der Behebung trifft
   (Präfix statt Wortgrenze) — er schreibt den Fehler nicht fest.
 
+### BUG-5: Die Erfassungszeile sendet ohne JavaScript per GET — mit allen Feldern in der Adresszeile
+
+- **Severity:** High · **Status:** offen · **Betrifft:** `.claude/rules/security.md` → *Sensitive Data in URLs* · **verursacht von der Behebung für BUG-2** · gefunden in QA-Lauf 2
+- **Was passiert:** Die Erfassungszeile wird jetzt als `<form noValidate class="…">` ausgeliefert —
+  **ohne `method` und ohne `action`**. Ein Formular ohne `method` sendet nativ per **GET**. Steht
+  JavaScript nicht zur Verfügung oder scheitert es, landen Betrag, Währung, Kategorie, Datum und
+  **die Notiz** in der Adresszeile:
+  `/?amount=1250%2C00&currency=USD&category=software&spentOn=2026-08-17&note=Mittagessen+mit+Dr.+M%C3%BCller`
+  — und damit im Browserverlauf, in Server-Protokollen und in `Referer`-Kopfzeilen.
+- **Und die Ausgabe geht verloren:** Derselbe Aufruf antwortet mit HTTP 200 und legt **keine Zeile**
+  an. Ohne JavaScript ist die Erfassung damit nicht nur undicht, sondern wirkungslos.
+- **Reproduktion:** `curl` auf `/?amount=…&note=…` mit gültiger Sitzung → HTTP 200, `select count(*)
+  from expenses` bleibt 0. Im ausgelieferten HTML: `<form noValidate class="…">` ohne `method`.
+- **Vergleich, der es einordnet:** PROJ-1s Anmeldeformular trägt unverändert
+  `<form … action="" encType="multipart/form-data" method="POST">`, der Änderungsdialog ebenfalls
+  (`action={submit}`). **Nur die Erfassungszeile** hat die Zusicherung verloren.
+- **Ursache:** Die Umstellung von `action={formAction}` auf `onSubmit` + `startTransition`, mit der
+  BUG-2 behoben wurde. `action={formAction}` erzeugte das `method="POST"` und die versteckten
+  Server-Action-Felder; ohne sie gibt es weder POST noch Bedienbarkeit ohne JavaScript.
+- **Nebenwirkung für die Prüfbarkeit:** `/qa` kann die Erfassungszeile seither **nicht mehr über
+  HTTP ansteuern** — die `$ACTION_*`-Felder fehlen. Der Erfassungspfad ist damit nur noch über die
+  E2E-Suite prüfbar. Das ist derselbe Verlust, aus einer anderen Richtung gesehen.
+- **Fix-Richtung (für `/build`, nicht hier entschieden):** BUG-2 anders lösen als über den Wegfall
+  von `action=`. Denkbar wäre, `action={formAction}` beizubehalten und das Zurücksetzen am `Select`
+  abzufangen, statt das Formular umzubauen. Was auch immer gewählt wird: **`method="POST"` muss im
+  ausgelieferten Markup wieder stehen** — das ist in diesem Projekt eine harte Zusicherung, keine
+  Geschmacksfrage.
+
 ---
 
 ## Summary
 
-- **Acceptance Criteria:** **18 von 19 erfüllt** — AC-6 von `/e2e-tests` widerlegt (BUG-2)
-- **Edge Cases:** **8 von 9 erfüllt** — EC-9 offen als BUG-3
-- **Bugs:** 0 Critical · **2 High** (BUG-1, BUG-2 — beide von `/e2e-tests` gefunden) · **1 Medium** (BUG-3, vorbestehend) · **1 Low** (BUG-4)
-- **Security:** **9 Prüfungen verifiziert, 2 NOT VERIFIED**, keine negativ. Die neue Angriffsfläche
-  des Features — ein Eingabefeld, das eine ausgehende Adresse bildet — ist mit neun Nutzlasten
-  geprüft und geschlossen
-- **Tests:** 214 Unit-/Integrationstests grün (davon 5 in diesem Lauf ergänzt, rot nachgewiesen) ·
-  18 von 18 E2E grün als Regression · Lint, Build und TypeScript sauber
-- **Production Ready:** **NEIN.** Zwei **High**-Befunde, beide von `/e2e-tests` gefunden, beide mit
-  derselben Folge: **still falsche Zahlen in den Aufzeichnungen der Person.** BUG-1 verfälscht eine
-  Ausgabe beim bloßen Öffnen und Speichern des Änderungsdialogs; BUG-2 lässt einen Fremdwährungsbeleg
-  als Euro-Betrag zum Nennwert im Monat landen. In beiden Fällen erscheint keine Meldung und nichts
-  sieht falsch aus — genau die Klasse Fehler, gegen die ein Ausgaben-Tracker existiert.
+**Zweiter Durchlauf, 01.09.2026.**
 
-**Was das über den ersten Durchlauf sagt.** Dieser Bericht hat AC-6 als erfüllt geführt, mit einer
-Begründung aus dem Quelltext, die für sich genommen richtig war. Sie hat trotzdem das Falsche
-bewiesen: dass der Rücksetz-Effekt die Währung nicht anfasst — nicht, dass die Währung stehen bleibt.
-Und er hat für den Änderungsdialog die Zeile 68 zitiert, ohne nach einer zweiten Stelle zu suchen.
-**Beide Male hätte nur ein Browser die Wahrheit gesagt**, und beide Male stand im Bericht, dass genau
-das fehlt. Die Lehre ist nicht „mehr lesen", sondern: **Wo ein Kriterium von Browserzustand handelt,
-ist Code-Lektüre kein Beleg, sondern eine Vermutung** — und gehört als `[!]` markiert, nicht als `[x]`.
+- **Acceptance Criteria:** **19 von 19 erfüllt** — AC-6 und AC-11 jetzt erstmals **im Browser** belegt
+- **Edge Cases:** **8 von 9 erfüllt** — EC-9 offen als BUG-3 (gehört nach PROJ-2)
+- **Bugs:** 0 Critical · **1 High offen** (BUG-5, **neu, durch die Behebung von BUG-2 entstanden**) · 1 Medium offen (BUG-3) · **geschlossen: BUG-1, BUG-2, BUG-4**
+- **Security:** die bestehenden Kontrollen halten unverändert — Zugriffsschutz auf allen drei Routen (307), `expenses` und `profiles` anonym 401, alle vier Sicherheits-Header, **null** Secrets im Bundle. **Neu negativ: BUG-5**
+- **Tests:** 214 Unit-/Integrationstests grün · **24 von 24 E2E grün** in Chromium und Mobile Safari · Lint und Build sauber
+- **Production Ready:** **NEIN.** Ein High-Befund steht offen.
 
-**Was trotzdem steht:** 18 von 19 AC und 8 von 9 EC sind erfüllt, davon die schwierigen Teile gegen
-den echten Kursdienst — das Einfrieren, die Wochenendregel, die Nachrechenbarkeit, die Summen, der
-Export, die neun SSRF-Nutzlasten. Der Kern des Features trägt. Was nicht trägt, sind zwei Stellen im
-Browserzustand der Oberfläche.
+**Der Befund ist die Behebung.** BUG-1, BUG-2 und BUG-4 sind sauber geschlossen und im Browser
+nachgewiesen — die drei Journeys, die letzten Lauf rot waren, sind grün, und der Rückbau jeder
+Behebung macht genau die zugehörige Zusicherung wieder rot. **Der Weg dorthin hat jedoch eine harte
+Zusicherung des Projekts gebrochen:** Die Erfassungszeile trägt kein `method="POST"` mehr, sendet
+ohne JavaScript per GET und legt Betrag, Kategorie, Datum und Notiz in die Adresszeile — von wo aus
+sie in Verlauf, Protokolle und `Referer`-Kopfzeilen wandern. Dieselbe Ausgabe wird dabei nicht
+gespeichert.
+
+**Was daran zu lernen ist:** Eine Behebung, die den Absendeweg eines Formulars ändert, ist nie nur
+eine Zustandsfrage der Oberfläche. `action={formAction}` hat drei Dinge gleichzeitig geliefert —
+POST, Bedienbarkeit ohne JavaScript und die Prüfbarkeit über HTTP. Alle drei sind mitgegangen, und
+im `/build`-Lauf ist das niemandem aufgefallen, weil die E2E-Suite mit JavaScript läuft und deshalb
+grün blieb.
+
+**Was trotzdem steht:** Der fachliche Kern des Features ist unverändert in Ordnung und in diesem Lauf
+erneut belegt — 19 von 19 AC, die Wochenendregel, die Nachrechenbarkeit, die Summen über vier
+Währungen, der Export, der Zugriffsschutz. Was offen ist, ist ein Absendeweg, nicht die Umrechnung.
+
+**Nicht geprüft in diesem Lauf** (unverändert aus Lauf 1, plus eine Verschärfung): Darstellung auf
+verschiedenen Bildschirmbreiten, andere Browser als Chromium und WebKit, ein vollständiger Neuaufbau
+der Datenbank — **und neu:** der Erfassungspfad ist über HTTP nicht mehr prüfbar (BUG-5), sodass
+`/qa` dort ganz auf die E2E-Suite angewiesen ist.
