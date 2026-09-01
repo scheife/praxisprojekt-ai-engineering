@@ -1,30 +1,37 @@
 # QA-Bericht — PROJ-3: Fremdwährung & Wechselkurs
 
-**Getestet:** 2026-08-31 (erster Durchlauf) · **2026-09-01 (zweiter Durchlauf, nach den Behebungen aus `/e2e-tests`)**
-**Gemessen gegen:** Produktions-Build (`npm run build && npm run start`), lokaler Supabase-Stack auf Port 55321, Kursdienst `api.frankfurter.dev` **live**
-**App-URL:** `http://localhost:3100` — **nicht** die 3000 aus `.ai-eng-kit`
-**Grundlage:** `spec.md` (19 AC, 9 EC) in der Fassung vom 31.08.2026 nach dem `/refine` · `design.md` mit 13 TD
+**Getestet:** 31.08.2026 (Lauf 1) · 01.09.2026 (Lauf 2) · **01.09.2026 (Lauf 3 — dieser Bericht)**
+**Gemessen gegen:** Produktions-Build (`npm run build && npm run start`), lokaler Supabase-Stack auf
+Port 55321, Kursdienst `api.frankfurter.dev` **live**
+**App-URL:** `http://localhost:3210` — **nicht** die 3000 aus `.ai-eng-kit`
+**Grundlage:** `spec.md` (19 AC, 9 EC) in der Fassung vom 31.08.2026 · `design.md` mit 13 TD
 
-> **Warum Port 3100.** Der Dev-Server des produktiven alexmacht Business OS hält auf dieser Maschine
-> die 3000 (PID 97973). Der Prozess wurde nicht angefasst — die Trennung ist eine Rahmenbedingung des
-> PRD.
+> **Warum Port 3210.** Die 3000 und die 3100 sind auf dieser Maschine vom produktiven alexmacht
+> Business OS belegt. Lauf 2 hatte auf der 3100 gemessen; sie wurde während dieses Laufs von einem
+> fremden Server übernommen — der Fehler fiel sofort auf, weil die ausgelieferte Seite nicht
+> `auslage.` war. Deshalb 3210, und deshalb wird jede Messung dieses Laufs mit einem Merkmal der
+> eigenen App belegt.
 >
 > **Wie geprüft wurde.** Ausgaben über den echten Formularweg: GET der Seite, die versteckten
-> `$ACTION_*`-Felder auslesen, multipart-POST auf dieselbe URL. Der Kursdienst wurde **nicht**
-> ersetzt — alle Kurse in diesem Lauf sind echte EZB-Referenzkurse. Datenbankzustand nach jedem
-> Schritt direkt gelesen.
+> `$ACTION_*`-Felder **aus dem Erfassungsformular** auslesen, multipart-POST auf dieselbe URL. Der
+> Kursdienst wurde **nicht** ersetzt — alle Kurse in diesem Lauf sind echte EZB-Referenzkurse.
+> Datenbankzustand nach jedem Schritt direkt gelesen.
 
 ---
 
-## Was der zweite Durchlauf ändert (01.09.2026)
+## Was Lauf 3 prüft
 
-| Befund aus Lauf 1 | Stand jetzt |
+Lauf 2 hinterließ **einen offenen High-Befund und einen offenen Medium-Befund**. Beide sind
+inzwischen bearbeitet worden — BUG-5 durch `fix(PROJ-3)` (c4781cb), BUG-3 durch die Fristen-Arbeit
+an PROJ-2. Dieser Lauf prüft die beiden Behebungen **und** den gesamten Vertrag erneut, weil die
+PROJ-2-Arbeit danach genau die Wege angefasst hat, auf denen PROJ-3 steht
+(`auth.ts`, `deadline.ts`, `proxy.ts`, `actions/expenses.ts`, `page.tsx`).
+
+| Befund aus Lauf 2 | Stand jetzt |
 |---|---|
-| **BUG-1 High** — der Änderungsdialog belegte den Betrag mit dem Euro-Betrag vor | **geschlossen.** `edit-expense-dialog.tsx` liest jetzt `amount_original` und setzt die Währung mit zurück · *Evidenz: E2E Journey 2 grün in beiden Browsern; Rückbau der Behebung macht sie wieder rot („unexpected value 1078,24")* |
-| **BUG-2 High** — Währung und Kategorie verloren nach dem Speichern ihren Wert | **geschlossen.** Ursache benannt und behoben: React 19 setzt das Formular nach der Server Action zurück, Radix reicht das über sein verstecktes Auswahlfeld in den Zustand zurück · *Evidenz: E2E Journeys 1 und 3 grün; PROJ-2s Journey 1 prüft jetzt auch die Kategorie und wird beim Rückbau rot* |
-| **BUG-4 Low** — zugänglicher Name „USDUS-Dollar" | **geschlossen** · *Evidenz: die Auswahl liest sich jetzt „EUR Euro"* |
-| **BUG-3 Medium** — Datenbankausfall hängt 50 s | **unverändert offen.** Gehört nach PROJ-2 (`/refine` auf EC-4), nicht in diesen Lauf |
-| — | **Neu: BUG-5 High.** Die Behebung von BUG-2 hat die Erfassungszeile ohne JavaScript unbrauchbar gemacht **und ihre Daten in die Adresszeile gelegt** |
+| **BUG-5 High** — die Erfassungszeile sendete ohne JavaScript per GET, mit allen Feldern in der Adresszeile | **geschlossen.** Das ausgelieferte Markup trägt wieder `method="POST"` und die `$ACTION_*`-Felder · *Evidenz unten bei AC-6* |
+| **BUG-3 Medium** — Datenbankausfall hängt 50,4 s und endet mit HTTP 500 ohne Text | **geschlossen** durch PROJ-2. Bei angehaltener Datenbank jetzt **4,0 s** und eine verständliche Meldung · *Evidenz unten bei EC-9* |
+| — | **Neu: BUG-6 Low.** Unter Last der Maschine meldet die Frist aus PROJ-2 gesunde Infrastruktur als „nicht erreichbar" — und macht damit die eigene E2E-Suite unzuverlässig |
 
 ---
 
@@ -32,316 +39,221 @@
 
 ### Währung wählen und erfassen
 
-- [x] **AC-1** — Währungsfeld vorhanden, mit `EUR` vorbelegt, **30 Währungen**, Reihenfolge EUR · USD · CHF · GBP, dann alphabetisch · *Evidenz: `name="currency"` im ausgelieferten Formular; die 30 Codes im Anwendungscode und die Prüfregel `expenses_currency_known` der Datenbank sind **zeichengleich** (maschinell verglichen); eine erfundene Währung `XYZ` → „Diese Währung gibt es nicht.", keine Zeile*
-- [x] **AC-2** — bei EUR wird **kein** Kursdienst aufgerufen · *Evidenz zweifach: neue Zusicherungen in `src/lib/actions/expenses.test.ts` („ruft bei EUR keinen Kurs ab", „auch bei fehlendem Währungsfeld"), rot nachgewiesen; und zwei EUR-Erfassungen über das Formular → `amount_original = amount_cents`, `rate_per_eur` leer*
-- [x] **AC-3** — Kurs zum Ausgabedatum geholt, Währung, Originalbetrag, Kurs und Kursdatum gespeichert · *Evidenz: fünf Fremdwährungserfassungen (USD, CHF, JPY, HUF) → alle vier Felder gesetzt, z. B. `USD 125000 → 107824 Cent, Kurs 1,1593 vom 17.08.2026`*
+- [x] **AC-1** — Währungsfeld vorhanden, mit `EUR` vorbelegt, **30 Währungen**, Reihenfolge EUR · USD · CHF · GBP, dann alphabetisch · *Evidenz vierfach: `<input type="hidden" name="currency" value="EUR">` im ausgelieferten Formular; die 30 Codes aus `currencies.ts` und die Prüfregel `expenses_currency_known` der Datenbank maschinell verglichen und **zeichengleich**; die Reihenfolge jetzt als Zusicherung festgehalten (`currencies.test.ts`, neu in diesem Lauf, rot nachgewiesen); eine erfundene Währung `XYZ` → „Diese Währung gibt es nicht.", keine Zeile*
+- [x] **AC-2** — bei EUR wird **kein** Kursdienst aufgerufen · *Evidenz zweifach: Erfassung über das Formular → `amount_original = amount_cents = 2490`, `rate_per_eur` leer; dazu die Zusicherungen „ruft bei EUR keinen Kurs ab (AC-2)" und „auch bei fehlendem Währungsfeld (EC-8)" in `actions/expenses.test.ts`*
+- [x] **AC-3** — Kurs zum Ausgabedatum geholt, Währung, Originalbetrag, Kurs und Kursdatum gespeichert · *Evidenz: Erfassungen mit echtem Dienst → `USD 125000 → 107824 Cent, Kurs 1,1593 vom 17.08.2026` und `JPY 1500000 → 8114 Cent, Kurs 184,87 vom 18.08.2026`; alle vier Felder gesetzt*
 - [x] **AC-4** — ohne Kurs am Ausgabetag gilt der **letzte Werktag**, und als Kursdatum steht **dieser** Tag · *Evidenz dreifach, mit dem echten Dienst:*
   - *Samstag 15.08.2026 → Kursdatum **14.08.2026***
   - *Sonntag 16.08.2026 → Kursdatum **14.08.2026***
-  - *Samstag 01.01.2000 (die Untergrenze aus PROJ-2 AC-30) → Kursdatum **30.12.1999***
-- [x] **AC-5** — ohne Kurs keine Ausgabe, Meldung nennt beides · *Evidenz: BRL zum 03.01.2000 → „Für Brasilianischer Real gibt es zum 03.01.2000 keinen Kurs. Bitte prüf das Datum oder wähl eine andere Währung."; Zeilenzahl vorher = nachher. Der Ausfallfall zusätzlich als Test („schreibt GAR NICHTS, wenn der Kurs nicht zu holen ist") mit `from` **nie** aufgerufen*
-- [x] **AC-6** — die Währung bleibt nach dem Erfassen stehen · *Evidenz: E2E Journey 1 wählt USD, erfasst, und prüft danach `toHaveText(/USD/)` — grün in Chromium **und** Mobile Safari. Beim Rückbau der Behebung wird genau diese Zusicherung wieder rot. In Lauf 1 war das Kriterium aus dem Quelltext als erfüllt abgeleitet und damit **falsch** belegt*
+  - *Samstag 01.01.2000 (die Untergrenze aus PROJ-2 AC-30) → Kursdatum **30.12.1999**, Kurs 1,6051*
+- [x] **AC-5** — ohne Kurs keine Ausgabe, Meldung nennt beides · *Evidenz: BRL zum 03.01.2000 → „Für Brasilianischer Real gibt es zum 03.01.2000 keinen Kurs. Bitte prüf das Datum oder wähl eine andere Währung."; Zeilenzahl vorher = nachher. Dazu die Zusicherung „schreibt GAR NICHTS, wenn der Kurs nicht zu holen ist (AC-5)"*
+- [x] **AC-6** — die Währung bleibt nach dem Erfassen stehen · *Evidenz: E2E Journey 1 wählt USD, erfasst, prüft danach `toHaveText(/USD/)` — grün in Chromium **und** Mobile Safari. **Und die Zusicherung aus BUG-5:** die Erfassungszeile wird als `<form id="expense-composer" … method="POST">` mit ihren `$ACTION_*`-Feldern ausgeliefert, am rohen HTML des Produktions-Builds geprüft, nicht am hydrierten DOM*
 
 ### Anzeigen
 
-- [x] **AC-7** — Euro als Hauptbetrag, darunter Original, Kurs und Kursdatum; Euro-Zeilen unverändert einzeilig · *Evidenz: ausgeliefertes HTML von `/?monat=2026-08`, acht Zeilen — die fünf Fremdwährungszeilen zweizeilig („81,14 € · 15.000,00 JPY · 1 € = 184,87 JPY · Kurs vom 18.08.2026"), die zwei Euro-Zeilen einzeilig wie in PROJ-2*
-- [x] **AC-8** — Kurs in der Richtung „1 € = X", Division rechnet auf · *Evidenz: alle acht Fremdwährungszeilen des CSV-Exports nachgerechnet — `Original ÷ Kurs = Euro-Betrag` stimmt in jeder auf den Cent (z. B. 15.000,00 JPY ÷ 184,87 = 81,14)*
-- [x] **AC-9** — Monatsübersicht, Kategoriesummen und Gesamtsumme ausschließlich in Euro · *Evidenz: Gesamtsumme **29.196,24 €** im Markup, exakt die Summe der `amount_cents` des Monats laut Datenbank; alle **sechs** Kategoriesummen einzeln gegen die Datenbank geprüft und gefunden; im Übersichtsbereich **kein** Fremdwährungscode*
-- [x] **AC-10** — später unverändert, weil der Lesepfad keinen Kurs holt · *Evidenz: `queries.ts`, `summary.ts`, `expense-list.tsx`, `month-view.tsx` und `csv.ts` enthalten **weder** einen Import aus `rate.ts` **noch** ein `fetch(` — null Abrufe beim Anzeigen*
+- [x] **AC-7** — Euro als Hauptbetrag, darunter Original, Kurs und Kursdatum; Euro-Zeilen unverändert einzeilig · *Evidenz: ausgeliefertes HTML von `/?monat=2026-08` — die Fremdwährungszeilen zweizeilig („81,14 € · 15.000,00 JPY · 1 € = 184,87 JPY · Kurs vom 18.08.2026"), die Euro-Zeile („24,90 €", Papier) einzeilig ohne jede Kursangabe*
+- [x] **AC-8** — Kurs in der Richtung „1 € = X", Division rechnet auf · *Evidenz: alle drei Währungen der Ansicht nachgerechnet — 15.000,00 JPY ÷ 184,87 = 81,14 · 1.250,00 USD ÷ 1,1593 = 1.078,24 · 100,00 CHF ÷ 0,939 = 106,50; jede auf den Cent*
+- [x] **AC-9** — Monatsübersicht, Kategoriesummen und Gesamtsumme ausschließlich in Euro · *Evidenz: Gesamtsumme **1.397,28 €** im Markup, exakt die Summe der `amount_cents` des Monats laut Datenbank (139728); alle **vier** Kategoriesummen einzeln gegen die Datenbank geprüft und gefunden; im Übersichtsbereich **null** Fremdwährungscodes*
+- [x] **AC-10** — später unverändert, weil der Lesepfad keinen Kurs holt · *Evidenz: `queries.ts`, `summary.ts`, `expense-list.tsx`, `month-view.tsx` und `csv.ts` enthalten **weder** einen Import aus `rate.ts` **noch** ein `fetch(` — je 0 Treffer, null Abrufe beim Anzeigen*
 
 ### Ändern
 
-- [x] **AC-11** — der Dialog zeigt die Währung, vorbelegt mit der gespeicherten, **und den Originalbetrag** · *Evidenz: E2E Journey 2 öffnet den Dialog und prüft `Betrag = 1250,00` und `Währung = USD` — grün in beiden Browsern*
-- [x] **AC-12** — Neuabruf bei Währungs- **oder** Datumswechsel · *Evidenz: zwei Zusicherungen in `expenses.test.ts`, beide rot nachgewiesen (Bruch „friert den Kurs für immer ein" lässt genau sie fallen)*
-- [x] **AC-13** — nur Betrag geändert ⇒ Kurs bleibt, Euro-Wert neu gerechnet · *Evidenz: Test „holt NICHTS, wenn nur der Betrag sich ändert" — `fetchRate` nicht aufgerufen, `rate_per_eur` unverändert 1,1593, `amount_cents` neu 5003*
-- [x] **AC-14** — nur Kategorie oder Notiz ⇒ kein Abruf · *Evidenz: Test „holt NICHTS, wenn nur die Notiz sich ändert"*
-- [x] **AC-15** — gescheiterter Neuabruf schreibt nicht · *Evidenz: Test „schreibt GAR NICHT, wenn der nötige Neuabruf scheitert" — `from` genau **einmal** aufgerufen (nur das Lesen), kein Schreibvorgang*
-- [x] **AC-16** — Umstellung auf EUR entfernt Kurs und Kursdatum · *Evidenz: Test „entfernt Kurs und Kursdatum bei der Umstellung auf EUR"; zusätzlich erzwingt es die Datenbank — der Versuch, EUR **mit** Kurs zu schreiben, wird abgelehnt (siehe Security)*
+- [x] **AC-11** — der Dialog zeigt die Währung, vorbelegt mit der gespeicherten, **und den Originalbetrag** · *Evidenz: E2E Journey 2 prüft `Betrag = 1250,00` und `Währung = USD` — grün in beiden Browsern; dazu die Zusicherung aus Lauf 2, dass der Dialog seine Auswahl behält, **wenn das Speichern scheitert***
+- [x] **AC-12** — Neuabruf bei Währungs- **oder** Datumswechsel · *Evidenz: zwei Zusicherungen in `expenses.test.ts` („holt einen neuen Kurs, wenn die WÄHRUNG sich ändert", „… wenn das DATUM sich ändert"), in Lauf 2 rot nachgewiesen*
+- [x] **AC-13** — nur Betrag geändert ⇒ Kurs bleibt, Euro-Wert neu gerechnet · *Evidenz: Test „holt NICHTS, wenn nur der Betrag sich ändert — rechnet aber neu (AC-13)"*
+- [x] **AC-14** — nur Kategorie oder Notiz ⇒ kein Abruf · *Evidenz: Test „holt NICHTS, wenn nur die Notiz sich ändert (AC-14)"*
+- [x] **AC-15** — gescheiterter Neuabruf schreibt nicht · *Evidenz: Test „schreibt GAR NICHT, wenn der nötige Neuabruf scheitert (AC-15)"; dazu die E2E-Zusicherung, dass der Dialog dabei die gewählte Währung behält*
+- [x] **AC-16** — Umstellung auf EUR entfernt Kurs und Kursdatum · *Evidenz: Test „entfernt Kurs und Kursdatum bei der Umstellung auf EUR (AC-16)"; zusätzlich erzwingt es die Datenbank — der Versuch, EUR **mit** Kurs zu schreiben, wird abgelehnt (siehe Security)*
 
 ### Grenzen
 
-- [x] **AC-17** — Grenzen auf den **Originalbetrag** · *Evidenz: 10.000.000,00 USD → „Der Betrag darf höchstens 9.999.999,99 sein." — **ohne** Währungszeichen, wie es AC-17 verlangt; keine Zeile*
+- [x] **AC-17** — Grenzen auf den **Originalbetrag** · *Evidenz: 10.000.000,00 USD → „Der Betrag darf höchstens 9.999.999,99 sein." — **ohne** Währungszeichen, wie AC-17 es verlangt; keine Zeile*
 - [x] **AC-18** — Grenze auf den **umgerechneten** Wert, Meldung nennt ihn · *Evidenz: 9.999.999,99 GBP → „Das sind umgerechnet 11.695.906,42 € — höchstens 9.999.999,99 € sind möglich."*
 
 ### Datenschutz
 
-- [x] **AC-19** — der Export trägt Währung, Originalbetrag, Kurs und Kursdatum · *Evidenz: `GET /konto/export` mit echter Sitzung → **9 Spalten**, die fünf aus PROJ-2 unverändert an Position 1–5, die vier neuen hinten. BOM vorhanden, CRLF durchgehend, **null** einzelne Zeilenumbrüche ohne Wagenrücklauf. Euro-Zeilen lassen Kurs und Kursdatum **leer**, nicht „1,0000"*
+- [x] **AC-19** — der Export trägt Währung, Originalbetrag, Kurs und Kursdatum · *Evidenz: `GET /konto/export` mit echter Sitzung → **9 Spalten**, die fünf aus PROJ-2 unverändert an Position 1–5, die vier neuen hinten. BOM `ef bb bf` in den Rohbytes, CRLF durchgehend, **null** einzelne Zeilenumbrüche ohne Wagenrücklauf. Euro-Zeilen lassen Kurs und Kursdatum **leer**, nicht „1,0000"*
 
-**19 von 19 Acceptance Criteria erfüllt.** AC-6 ist seit der Behebung von BUG-2 im Browser belegt; AC-11 ebenso, weil Journey 2 den Dialog jetzt erreicht.
+**19 von 19 Acceptance Criteria erfüllt.**
 
 ---
 
 ## Edge Cases
 
-- [x] **EC-1** — Doppelklick erzeugt eine Ausgabe mit **einem** Kurs · *Evidenz: **drei** Rennen mit gemeinsamer Barriere und identischer Vorgangskennung → je genau 1 Zeile und je genau 1 verschiedener Kurs; **beide** Anfragen melden „saved", die Person sieht keinen Fehler. Die Garantie ist die Eindeutigkeit `expenses_user_client_token_unique` aus PROJ-2, in der Datenbank bestätigt*
-- [x] **EC-2** — langsamer Dienst gilt nach begrenzter Wartezeit als Störung · *Evidenz: `rate.test.ts` — abgelaufene Frist → `unavailable`; und der Abruf bekommt nachweislich ein `AbortSignal` mit*
-- [x] **EC-3** — unbrauchbarer Kurs gilt als Störung, nie als Kurs · *Evidenz: **acht** Fälle in `rate.test.ts` (Kurs 0, negativ, keine Zahl, unendlich, Datum fehlt, Datum unlesbar, `rates` fehlt, gar kein Objekt) → alle `unavailable`*
-- [x] **EC-4** — fehlender Kurs für die Kombination ist **dauerhaft** und wird nicht als Ausfall gemeldet · *Evidenz: BRL zum 03.01.2000 über das Formular → Meldung nennt Währung und Datum und **nicht** „nicht abrufbar"; im Test zusätzlich als eigene Klasse (HTTP 404) von der vorübergehenden getrennt*
+- [x] **EC-1** — Doppelklick erzeugt eine Ausgabe mit **einem** Kurs · *Evidenz: **drei** Rennen mit gleichzeitig freigegebenen, identischen Anfragen und gleicher Vorgangskennung → je genau **1** Zeile und je genau **1** Kurs; beide Anfragen antworten mit HTTP 200 und **ohne** Fehlermeldung, die Person sieht keinen Fehlschlag. Die Garantie ist die Eindeutigkeit `expenses_user_client_token_unique`, in `pg_constraint` bestätigt*
+- [x] **EC-2** — langsamer Dienst gilt nach begrenzter Wartezeit als Störung · *Evidenz: `rate.test.ts`; im Quelltext `AbortSignal.timeout(TIMEOUT_MS)` am Abruf (`rate.ts:63`)*
+- [x] **EC-3** — unbrauchbarer Kurs gilt als Störung, nie als Kurs · *Evidenz: acht Fälle in `rate.test.ts` (Kurs 0, negativ, keine Zahl, unendlich, Datum fehlt, Datum unlesbar, `rates` fehlt, gar kein Objekt) → alle `unavailable`*
+- [x] **EC-4** — fehlender Kurs für die Kombination ist **dauerhaft** und wird nicht als Ausfall gemeldet · *Evidenz: BRL zum 03.01.2000 über das Formular → die Meldung nennt Währung und Datum und behauptet **keinen** vorübergehenden Ausfall; im Code als eigene Klasse (HTTP 404 ⇒ `no-rate-for-date`) von der vorübergehenden getrennt (`rate.ts:77`)*
 - [x] **EC-5** — Kleinstbetrag wird abgelehnt, nicht auf null gerundet · *Evidenz: 0,05 IDR → „Umgerechnet ergibt das weniger als 0,01 € — bitte prüf Betrag und Währung.", keine Zeile*
-- [x] **EC-6** — gleicher Kurstag ⇒ gleicher Kurs; der laufende Tag wird nicht zwischengespeichert · *Evidenz doppelt: **gemessen** — fünf Erfassungen mit gleichem abgeschlossenem Tag und gleicher Währung brauchten im Median **150 ms**, fünf mit je anderem Tag **274 ms**; die Ersparnis von 124 ms je Erfassung ist der eingesparte Abruf. Dazu die Zusicherung im Test, dass der **laufende** Tag `cache: 'no-store'` bekommt*
-- [x] **EC-7** — kein Mischzustand aus zwei Tabs · *Evidenz: die Änderung schreibt alle Felder in **einer** Anweisung (`actions/expenses.ts:321`, `.update({ ...priced.row, category, spent_on, note })`); es gibt kein Lesen-Ändern-Zurückschreiben auf den Kursfeldern*
-- [x] **EC-8** — Bestandszeilen aus PROJ-2 laufen unverändert weiter · *Evidenz: eine Erfassung **ohne** Währungsfeld → `currency = EUR`, kein Kurs, einzeilige Darstellung; dazu die Zusicherung „auch bei fehlendem Währungsfeld keinen Kurs abrufen"*
-- [ ] **EC-9** — **BUG-3.** Bei nicht erreichbarer Datenbank erscheint **keine** verständliche Meldung: die Anfrage hängt **50,4 Sekunden** und endet mit **HTTP 500** und leerem Rumpf. Ein Kursproblem und ein Datenbankproblem sind damit zwar nicht zu verwechseln — aber EC-9 verlangt ausdrücklich, dass PROJ-2s EC-4 weiter gilt, und das tut es nicht. **Nicht von PROJ-3 verursacht**, siehe BUG-3
+- [x] **EC-6** — gleicher Kurstag ⇒ gleicher Kurs; der laufende Tag wird nicht zwischengespeichert · *Evidenz: `rate.ts:68` — `cache: isCompletedDay(day) ? 'force-cache' : 'no-store'`, mit der Begründung im Quelltext; dazu die Zusicherung in `rate.test.ts`*
+- [x] **EC-7** — kein Mischzustand aus zwei Tabs · *Evidenz: die Änderung schreibt alle Felder in **einer** Anweisung (`actions/expenses.ts:340`, `.update({ ...priced.row, category, spent_on: spentOn, note })`); es gibt kein Lesen-Ändern-Zurückschreiben auf den Kursfeldern, und die Zusicherung „schreibt alle vier Felder in einer Anweisung, eingeschränkt auf die eigene Zeile" hält sie fest*
+- [x] **EC-8** — Bestandszeilen aus PROJ-2 laufen unverändert weiter · *Evidenz: die Euro-Ausgabe dieses Laufs steht ohne Kurs und einzeilig in der Liste; dazu die Zusicherung „ruft auch bei fehlendem Währungsfeld keinen Kurs ab"*
+- [x] **EC-9** — **jetzt erfüllt, war BUG-3.** Bei angehaltener Datenbank antwortet die Erfassung einer Fremdwährungsausgabe mit **HTTP 200 nach 4,0 Sekunden** und der Meldung „Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal."; **keine Zeile entsteht** (7 → 7). Ein Kursproblem („Für Brasilianischer Real gibt es zum 03.01.2000 keinen Kurs") und ein Datenbankproblem sind damit unterscheidbar benannt. *Zusätzlich die Zusicherung aus PROJ-2: `npm run test:outage` misst bei angehaltenem Datenzugriff 2.509 ms (schreiben), 2.453 ms (lesen) und 2.414 ms (der teuerste Weg) — Grenze 5.000 ms.*
 
-**8 von 9 Edge Cases erfüllt.**
+**9 von 9 Edge Cases erfüllt.**
 
 ---
 
 ## Security Audit
 
-- [x] **Die neue Angriffsfläche dieses Features: kann ein Eingabefeld die ausgehende Adresse verbiegen?** (SSRF) · *Evidenz: **sechs** Nutzlasten im Währungsfeld — Pfadwechsel `USD/../../../etc/passwd`, fremder Host `USD@evil.example.com`, angehängte Query, `http://169.254.169.254/` (Metadatendienst), Zeilenumbruch mit gefälschtem Kopf, Platzhalter `*` — **alle** an der Schema-Prüfung abgewiesen („Diese Währung gibt es nicht."). Dazu **drei** im Datumsfeld (`2026-08-17/../../currencies`, `?base=XXX`, `latest`) → alle „Bitte gib ein Datum ein.", Zeilenzahl vorher = nachher*
-- [x] **Autorisierung über Kontogrenzen, auf den neuen Spalten** · *Evidenz mit zwei echten Konten und ihren JWTs: B liest alle `expenses` → `[]`, obwohl A **12** Zeilen hat; gezielt auf As `user_id` → `[]`; `PATCH rate_per_eur = 0.01` auf As Zeilen → `[]` und As 12 Zeilen danach **unverändert**; `DELETE` → `[]`. Bs CSV-Export enthält nur die Kopfzeilen*
-- [x] **Zugriff ohne Anmeldung** — `/`, `/konto` und `/konto/export` → je HTTP 307 auf `/login`; `expenses` anonym über die Datenschnittstelle → HTTP 401
-- [x] **Injection in die Notiz** — `<img src=x onerror=alert(1)>` und `x'; drop table public.expenses;--` werden gespeichert, aber **maskiert** ausgeliefert (kein `<img`-Tag im Dokument); `to_regclass('public.expenses')` unverändert
-- [x] **Die Datenbank lässt die verbotenen Zustände nicht zu** — der Kern von TD-8 · *Evidenz aus dem Bau, in diesem Lauf am Schema bestätigt: `expenses_currency_rate_consistent`, `expenses_currency_known`, `expenses_rate_positive`, `expenses_amount_original_range` stehen alle in `\d expenses`. Ein Kurs auf einer EUR-Zeile oder eine Fremdwährung ohne Kurs ist damit **unmöglich**, nicht nur unwahrscheinlich*
-- [x] **Keine Secrets im Client-Bundle** — je **0** Treffer in `.next/static` für `GATE_SECRET`, `service_role`, `sb_secret`, das JWT-Secret und `TRUSTED_PROXY_HOPS`
-- [x] **PROJ-3 führt keine neue Umgebungsvariable und kein Geheimnis ein** — der Kursdienst braucht weder Konto noch Schlüssel; `design.md` → *Settings the user makes*: „Keine". **Keine `[user]`-Aufgabe in `tasks.md`**, also auch keine offene
-- [x] **Last auf dem fremden Dienst** — durch den Zwischenspeicher begrenzt, gemessen (siehe EC-6). Ungültige Eingaben lösen **gar keinen** Abruf aus (Test „prüft die Eingaberegeln VOR dem Kursabruf")
-- [x] **Zugangsdaten in der URL** — PROJ-3 fügt kein Formular mit Zugangsdaten hinzu; die Erfassung geht wie alles über eine Server Action und damit per POST
+- [x] **Die neue Angriffsfläche dieses Features: kann ein Eingabefeld die ausgehende Adresse verbiegen?** (SSRF) · *Evidenz: Nutzlasten im Währungsfeld — Pfadwechsel `USD/../../../etc/passwd`, fremder Host `USD@evil.example.com`, erfundener Code `XYZ` — **alle** an der Schema-Prüfung abgewiesen („Diese Währung gibt es nicht."). Dazu `2026-08-17/../../currencies` im Datumsfeld → „Bitte gib ein Datum ein.". Zeilenzahl vorher = nachher. Der Abruf baut die Adresse aus geprüften Werten (`rate.ts:58`) und folgt keiner Weiterleitung (`redirect: 'error'`)*
+- [x] **An den Kursdienst gehen keine personenbezogenen Daten** — die Vertragszusicherung aus `spec.md` · *Evidenz: die aufgerufene Adresse ist vollständig `${BASE_URL}/${day}?base=EUR&symbols=${currency}` (`rate.ts:58`) — ein Datum und zwei Währungscodes. Weder Betrag, Notiz, Kategorie noch eine Kennung der Person verlassen die Anwendung*
+- [x] **Autorisierung über Kontogrenzen, auf den neuen Spalten** · *Evidenz mit zwei echten Konten und ihren JWTs: A liest **9** eigene Zeilen; B liest alle `expenses` → `[]`; gezielt auf As `user_id` → `[]`; `PATCH rate_per_eur = 0.01` auf As Zeilen → `[]`; `DELETE` → `[]`. As 9 Zeilen und ihre 5 verschiedenen Kurse danach **unverändert***
+- [x] **Zugriff ohne Anmeldung** — `/`, `/konto` und `/konto/export` → je HTTP **307** auf `/login`; `expenses`, `profiles` und `login_attempts` anonym über die Datenschnittstelle → je HTTP **401**
+- [x] **Injection in die Notiz** — `<img src=x onerror=alert(1)>` wird gespeichert, aber **maskiert** ausgeliefert (kein `<img`-Tag im Dokument); `x'; drop table public.expenses;--` bleibt Text, `to_regclass('public.expenses')` unverändert; die CSV-Formel `=cmd|' /C calc'!A0` verlässt den Export als `"'=cmd|' /C calc'!A0"` — mit vorangestelltem Apostroph
+- [x] **Die Datenbank lässt die verbotenen Zustände nicht zu** — der Kern von TD-8 · *Evidenz: vier Schreibversuche mit dem eigenen JWT direkt an der Datenschnittstelle, alle abgewiesen — EUR **mit** Kurs und Fremdwährung **ohne** Kurs an `expenses_currency_rate_consistent`, Kurs 0 an `expenses_rate_positive`, `XYZ` an `expenses_currency_known`. Eine Ausgabe ohne Euro-Wert ist damit **unmöglich**, nicht nur unwahrscheinlich*
+- [x] **Keine Secrets im Client-Bundle** — je **0** Treffer in `.next/static` für `GATE_SECRET`, `service_role`, `sb_secret`, das JWT-Secret, `TRUSTED_PROXY_HOPS` und `SERVICE_ROLE`. Die einzigen `NEXT_PUBLIC_`-Variablen sind `NEXT_PUBLIC_SUPABASE_URL` und `NEXT_PUBLIC_SUPABASE_ANON_KEY` — beide gehören in den Browser
+- [x] **Sicherheits-Header** — an der laufenden App geprüft, alle vier vorhanden: `X-Frame-Options: DENY` · `X-Content-Type-Options: nosniff` · `Referrer-Policy: origin-when-cross-origin` · `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- [x] **Zugangsdaten und Eingaben in der URL** — **der Befund aus Lauf 2 ist geschlossen.** Die Erfassungszeile wird als `method="POST"` ausgeliefert, das Anmeldeformular ebenfalls (`<form … method="POST">`). Kein Feld landet mehr in der Adresszeile
+- [x] **PROJ-3 führt keine neue Umgebungsvariable und kein Geheimnis ein** — der Kursdienst braucht weder Konto noch Schlüssel. **Keine `[user]`-Aufgabe in `tasks.md`**, also auch keine offene
 - [!] **Drosselung eines gewöhnlichen Endpunkts** — NOT VERIFIED: `/konto/export` hat weiterhin keine, und die Erfassung hat keine eigene. `design.md` (TD-22 in PROJ-2) entscheidet das ausdrücklich so. Für ein MVP vertretbar, aber nicht als bestandene Prüfung verbucht
-- [!] **Brute Force auf Zugangsdaten** — NOT VERIFIED für PROJ-3: Dieses Feature hat keinen Zugangsdaten-Pfad. Die Drosselung von PROJ-1 ist unberührt und wurde dort im achten Lauf geprüft
+- [!] **Brute Force auf Zugangsdaten** — NOT VERIFIED für PROJ-3: Dieses Feature hat keinen Zugangsdaten-Pfad. Die Drosselung von PROJ-1 ist unberührt (10 Registrierungen je 60 Minuten, in `signup_attempt_gate` bestätigt) und wurde dort geprüft
 
-**9 Prüfungen verifiziert, 2 NOT VERIFIED.** Keine davon negativ.
+**10 Prüfungen verifiziert, 2 NOT VERIFIED.** Keine davon negativ.
 
 ---
 
 ## Automatisierte Tests
 
-- **Unit- und Integrationstests:** `npm test` → **214 Tests in 15 Dateien, alle grün** (vor diesem Lauf 209).
-- **Neu in diesem QA-Lauf: 5 Tests** in `src/lib/actions/expenses.test.ts`. Sie schließen eine echte
-  Lücke: **AC-2 hatte keine Zusicherung** — dass eine Euro-Erfassung den Kursdienst nie aufruft, war
-  nirgends festgehalten, obwohl daran hängt, dass ein Ausfall des Dienstes die Euro-Erfassung nicht
-  mitreißt. Dazu die Reihenfolge aus TD-13 (Eingaberegeln vor dem Abruf), das Einfrieren des
-  **gelieferten** Kursdatums und der Fall „Abruf scheitert ⇒ die Tabelle wird gar nicht berührt".
-- **Rot-Nachweis geführt**, für die neuen Tests dieses Laufs und stichprobenartig für die des Baus:
-  drei gezielte Brüche an `actions/expenses.ts` (auch für Euro einen Kurs holen · trotz
-  gescheitertem Abruf weiterschreiben · das angefragte statt des gelieferten Kursdatums speichern) —
-  jeder von genau den Tests gefangen, die ihn verhindern sollen.
+- **Unit- und Integrationstests:** `npm test` → **255 Tests in 20 Dateien, alle grün** (vor diesem Lauf 247).
+- **Neu in diesem QA-Lauf: 8 Tests** in `src/lib/expenses/currencies.test.ts` — eine Datei, die es
+  noch nicht gab, obwohl es `categories.test.ts` seit PROJ-2 gibt. Sie schließt die Lücke, die
+  `currencies.ts` selbst benennt: „Weichen die beiden Listen auseinander, gewinnt die Datenbank — sie
+  lehnt ab, was der Code durchgelassen hat." Ohne Zusicherung ist dieser Fall von außen unsichtbar
+  und teuer: Die Auswahl bietet die Währung an, der Kurs wird geholt — ein Aufruf beim fremden
+  Dienst — und **erst das Schreiben** scheitert. Der Test liest die Prüfregel aus der Migration und
+  vergleicht sie mit der Liste im Code; dazu Reihenfolge, Eindeutigkeit und die drei Hilfsfunktionen.
+- **Rot-Nachweis geführt** für die neuen Tests: drei gezielte Brüche an `currencies.ts` — eine
+  Währung im Code, die die Migration nicht kennt (`XAU`) · die vorangestellten Währungen vertauscht ·
+  EUR nicht mehr als Vorbelegung. Jeder wurde von genau den Zusicherungen gefangen, die ihn
+  verhindern sollen; die Quelle ist danach nachweislich unverändert (`git diff` leer).
 - **Lint:** ohne Befund. **Build:** erfolgreich. **TypeScript:** keine Fehler.
 
 ## E2E Tests
 
-**Nachgetragen von `/e2e-tests` am 01.09.2026** — drei kritische Journeys in
-`tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`. **Sie haben zwei schwere Fehler gefunden,
-die dieser Bericht zuvor als erfüllt geführt hat.**
+**Vorhanden seit `/e2e-tests` (01.09.2026), in diesem Lauf als Regression gefahren** —
+`tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`, fünf Zusicherungen in zwei Browsern.
 
 | Journey | deckt ab | Ergebnis |
 |---|---|---|
-| 1: Eine Ausgabe in Fremdwährung erfassen und nachrechnen können | AC-1, AC-3, AC-6, AC-7, AC-8, AC-9 | **rot** — scheitert an **BUG-2** (AC-6) |
-| 2: Die Währung einer Ausgabe ändern — der Kurs zieht mit | AC-11, AC-12, AC-16 | **rot** — scheitert an **BUG-1** |
-| 3: Ohne Kurs entsteht keine Ausgabe, und die Eingaben bleiben stehen | AC-5, EC-4 | **rot** — die Meldung stimmt, die Währung fällt zurück (**BUG-2**) |
+| 1: Eine Ausgabe in Fremdwährung erfassen und nachrechnen können | AC-1, AC-3, AC-6, AC-7, AC-8, AC-9 | **grün** |
+| 2: Die Währung einer Ausgabe ändern — der Kurs zieht mit | AC-11, AC-12, AC-16 | **grün** |
+| 3: Ohne Kurs entsteht keine Ausgabe, und die Eingaben bleiben stehen | AC-5, EC-4 | **grün** |
+| Die Erfassungszeile wird als POST ausgeliefert — nie als GET | BUG-5 | **grün** |
+| Der Änderungsdialog behält die Auswahl, wenn das Speichern scheitert | AC-11, AC-15 | **grün** |
 
-**Regression der Nachbarn:** PROJ-1 und PROJ-2 unverändert **18 von 18 grün**.
-
-**Die Tests sind geprüft, nicht nur geschrieben.** Bevor sie als Befund gelten durften, wurden beide
-Fehler probeweise geflickt — daraufhin liefen **alle drei Journeys grün** (20,1 s). Danach wurde der
-Flicken zurückgenommen und der Quellcode als unverändert nachgewiesen (`git status src/` leer). Damit
-steht fest: Die Journeys scheitern **am Produkt und nicht an sich selbst**, und sie werden grün,
-sobald die Fehler behoben sind. Der Rot-Nachweis, den dieser Schritt verlangt, ist damit erbracht —
-sie sind gerade rot, und zwar an genau der Zeile, die den kaputten Schritt benennt.
-
-**Warum diese Journeys robust gegen einen fremden Dienst sind:** Sie benutzen ein abgeschlossenes
-Datum (17.08.2026), dessen EZB-Kurs für immer feststeht, und prüfen **keinen fest verdrahteten
-Euro-Betrag**, sondern rechnen die auf der Seite angezeigten Zahlen gegeneinander auf:
-`Originalbetrag ÷ Kurs = Euro-Betrag`. Das prüft AC-8 strenger als ein Vergleich mit einer Konstante
-und hält, wenn sich Kurse ändern.
+**Alle PROJ-3-Journeys sind in Chromium und Mobile Safari grün.**
 
 ## Regression
 
 `features/INDEX.md` führt kein Feature als *Deployed*; PROJ-1 und PROJ-2 stehen auf *Approved* und
-sind beide von PROJ-3 berührt — die Ausgaben-Tabelle, die Erfassungszeile, die Liste, der
-Änderungsdialog und der CSV-Export gehören PROJ-2.
+sind beide von PROJ-3 berührt. **Zusätzlich hat PROJ-2 nach dem letzten Lauf die Fristen-Arbeit
+bekommen und dabei genau die Wege angefasst, auf denen PROJ-3 steht** — `auth.ts`, `deadline.ts`,
+`proxy.ts`, `actions/expenses.ts`, `page.tsx`.
 
-- **Alle 18 E2E-Journeys grün**, darunter PROJ-2s Journey 1, die über die **veränderte**
-  Erfassungszeile eine Ausgabe anlegt, und Journey 4, die den **veränderten** CSV-Export herunterlädt.
-- **Die Summen von PROJ-2 rechnen unverändert:** Gesamtsumme und alle sechs Kategoriesummen stimmen
+- **PROJ-1: 8 von 8 E2E-Journeys grün** (Chromium und Mobile Safari, einzeln gefahren).
+- **PROJ-2 und PROJ-3: alle Journeys grün** im vollständigen Suite-Lauf.
+- **Die Summen von PROJ-2 rechnen unverändert:** Gesamtsumme und alle vier Kategoriesummen stimmen
   auf den Cent mit der Datenbank überein, obwohl der Monat vier Währungen enthält.
 - **Euro-Ausgaben verhalten sich exakt wie vorher** — einzeilig, ohne Kursangabe, ohne Außenkontakt.
-- **PROJ-1 unberührt:** Anmeldung, Zugriffsschutz und Kontolöschung laufen über dieselben Wege; die
-  vier E2E-Journeys von PROJ-1 sind grün.
-- **Zwei PROJ-2-Tests mussten mitziehen** (im Bau, nicht hier): Die Update-Anweisung trägt vier
-  Felder mehr und ist auf zwei Anweisungen gewachsen. Beides ist die richtige Folge; die
-  Zusicherungen prüfen jetzt, dass **beide** Anweisungen auf die eigene Zeile eingeschränkt sind.
+- **Die Frist aus PROJ-2 bricht den Kurspfad nicht:** Eine Fremdwährungserfassung braucht mit echtem
+  Kursabruf 250–500 ms und bleibt damit weit unter der Frist. Die 5-Sekunden-Frist des Kursdienstes
+  und die 2-Sekunden-Frist der Datenbank liegen auf verschiedenen Aufrufen und stören einander nicht.
+- **Zur Zuverlässigkeit der Suite selbst siehe BUG-6** — sie ist unter Last der Maschine nicht
+  verlässlich grün, und das ist ein Befund, kein Rauschen.
 
 ---
 
 ## Not Verified In This Run
 
-- [!] **Der Fremdwährungsweg durch einen echten Browser** — die wichtigste Lücke. Radix füllt das
-  versteckte native Auswahlfeld erst clientseitig; serverseitig steht dort nichts. Für **Euro** ist
-  der Weg durch PROJ-2s E2E-Journey 1 gedeckt, für eine **ausgewählte Fremdwährung** nicht. Der
-  Anwendungscode fängt eine fehlende Angabe als Euro ab — ein still nach Euro gekippter Dollar-Beleg
-  wäre ein ernster Fehler. **Gehört als Erstes in `/e2e-tests`.**
-- [x] **Erledigt von `/e2e-tests` (01.09.2026): der Fremdwährungsweg im echten Browser.** Die Lücke ist geschlossen — und sie hat **BUG-1 und BUG-2** zutage gefördert. Die frühere Formulierung dieses Punkts lautete:
-- [!] **AC-6 und AC-11 waren am Code belegt, nicht an der laufenden Oberfläche** — dass die Währung
-  nach dem Erfassen stehen bleibt und der Änderungsdialog sie vorbelegt zeigt, ist im Quelltext
-  eindeutig (`setCurrency` kommt im Rücksetz-Effekt nicht vor; der Dialog liest `expense.currency`),
-  aber beides ist Browserzustand.
-- [!] **Wie die Zeilen aussehen** — die Betragsspalte wurde von `w-32` auf `w-56` verbreitert, damit
-  Kurs und Kursdatum nicht umbrechen. Markup geprüft, Bild nicht.
-- [!] **Darstellung auf 375 / 768 / 1440 px** — kein Viewport in `/qa`. Die Erfassungszeile hat eine
-  sechste Spalte bekommen, der Änderungsdialog eine dritte; gerade dort ist das relevant.
+- [!] **Darstellung auf 768 px und 1440 px** — kein Viewport in `/qa`. **Teilweise gedeckt:** Die
+  E2E-Suite fährt Mobile Safari als iPhone 13 (390 px), dort sind alle PROJ-3-Journeys grün — die
+  Erfassungszeile mit ihrer sechsten Spalte und der Änderungsdialog mit seiner dritten sind auf einem
+  schmalen Gerät also **bedienbar**. Ob sie dabei *gut aussehen*, ist nicht geprüft: Es gibt keine
+  Zusicherung auf Umbruch, Abschneiden oder Überlappung, und kein Bild wurde angesehen.
 - [!] **Andere Browser als Chromium und WebKit** — Firefox ist in keiner Suite konfiguriert.
 - [!] **Drosselung gewöhnlicher Endpunkte** — bewusst nicht implementiert (TD-22 in PROJ-2).
 - [!] **Brute Force** — PROJ-3 hat keinen Zugangsdaten-Pfad.
 - [!] **Ein vollständiger Neuaufbau der Datenbank** (`supabase db reset`) — nicht ausgeführt, weil er
   das Tor-Geheimnis von PROJ-1 löschen würde, das ohne den Klartext aus `.env.local` nicht
-  wiederherstellbar ist. Die neue Migration ist als Einzelschritt sauber eingespielt.
+  wiederherstellbar ist. Die Migration ist als Einzelschritt sauber eingespielt und ihre vier
+  Prüfregeln stehen in `\d expenses`.
 - [!] **Das Verhalten des Kursdienstes über die Zeit** — Ausfallhäufigkeit und etwaige Aufrufgrenzen
   von frankfurter.dev sagt eine Momentaufnahme nicht. AC-5 fängt einen Ausfall sauber ab.
+- [!] **Die Schwelle von BUG-6 in Zahlen** — dass die Frist unter Last falsch auslöst, ist belegt
+  (siehe unten). **Bei welcher Gleichzeitigkeit genau**, ist es nicht: Bei ruhiger Maschine blieben
+  80 gleichzeitige Seitenaufrufe fehlerfrei, unter Last kippten schon deutlich weniger. Die Schwelle
+  hängt an der Auslastung des Rechners, nicht an einer Zahl, die sich hier festhalten ließe.
 
 ---
 
 ## Bugs
 
-### BUG-1: Der Änderungsdialog belegt den Betrag mit dem EURO-Betrag vor — Speichern verfälscht die Ausgabe
+### BUG-6: Unter Last meldet die Frist gesunde Infrastruktur als „nicht erreichbar"
 
-- **Severity:** High · **Status:** **behoben am 01.09.2026** · verifiziert durch E2E Journey 2 in beiden Browsern, Rückbau macht sie wieder rot · **Betrifft:** PROJ-2 AC-20 (Dialog öffnet mit dem gespeicherten Stand) · gefunden von `/e2e-tests`
-- **Was passiert:** Bei einer Ausgabe über **1.250,00 USD** zeigt das Betragsfeld im Änderungsdialog
-  **1078,24** — den umgerechneten Euro-Betrag. Wer dort irgendetwas speichert, und sei es nur eine
-  Notizkorrektur, schreibt **1.078,24 USD** als Originalbetrag zurück; der Euro-Betrag schrumpft
-  damit auf rund 930,25 €. **Stille Verfälschung der eigenen Aufzeichnungen durch eine ganz normale
-  Handlung** — es erscheint keine Meldung und nichts sieht falsch aus.
-- **Reproduktion:** Ausgabe über 1.250,00 USD erfassen → „Ändern" → das Feld zeigt 1078,24.
-- **Ursache:** `src/components/expenses/edit-expense-dialog.tsx:111`. Beim Öffnen setzt
-  `onOpenChange` den Stand zurück — und liest dabei `expense.amount_cents` statt
-  `expense.amount_original`. Dieselbe Funktion setzt auch die **Währung nicht** zurück.
-- **Warum es durch zwei Prüfungen gerutscht ist, offen gesagt:** Der `/build`-Lauf hat genau diesen
-  Fehler an der **Initialisierung** (Zeile 68) behoben und im Bericht als erledigt vermerkt — die
-  **zweite** Stelle wurde übersehen. Dieser QA-Bericht hat Zeile 68 dann als Beleg zitiert und die
-  Zeile 111 nicht gesucht. Erst der Browser hat es gezeigt: Ohne Klick auf „Ändern" ist der Fehler
-  nicht sichtbar, und `/qa` hat keinen Browser.
-- **Fix-Richtung:** aus `expense.amount_original` vorbelegen und `setCurrency(expense.currency)`
-  ergänzen. Probeweise angewandt — danach liefen alle drei Journeys grün.
-
-### BUG-2: Nach dem Speichern verlieren Währung **und** Kategorie ihren Wert
-
-- **Severity:** High · **Status:** **behoben am 01.09.2026** · verifiziert durch E2E Journeys 1 und 3 sowie PROJ-2s Journey 1 · **Betrifft:** PROJ-3 AC-6 **und PROJ-2 AC-3** · gefunden von `/e2e-tests`
-- **Was passiert:** Unmittelbar vor dem Absenden steht das Währungsfeld auf `USD`, unmittelbar danach
-  wieder auf `EUR`. Dasselbe trifft die **Kategorie**, die auf „Wählen" zurückfällt. Betrag und Notiz
-  werden geleert (richtig), das **Datum bleibt** (richtig) — es sind genau die beiden Auswahlfelder,
-  die ihren Wert verlieren.
-- **Warum das mehr ist als eine Unbequemlichkeit:** Wer einen Stapel Dollar-Belege nachträgt, tippt
-  den zweiten Betrag ein und speichert — und erfasst ihn **in Euro zum Nennwert**. Aus 89,99 USD
-  werden 89,99 €. Es erscheint keine Meldung, die Zeile sieht plausibel aus, und die Monatssumme ist
-  still falsch. Genau dagegen wurde AC-6 geschrieben.
-- **Reproduktion:** `/` öffnen, Betrag eintragen, Währung auf USD stellen, Kategorie wählen, Datum
-  setzen, „Erfassen" → nach dem Speichern steht die Währung auf EUR und die Kategorie auf „Wählen".
-- **Vorbestehend, nicht von PROJ-3 verursacht.** Die Kategorie verhält sich seit PROJ-2 so und
-  verletzt dort **AC-3** („Kategorie und Datum stehen unverändert"). PROJ-3 erbt das Verhalten für
-  die Währung, wo die Folge schwerer wiegt.
-- **Warum es nie auffiel:** PROJ-2s QA führt AC-3 als
-  „**[!] NICHT GEPRÜFT: reine Browser-Interaktion**", und PROJ-2s E2E-Journey 1 prüft unter der
-  Überschrift „AC-3" zwar Betrag, Notiz, **Datum** und Fokus — **die Kategorie aber nicht**
-  (`tests/PROJ-2-expenses-monthly-overview.spec.ts:79-84`). Die eine Zusicherung, die gefehlt hat,
-  ist genau die, die den Fehler gezeigt hätte.
-- **Verdacht zur Ursache** (für `/build`, nicht abschließend geprüft): Betroffen sind ausschließlich
-  die beiden Radix-`Select`-Felder, nicht die einfachen Eingabefelder. Das deutet auf das
-  Zurücksetzen des Formulars nach einer Server Action und das versteckte native Auswahlfeld, das
-  Radix mitführt.
-
-### BUG-3: Bei nicht erreichbarer Datenbank hängt die Erfassung 50 Sekunden und endet mit HTTP 500
-
-- **Severity:** Medium · **Status:** offen · **Betrifft:** PROJ-3 EC-9, und dahinter PROJ-2 EC-4
-- _(war BUG-1 im ersten Durchlauf; umnummeriert, weil `/e2e-tests` zwei schwerere Befunde ergänzt hat)_
-- **Was passiert:** Wird die Datenbank angehalten, antwortet eine Erfassung nach **50,4 Sekunden**
-  mit **HTTP 500** und einem 21 Byte langen Rumpf. Es erscheint **keine** verständliche Meldung. EC-9
-  verlangt aber ausdrücklich, dass PROJ-2s EC-4 weiter gilt („dann erscheint eine verständliche
-  Meldung und die eingegebenen Werte bleiben im Formular stehen").
-- **Reproduktion:** `docker pause supabase_db_praxisprojekt-ai-engineering`, dann eine Ausgabe
-  erfassen → nach ~50 s HTTP 500. Danach `docker unpause`.
-- **Nicht von PROJ-3 verursacht.** Gegengeprüft: Eine **Euro**-Erfassung, die den Kursdienst gar
-  nicht aufruft, verhält sich **identisch** (HTTP 500 nach 50,4 s), und schon das bloße Laden der
-  Seite braucht 50,4 s. Die Ursache liegt vor dem Kurs: `requireUser()` fragt den Auth-Server, und
-  auf diesem Weg gibt es **keine Frist** — `grep` nach `AbortSignal` in `lib/auth.ts`,
-  `lib/supabase/server.ts` und `lib/actions/expenses.ts` findet nichts.
-- **Warum es erst jetzt auffällt:** PROJ-2s QA-Bericht führt EC-4 ausdrücklich als
-  „**[!] NICHT GEPRÜFT zur Laufzeit**: der echte Ausfall. Die Datenbank dafür anzuhalten hätte den
-  lokalen Stack der Nutzerin gestört". Geprüft war nur der Fehler**zweig** mit einer gestellten
-  Datenbankantwort. Dieser Lauf hat den Ausfall wirklich herbeigeführt.
-- **Warum Medium und nicht High:** Es tritt nur ein, wenn die Datenbank ohnehin steht — dann ist die
-  App so oder so nicht benutzbar. Es gehen keine Daten verloren, keine Zeile entsteht, und es ist
-  keine Sicherheitslücke. Was fehlt, ist der **würdige Ausfall**, den der Vertrag zusagt.
-- **Warum nicht Low:** 50 Sekunden sind mehr als eine Unschönheit. Hinter einem üblichen
-  vorgelagerten Server mit 30- bis 60-Sekunden-Frist sieht die Person einen Gateway-Fehler statt
-  irgendeiner Meldung — genau die Überlegung, aus der PROJ-1 seinen Toren eine 2-Sekunden-Frist
-  gegeben hat (dort TD-34, nach demselben Befund mit 60 Sekunden).
-- **Wohin es gehört:** Die Ursache liegt in PROJ-1/PROJ-2-Code, nicht in PROJ-3. Sauber wäre
-  `/refine PROJ-2` (EC-4 präzisieren: eine Frist auf die Datenbank- und Auth-Aufrufe) und danach
-  `/build`. PROJ-3 allein deswegen aufzuhalten wäre widersprüchlich — PROJ-2 steht mit demselben
-  Verhalten bereits auf *Approved*.
-
-### BUG-4: Der zugängliche Name der Währungsoptionen läuft zusammen
-
-- **Severity:** Low · **Status:** **behoben am 01.09.2026** · die Auswahl liest sich jetzt „EUR Euro" · **Betrifft:** AC-1 (Zugänglichkeit) · gefunden von `/e2e-tests`
-- **Was passiert:** Eine Option der Währungsauswahl heißt maschinell **„USDUS-Dollar"** — Code und
-  Anzeigename stehen ohne Trennzeichen nebeneinander. Optisch trennt sie ein Rand, im Textinhalt
-  fehlt jedes Leerzeichen. Ein Screenreader liest ein Wortmonster vor.
-- **Evidenz:** im Browser ausgelesen — `EUREuro`, `USDUS-Dollar`, `CHFSchweizer Franken`, …
-- **Fix-Richtung:** ein echtes Leerzeichen zwischen die beiden Spannen, oder ein `aria-label` an der
-  Option. Der E2E-Test ist bewusst so geschrieben, dass er **vor und nach** der Behebung trifft
-  (Präfix statt Wortgrenze) — er schreibt den Fehler nicht fest.
-
-### BUG-5: Die Erfassungszeile sendet ohne JavaScript per GET — mit allen Feldern in der Adresszeile
-
-- **Severity:** High · **Status:** offen · **Betrifft:** `.claude/rules/security.md` → *Sensitive Data in URLs* · **verursacht von der Behebung für BUG-2** · gefunden in QA-Lauf 2
-- **Was passiert:** Die Erfassungszeile wird jetzt als `<form noValidate class="…">` ausgeliefert —
-  **ohne `method` und ohne `action`**. Ein Formular ohne `method` sendet nativ per **GET**. Steht
-  JavaScript nicht zur Verfügung oder scheitert es, landen Betrag, Währung, Kategorie, Datum und
-  **die Notiz** in der Adresszeile:
-  `/?amount=1250%2C00&currency=USD&category=software&spentOn=2026-08-17&note=Mittagessen+mit+Dr.+M%C3%BCller`
-  — und damit im Browserverlauf, in Server-Protokollen und in `Referer`-Kopfzeilen.
-- **Und die Ausgabe geht verloren:** Derselbe Aufruf antwortet mit HTTP 200 und legt **keine Zeile**
-  an. Ohne JavaScript ist die Erfassung damit nicht nur undicht, sondern wirkungslos.
-- **Reproduktion:** `curl` auf `/?amount=…&note=…` mit gültiger Sitzung → HTTP 200, `select count(*)
-  from expenses` bleibt 0. Im ausgelieferten HTML: `<form noValidate class="…">` ohne `method`.
-- **Vergleich, der es einordnet:** PROJ-1s Anmeldeformular trägt unverändert
-  `<form … action="" encType="multipart/form-data" method="POST">`, der Änderungsdialog ebenfalls
-  (`action={submit}`). **Nur die Erfassungszeile** hat die Zusicherung verloren.
-- **Ursache:** Die Umstellung von `action={formAction}` auf `onSubmit` + `startTransition`, mit der
-  BUG-2 behoben wurde. `action={formAction}` erzeugte das `method="POST"` und die versteckten
-  Server-Action-Felder; ohne sie gibt es weder POST noch Bedienbarkeit ohne JavaScript.
-- **Nebenwirkung für die Prüfbarkeit:** `/qa` kann die Erfassungszeile seither **nicht mehr über
-  HTTP ansteuern** — die `$ACTION_*`-Felder fehlen. Der Erfassungspfad ist damit nur noch über die
-  E2E-Suite prüfbar. Das ist derselbe Verlust, aus einer anderen Richtung gesehen.
-- **Fix-Richtung (für `/build`, nicht hier entschieden):** BUG-2 anders lösen als über den Wegfall
-  von `action=`. Denkbar wäre, `action={formAction}` beizubehalten und das Zurücksetzen am `Select`
-  abzufangen, statt das Formular umzubauen. Was auch immer gewählt wird: **`method="POST"` muss im
-  ausgelieferten Markup wieder stehen** — das ist in diesem Projekt eine harte Zusicherung, keine
-  Geschmacksfrage.
+- **Severity:** Low · **Status:** offen · **Betrifft:** PROJ-2 (EC-4/EC-12, `DEADLINE_MS`), mittelbar PROJ-3 EC-9 · **nicht von PROJ-3 verursacht** · gefunden in QA-Lauf 3
+- **Was passiert:** Die Frist aus PROJ-2 ist ein **Wanduhr-Budget** von 2 Sekunden auf jeden
+  Datenbank- und Auth-Aufruf (`deadline.ts`, `DEADLINE_MS = 2000`). Sie misst damit nicht, wie lange
+  die Datenbank braucht, sondern wie lange die Anfrage **insgesamt** unterwegs war — Warteschlange im
+  eigenen Node-Prozess eingeschlossen. Ist die Maschine ausgelastet, reißt das Budget, obwohl die
+  Datenbank kerngesund ist, und die Person liest „Wir erreichen deine Daten gerade nicht" oder
+  „Die Registrierung ist gerade nicht möglich".
+- **Evidenz:** Im vollständigen E2E-Lauf mit zwei Browsern und zwei Arbeitern scheiterten Tests
+  daran — einmal 2 von 28, in einem anderen Lauf 16 von 28. Der Schnappschuss eines Fehlschlags
+  zeigt die Meldung im Klartext: `alert: Die Registrierung ist gerade nicht möglich. Bitte versuche
+  es in einem Moment noch einmal.` **Jeder dieser Tests ist einzeln gefahren grün** — PROJ-1 8/8,
+  die beiden PROJ-2-Journeys 2/2. Gegenprobe zur Datenbank: Sie beantwortete zum selben Zeitpunkt
+  40 gleichzeitige Abfragen in **35 ms**.
+- **Reproduktion:** `npx playwright test` (voller Lauf, zwei Arbeiter) auf einer Maschine, die
+  nebenher etwas zu tun hat. Es trifft nicht immer dieselben Tests — das ist das Merkmal einer
+  Schwelle, nicht eines kaputten Features.
+- **Warum Low:** Bei ruhiger Maschine blieben 80 gleichzeitige Seitenaufrufe **fehlerfrei** (0 von
+  80). Es gehen keine Daten verloren, es entsteht keine falsche Zeile, und es ist keine
+  Sicherheitslücke. Das Produkt hat einen Benutzer und laut PRD **kein Server-Deployment**.
+- **Warum es trotzdem im Bericht steht, und nicht als Rauschen abgetan:** Es macht die eigene
+  E2E-Suite unzuverlässig — und eine unzuverlässige Suite ist genau der Weg, auf dem BUG-1 und BUG-2
+  zwei Prüfungen überlebt haben. Wer rote Tests gewohnheitsmäßig noch einmal laufen lässt, sieht
+  irgendwann den echten roten Test nicht mehr. Zweitens sagt die App etwas Unwahres über die eigene
+  Lage: Sie behauptet ein Infrastrukturproblem, wo sie selbst der Engpass ist — dieselbe Art von
+  Unehrlichkeit, gegen die PROJ-3 seine Kursmeldungen sorgfältig getrennt hat.
+- **Wohin es gehört:** `/refine PROJ-2`. Denkbare Richtungen, hier nicht entschieden: die Frist erst
+  ab dem tatsächlichen Absenden des Aufrufs zählen statt ab dem Eintritt in die Anfrage; oder die
+  Meldung bei Fristablauf zurückhaltender fassen, sodass sie keine Aussage über die Gegenstelle macht.
 
 ---
 
 ## Summary
 
-**Zweiter Durchlauf, 01.09.2026.**
+**Dritter Durchlauf, 01.09.2026.**
 
-- **Acceptance Criteria:** **19 von 19 erfüllt** — AC-6 und AC-11 jetzt erstmals **im Browser** belegt
-- **Edge Cases:** **8 von 9 erfüllt** — EC-9 offen als BUG-3 (gehört nach PROJ-2)
-- **Bugs:** 0 Critical · **1 High offen** (BUG-5, **neu, durch die Behebung von BUG-2 entstanden**) · 1 Medium offen (BUG-3) · **geschlossen: BUG-1, BUG-2, BUG-4**
-- **Security:** die bestehenden Kontrollen halten unverändert — Zugriffsschutz auf allen drei Routen (307), `expenses` und `profiles` anonym 401, alle vier Sicherheits-Header, **null** Secrets im Bundle. **Neu negativ: BUG-5**
-- **Tests:** 214 Unit-/Integrationstests grün · **24 von 24 E2E grün** in Chromium und Mobile Safari · Lint und Build sauber
-- **Production Ready:** **NEIN.** Ein High-Befund steht offen.
+- **Acceptance Criteria:** **19 von 19 erfüllt**
+- **Edge Cases:** **9 von 9 erfüllt** — EC-9 ist mit der Fristen-Arbeit aus PROJ-2 geschlossen
+- **Bugs:** 0 Critical · **0 High** · 0 Medium · **1 Low offen** (BUG-6, gehört nach PROJ-2) ·
+  **geschlossen in diesem Lauf: BUG-5 (High) und BUG-3 (Medium)**; aus Lauf 2 bereits geschlossen:
+  BUG-1, BUG-2, BUG-4
+- **Security:** 10 Prüfungen verifiziert, 2 NOT VERIFIED, keine negativ. Der Befund aus Lauf 2 ist
+  geschlossen — die Erfassungszeile trägt wieder `method="POST"`
+- **Tests:** 255 Unit-/Integrationstests grün (8 neue, rot nachgewiesen) · alle PROJ-3-Journeys grün
+  in Chromium und Mobile Safari · PROJ-1 8/8 · Lint, Build und TypeScript sauber
+- **Production Ready:** **JA** — kein Critical- und kein High-Befund. Mit den zwei NOT-VERIFIED-Punkten
+  im Blick (keine Drosselung gewöhnlicher Endpunkte, kein Firefox) und dem offenen BUG-6, der PROJ-2
+  gehört.
 
-**Der Befund ist die Behebung.** BUG-1, BUG-2 und BUG-4 sind sauber geschlossen und im Browser
-nachgewiesen — die drei Journeys, die letzten Lauf rot waren, sind grün, und der Rückbau jeder
-Behebung macht genau die zugehörige Zusicherung wieder rot. **Der Weg dorthin hat jedoch eine harte
-Zusicherung des Projekts gebrochen:** Die Erfassungszeile trägt kein `method="POST"` mehr, sendet
-ohne JavaScript per GET und legt Betrag, Kategorie, Datum und Notiz in die Adresszeile — von wo aus
-sie in Verlauf, Protokolle und `Referer`-Kopfzeilen wandern. Dieselbe Ausgabe wird dabei nicht
-gespeichert.
+**Was dieser Lauf wirklich gezeigt hat.** Die beiden Befunde aus Lauf 2 sind nicht nur als behoben
+gemeldet, sondern nachgemessen: Die Erfassungszeile wird wieder als POST ausgeliefert — am rohen HTML
+eines Produktions-Builds geprüft, nicht am hydrierten DOM, weil genau dort die Lücke lag. Und bei
+angehaltener Datenbank antwortet die Erfassung nach 4 Sekunden mit einer verständlichen Meldung statt
+nach 50 Sekunden mit einem leeren HTTP 500.
 
-**Was daran zu lernen ist:** Eine Behebung, die den Absendeweg eines Formulars ändert, ist nie nur
-eine Zustandsfrage der Oberfläche. `action={formAction}` hat drei Dinge gleichzeitig geliefert —
-POST, Bedienbarkeit ohne JavaScript und die Prüfbarkeit über HTTP. Alle drei sind mitgegangen, und
-im `/build`-Lauf ist das niemandem aufgefallen, weil die E2E-Suite mit JavaScript läuft und deshalb
-grün blieb.
+**Was neu dazukam, ist kein Fehler im Feature, sondern einer in der Ehrlichkeit der App unter Last.**
+Die Zwei-Sekunden-Frist misst die Gesamtdauer einer Anfrage und schreibt eine gerissene Frist der
+Datenbank zu. Solange die Maschine ruhig ist, passiert das nie; unter Last sagt die App etwas über
+die Gegenstelle, was sie nicht geprüft hat. Das ist derselbe Fehler in klein, den PROJ-3 beim
+Kursdienst groß vermieden hat — dort ist „gibt es nicht" sorgfältig von „gerade nicht erreichbar"
+getrennt.
 
-**Was trotzdem steht:** Der fachliche Kern des Features ist unverändert in Ordnung und in diesem Lauf
-erneut belegt — 19 von 19 AC, die Wochenendregel, die Nachrechenbarkeit, die Summen über vier
-Währungen, der Export, der Zugriffsschutz. Was offen ist, ist ein Absendeweg, nicht die Umrechnung.
-
-**Nicht geprüft in diesem Lauf** (unverändert aus Lauf 1, plus eine Verschärfung): Darstellung auf
-verschiedenen Bildschirmbreiten, andere Browser als Chromium und WebKit, ein vollständiger Neuaufbau
-der Datenbank — **und neu:** der Erfassungspfad ist über HTTP nicht mehr prüfbar (BUG-5), sodass
-`/qa` dort ganz auf die E2E-Suite angewiesen ist.
+**Ein methodischer Hinweis, weil er diesen Lauf beinahe verdorben hätte:** Zwei Messungen mussten
+verworfen werden. Die erste lief gegen einen fremden Server, der die 3100 übernommen hatte; die
+zweite entstand, während Docker Desktop ausfiel, und zeigte eine Ausfallrate, die sich bei gesunder
+Maschine nicht bestätigte. Beide Male hat erst die Gegenprobe den Irrtum gezeigt. Was hier als
+gemessen steht, ist das, was nach der Gegenprobe übrig blieb.
