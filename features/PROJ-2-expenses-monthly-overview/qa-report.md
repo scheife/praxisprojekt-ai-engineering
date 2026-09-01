@@ -123,6 +123,71 @@ prüfbar bleibt. Die Prüfbahnen (Sicherheit, Regression) liefen nacheinander, n
   `sb-`-Cookies und eine gültige Sitzung · *Nachweis: `curl -c cookies.txt`, danach `/` → HTTP 200*
 
 
+---
+
+## Dritter Durchlauf — 01.09.2026 (Verifikation der Behebung von BUG-4)
+
+**Getestet:** 2026-09-01 · **App-URL:** `http://localhost:3300` (`next dev`) · **Testsuite:**
+`npm test` → **246 Tests, 19 Dateien, alle grün** (vorher 242) · **E2E:** `E2E_PORT=3400 npx
+playwright test` → **28 von 28 grün** in Chromium und Mobile Safari
+
+> **Warum Port 3400 statt 3200.** Auf 3200 lief während dieses Laufs ein **fremder** Dev-Server
+> (Titel `alex macht. · …`). `reuseExistingServer` hätte ihn stillschweigend übernommen und die
+> Suite hätte die falsche Anwendung geprüft — genau die Falle, vor der `playwright.config.ts`
+> warnt. Der Lauf wurde deshalb auf einen freien Port gelegt.
+
+**Umfang.** Dieser Lauf prüft **eine** Sache unabhängig nach: ob die Behebung von BUG-4 hält. Dazu
+Sicherheit und Regression. Die übrigen Kriterien stehen aus den ersten beiden Durchläufen.
+
+### BUG-4 — behoben und verifiziert
+
+- [x] **Der Fall, der den Befund ausgelöst hat** — `docker pause` auf **nur** PostgREST, Auth läuft
+  weiter, angemeldete Sitzung: **HTTP 200 nach 2,27 s**, **null Umleitungen**, Meldung „Wir erreichen
+  deine Daten gerade nicht", Knopf „Erneut versuchen", `role="alert"` · *Nachweis: `curl -b
+  cookies.txt -w "%{http_code} %{time_total} %{num_redirects}"` → `200 2.265297 0`; `grep` auf
+  Meldung, Knopf und `role="alert"` je 1 Treffer*
+- [x] **Der sichtbare Text ist nicht mehr bloß „auslage."** — nach Entfernen aller Tags:
+  `auslage. auslage . auslage . Konto Abmelden Wir erreichen deine Daten gerade nicht. Das liegt
+  nicht an dir — versuch es in einem M…` · *Nachweis: dasselbe Markup, Tags entfernt*
+- [x] **Der Rahmen bleibt stehen** — Kopfzeile mit „Konto" und „Abmelden" im Markup · *Nachweis: ebenso*
+- [x] **Nach dem Freigeben** — `docker unpause`, sofort wieder HTTP 200 in **0,23 s**
+- [x] **Nur ein Nichterreichen wird abgefangen** — jeder andere Fehler fliegt weiter, statt fälschlich
+  als „gerade nicht erreichbar" zu erscheinen · *Nachweis: `src/components/expenses/month-view.tsx:36`
+  (`if (!isUnreachable(error)) throw error`) und der Test „reicht jeden ANDEREN Fehler weiter" in
+  `month-view.test.tsx`, der einen `42501`-Fehler durchreichen lässt*
+- [x] **Keine weitere Stelle mit derselben Lücke** — `/konto` liest **keine** Daten (nur die
+  Sitzung), `/konto/export` fängt den Fall bereits ab (HTTP 503), und der Schreibpfad meldet bei
+  einem Datenbankfehler `SAVE_FAILED` („Das Speichern hat gerade nicht geklappt …") — verständlich im
+  Sinne von EC-4 · *Nachweis: `grep` nach Abfragen in `src/app/konto/page.tsx` (keine Treffer),
+  `src/lib/actions/expenses.ts:258`*
+
+### BUG-6 — unverändert offen
+
+- [ ] **BUG** Erneut gemessen, Zustand unverändert: **GET / 2,09 s · POST / 4,07 s** bei angehaltener
+  Datenbank. Die Frist gilt weiter je Aufruf, nicht je Anfrage · *Nachweis: `curl -w "%{time_total}"`
+  je einmal GET und POST während `docker pause`*
+
+### Sicherheit (Stichproben nach der Änderung)
+
+- [x] **Zugriffsschutz** — `/`, `/konto`, `/konto/export` ohne Sitzung je **HTTP 307** · *Nachweis: `curl`*
+- [x] **Erfassungszeile weiterhin POST** — `method="POST"` im ausgelieferten Markup · *Nachweis: `grep`*
+- [x] **Keine Secrets im Client** — 0 Treffer für `service_role` und `GATE_SECRET` in `.next/static`
+- [!] **NICHT GEPRÜFT** — die vollständige Angriffsliste. Dieser Lauf hat nur die Prüfungen wiederholt,
+  die die geänderte Datei berühren könnte. Der zweite Durchlauf hat die volle Liste abgearbeitet
+  (RLS mit gültigem anon-Schlüssel, Drosselung, serverseitige Eingabeprüfung); dort steht sie mit
+  Nachweisen
+
+### Regression
+
+- [x] **Unit-/Integrationstests** — 246 von 246 grün, 19 Dateien (4 neue in `month-view.test.tsx`)
+  · *Nachweis: `npm test`*
+- [x] **E2E-Suite** — 28 von 28 grün in beiden Browsern, also PROJ-1, PROJ-2 und PROJ-3
+  · *Nachweis: `E2E_PORT=3400 npx playwright test`*
+- [x] **Normalbetrieb unbeeinträchtigt** — `/` mit Sitzung in **0,23 s** · *Nachweis: `curl` nach `docker unpause`*
+- [x] **Rot-Nachweis der neuen Tests** — im Bau geführt: `catch` entfernt → 2 Tests rot; jeden Fehler
+  abfangen statt nur das Nichterreichen → 1 Test rot; danach alle vier grün
+
+
 ## Acceptance Criteria
 
 ### Ausgabe erfassen
@@ -483,10 +548,9 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 
 ### BUG-4: Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert
 - **Severity:** ~~Low~~ → **High** (hochgestuft am 2026-09-01 im zweiten Durchlauf)
-- **Status:** **Behebung eingebaut am 01.09.2026** (`/build BUG-4`) — `MonthView` fängt ein
-  Nichterreichen ab und zeigt `UnavailableNotice`; am echten Ausfall (`docker pause` auf PostgREST)
-  belegt: Meldung, Knopf und Kopfzeile stehen, sichtbarer Text nicht mehr nur „auslage.".
-  **Die Verifikation steht noch aus** — sie gehört in den nächsten `/qa`-Lauf, nicht in den Bau
+- **Status:** **BEHOBEN am 01.09.2026, verifiziert im dritten Durchlauf.** `MonthView` fängt ein
+  Nichterreichen ab und zeigt `UnavailableNotice`; jeder andere Fehler fliegt weiter. Unabhängig
+  nachgeprüft: HTTP 200 nach 2,27 s, null Umleitungen, Meldung und Knopf vorhanden, Rahmen steht
 - **Betrifft:** ~~keine AC~~ → **EC-4**. Der `/refine` vom 01.09.2026 hat EC-4 ausdrücklich auf das
   **Lesen** ausgeweitet: „… wenn eine geschützte Seite **geladen** … wird, dann gibt die App nach
   höchstens 2 Sekunden auf und zeigt eine verständliche Meldung." Genau das leistet dieser Pfad nicht
@@ -575,6 +639,37 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Nachweis:** `npm run test:e2e` → 18 von 18 grün; vorher fiel Journey 3 auf **beiden** Engines an genau diesem Schritt
 
 ---
+
+## Zusammenfassung — dritter Durchlauf (01.09.2026)
+
+- **Geprüft:** die Behebung von BUG-4, unabhängig vom Bau nachgestellt, plus Sicherheit und Regression
+- **Ergebnis:** **BUG-4 geschlossen.** Damit ist **kein Critical- und kein High-Befund mehr offen**
+- **Bugs:** 0 Critical · 0 High · **2 Medium** (BUG-6, BUG-3) · 1 Low (BUG-2)
+- **Security:** 3 Stichproben bestanden, die vollständige Liste steht aus dem zweiten Durchlauf
+- **Tests:** 246 Unit-/Integrationstests grün (vorher 242) · 28 von 28 E2E grün in beiden Browsern
+- **Production Ready:** **JA** — kein Critical- oder High-Befund. **Mit zwei benannten Einschränkungen**
+  (siehe unten); „Ready" heißt hier *keine blockierenden Fehler gefunden*, nicht *alles geprüft*
+
+**Was jetzt trägt.** Der würdige Ausfall, um den es im `/refine` ging, hält auf allen drei Wegen:
+Fallen Datenbank und Auth-Server zusammen aus, greift die Sitzungsprüfung (2,12 s). Fällt **nur** der
+Datenzugriff aus, greift `MonthView` (2,27 s). Der Export antwortet mit 503. In allen drei Fällen
+steht der Rahmen, die Meldung ist dieselbe, und es wird **nicht** auf `/login` umgeleitet.
+
+**Die zwei Einschränkungen, die bewusst offen bleiben.**
+
+1. **BUG-6 (Medium): EC-4 wird auf dem POST-Pfad um den Faktor zwei verfehlt** — 4,07 s statt der
+   zugesagten 2 Sekunden, weil zwei Sitzungsprüfungen hintereinander je ihre eigene Frist bekommen.
+   Der Vertrag ist damit auf diesem Pfad **nicht vollständig erfüllt**. Das ist eine bewusste
+   Freigabe mit bekanntem Mangel, keine Feststellung, dass EC-4 erfüllt wäre
+2. **BUG-3 (Medium): zwei gleich benannte „Abmelden"-Schaltflächen auf `/konto`** — unverändert eine
+   Routing-Frage, die PROJ-1s Vertrag berührt
+
+**Was dieser Lauf nicht geprüft hat.** Darstellung auf verschiedenen Bildschirmbreiten und in anderen
+Browsern (kein Browser in `/qa`), die Wirkung des Knopfes „Erneut versuchen", der Schreibweg bei
+Nichterreichbarkeit zur Laufzeit (durch Unit-Tests abgedeckt), und die vollständige Angriffsliste
+(im zweiten Durchlauf abgearbeitet). Die 30 AC und 10 unveränderten EC wurden **nicht** einzeln neu
+durchgespielt.
+
 
 ## Zusammenfassung — zweiter Durchlauf (01.09.2026)
 

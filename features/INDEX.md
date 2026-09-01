@@ -23,7 +23,7 @@
 | ID | Feature | Description | Status | Spec | Created |
 |----|---------|-------------|--------|------|---------|
 | PROJ-1 | Konto & Anmeldung | Registrierung und Login per E-Mail und Passwort; der Ausgabenbereich ist nur angemeldet erreichbar, und jede Person sieht ausschließlich die eigenen Daten. | Approved | [PROJ-1-accounts-auth](PROJ-1-accounts-auth/) | 2026-08-27 |
-| PROJ-2 | Ausgaben & Monatsübersicht | Ausgaben in Euro anlegen, bearbeiten und löschen (Betrag, Kategorie, Datum, Notiz) und je Monat Summe pro Kategorie plus Gesamtsumme sehen. | In Progress | [PROJ-2-expenses-monthly-overview](PROJ-2-expenses-monthly-overview/) | 2026-08-27 |
+| PROJ-2 | Ausgaben & Monatsübersicht | Ausgaben in Euro anlegen, bearbeiten und löschen (Betrag, Kategorie, Datum, Notiz) und je Monat Summe pro Kategorie plus Gesamtsumme sehen. | Approved | [PROJ-2-expenses-monthly-overview](PROJ-2-expenses-monthly-overview/) | 2026-08-27 |
 | PROJ-3 | Fremdwährung & Wechselkurs | Ausgaben in Fremdwährung erfassen, mit dem Kurs ihres Ausgabetags in Euro umrechnen und den verwendeten Kurs samt Datum ausweisen. | In Progress | [PROJ-3-foreign-currency-exchange-rate](PROJ-3-foreign-currency-exchange-rate/) | 2026-08-27 |
 
 **Build order:** P0 (MVP): PROJ-1 → PROJ-2 (braucht PROJ-1) → PROJ-3 (braucht PROJ-2)
