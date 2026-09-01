@@ -195,6 +195,16 @@
 
 - [x] T27  **BUG-4 (High):** Der Lesepfad bekommt denselben Ausgang wie die Sitzungsprüfung. Fällt **nur** der Datenzugriff aus, während der Auth-Server erreichbar bleibt, ist die Sitzung feststellbar und erst die Monatsabfrage scheitert — dort fing sie niemand, und die Person sah dauerhaft das Ladegerüst. `MonthView` fängt jetzt ein **Nichterreichen** ab und zeigt `UnavailableNotice`; **jeder andere Fehler fliegt weiter**, denn ihn als „gerade nicht erreichbar" auszugeben wäre dieselbe falsche Behauptung, gegen die EC-12 geschrieben wurde  · files: `src/components/expenses/month-view.tsx`, `src/components/expenses/month-view.test.tsx`  · → EC-4
 
+### Ebene 11 — Die Gesamtgrenze aus EC-4 festhalten (01.09.2026)
+
+<!-- Nach dem zweiten `/refine` und `/architecture`. Der Entwurf hält fest: Es wird **kein neuer
+     Mechanismus** gebaut — die Anwendung erfüllt die präzisierte Fassung von EC-4 bereits
+     (gemessen 2,12 s / 2,27 s / 4,07 s, alle unter 5 Sekunden). Was fehlt, ist eine Zusicherung,
+     die es so hält. Zwei Aufgaben, disjunkte Dateien, deshalb beide [P]. -->
+
+- [ ] T28 [P]  **Die Ausfall-Zusicherung**, mit `@outage` markiert und über `grepInvert` aus dem Standardlauf **ausgeschlossen**, dazu ein eigenes Skript `npm run test:outage`. Sie hält **nur PostgREST** an — nicht die Datenbank, dann bleibt die Anmeldung prüfbar und der Eingriff kleiner —, misst das Laden von `/` **und** einen POST darauf, prüft beide gegen die **5-Sekunden-Grenze** und gibt in einem `finally` wieder frei. **Bewusst nicht im Alltagslauf:** Ein pausierter Container reißt bei `workers: 2` jeden gleichzeitig laufenden Test mit, und ein Test, der grundlos rot wird, wird abgeschaltet — dann ist er gar nicht da. Der Preis ist benannt: Wer `npm test` und `npm run test:e2e` grün sieht, hat die Gesamtgrenze **nicht** geprüft; das tut erst `/qa`  · files: `tests/outage.spec.ts`, `playwright.config.ts`, `package.json`  · → EC-4
+- [ ] T29 [P]  **Die strukturelle Zusicherung, die im Alltagslauf mitläuft:** Die beiden Abfragen der Monatsansicht laufen **parallel**, nicht nacheinander. Genau diese Eigenschaft spart eine Wartestation und trägt damit die Rechnung aus `design.md` → *Das Zeitbudget einer Anfrage*. Sie schlägt bei der häufigsten Art an, wie jemand versehentlich eine dritte Wartestation einbaut: die zweite Abfrage hinter die erste zu hängen. Geprüft wird, dass beide begonnen haben, bevor die erste fertig ist — nicht die Uhrzeit, sondern die Reihenfolge  · files: `src/components/expenses/month-view.test.tsx`  · → EC-4
+
 **Nachtrag aus dem Bau (01.09.2026): `account.test.ts` fehlte in T26.** Ebene 9 hatte die
 Testdateien aufgezählt, deren Prüfgegenstand sich ändert — `expenses.test.ts` war dabei,
 `account.test.ts` nicht. Beide mocken aber `requireUser()`, und dessen Rückgabetyp hat sich
@@ -221,7 +231,7 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 - **Innerhalb einer Ebene importiert keine Aufgabe eine andere.** Deshalb liegt `MonthPanel` in Ebene 5
   und nicht bei den Bausteinen — es steckt Composer, Übersicht und Liste zusammen und wäre in Ebene 4
   eine Parallelaufgabe, die auf drei Geschwister wartet.
-- **Grobkörnig, nicht kleinteilig.** 26 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
+- **Grobkörnig, nicht kleinteilig.** 29 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
   ursprünglichen Bau, 10 aus der Runde vom 01.09.2026 (Ebenen 6 bis 9).
 - **Die Ebenen 6 bis 9 folgen derselben Ordnung:** gemeinsames Fundament (L6) → die Stellen, an denen
   gewartet wird (L7) → ihre Aufrufer (L8) → Tests (L9). Disjunktheit geprüft: L6 zwei, L7 drei, L8 drei,
@@ -244,5 +254,5 @@ Alle **30 Acceptance Criteria** und alle **12 Edge Cases** sind mindestens einer
 | AC-26 | T1 · AC-27 T8, T10, T16 · AC-28 T12 · AC-29 T1, T5, T12 · AC-30 T1, T5, T12 |
 | EC-1 | T1, T9, T12 · EC-2 T9, T14 · EC-3 T9, T14 · EC-4 T12 · EC-5 T9, T15 · EC-6 T3 |
 | EC-7 | T6 · EC-8 T7 · EC-9 T7 · EC-10 T8, T10 · EC-11 T9, T14 |
-| **EC-4** (neu gefasst) | T17, T19, T22, T23, T24, T25, T26, **T27** — ersetzt die alte Zuordnung „T12" |
+| **EC-4** (neu gefasst) | T17, T19, T22, T23, T24, T25, T26, **T27**, **T28**, **T29** — ersetzt die alte Zuordnung „T12" |
 | **EC-12** (neu) | T18, T20, T21, T22, T25, T26 |
