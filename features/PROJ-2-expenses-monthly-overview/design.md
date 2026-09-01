@@ -459,12 +459,110 @@ Mischung entsteht, und das leistet die vollständige Ein-Anweisungs-Änderung.
 
 ---
 
+## Wenn Datenbank oder Auth-Server nicht antworten (EC-4, EC-12)
+
+_Nachgetragen von `/architecture PROJ-2` am 01.09.2026, nach dem `/refine`._
+
+**Das Problem in einem Satz:** Es fehlte nicht die Meldung, es fehlte der Punkt, an dem die App
+aufgibt. Gemessen bei angehaltener Datenbank: **50,4 Sekunden**, dann HTTP 500 ohne Text — und das
+bloße Laden der Seite ebenso.
+
+### Die drei Stellen, an denen gewartet wird
+
+1. **Die Vorprüfung** (`proxy.ts`) — läuft vor **jeder** Anfrage und fragt den Auth-Server.
+2. **Die Sitzungsprüfung** (`requireUser()`) — auf jeder geschützten Seite und in jeder Action.
+3. **Die Abfragen und Schreibvorgänge selbst.**
+
+Alle drei hängen an derselben Lücke, und die erste ist die wichtigste: Sie läuft **vor** der Seite.
+Ein Zustand, den nur die Seite zeigen kann, wäre nie erreicht worden.
+
+### Wo die Frist sitzt
+
+An der Stelle, an der der Datenbank-Client erzeugt wird: ein eigener `fetch`, der jede Anfrage nach
+**2 Sekunden** abbricht. Die Supabase-Dokumentation hält ausdrücklich fest, dass ein solcher `fetch`
+für **alle** Aufrufe des Clients gilt — Auth eingeschlossen, nicht nur Datenbankabfragen. Genau das
+wird hier gebraucht: Eine Frist je Abfrage würde nur die Datenbank treffen und ausgerechnet den
+Aufruf auslassen, der zuerst hängt.
+
+Beide Clients bekommen sie — der in `proxy.ts` erzeugte ebenso wie der für Seiten und Actions.
+
+**Die eingebauten Wiederholversuche werden dabei abgeschaltet.** Seit `supabase-js` 2.102.0
+wiederholt der Client Netzwerkfehler bei Datenbankabfragen selbsttätig, mit wachsenden Wartezeiten;
+installiert ist **2.112.4**. Eine Frist je Anfrage wäre damit **je Versuch** wirksam, und die
+zugesagten 2 Sekunden wären in Wahrheit ein Vielfaches — EC-4 wäre still gebrochen geblieben. Es
+gilt: ein Versuch, eine Frist.
+
+### Drei Ausgänge statt zwei
+
+Die Sitzungsprüfung liefert künftig nicht mehr „Person" oder „niemand", sondern drei Ergebnisse:
+
+| Ergebnis | Was es heißt | Was passiert |
+|---|---|---|
+| **Angemeldet** | Der Auth-Server hat die Sitzung bestätigt | wie bisher |
+| **Nicht angemeldet** | Der Auth-Server hat **geantwortet**: die Sitzung gilt nicht | wie bisher — Weiterleitung auf `/login` (EC-5, PROJ-1 EC-3) |
+| **Nicht feststellbar** | Frist abgelaufen, Netzwerkfehler oder Serverfehler — es kam **keine** Antwort | **keine** Weiterleitung, Nicht-erreichbar-Zustand (EC-12) |
+
+Unterschieden wird an der **Art des Fehlers**, nicht am Fehlen der Person: ein abgebrochener oder
+fehlgeschlagener Netzaufruf ist etwas anderes als eine beantwortete Ablehnung. Das ist derselbe
+Schnitt, den PROJ-3 beim Kursdienst zieht — dauerhaft gegen vorübergehend.
+
+### Was die Vorprüfung tut, und warum das den Zugriffsschutz nicht schwächt
+
+Bei „nicht feststellbar" **lässt die Vorprüfung die Anfrage durch**, statt umzuleiten. Das sieht auf
+den ersten Blick wie eine Lücke aus und ist keine:
+
+- Die Vorprüfung war **nie** die Zugriffskontrolle, sondern eine Vorfilterung (TD-2). Die echte
+  Prüfung sitzt auf jeder geschützten Seite.
+- Die Seite kommt zum selben Ergebnis und zeigt deshalb **gar keine Daten**, sondern den
+  Nicht-erreichbar-Zustand.
+- Und es sind auch keine zu holen: Steht der Weg zur Datenbank, liefert Row Level Security nichts.
+- **Fail-open an der Vorprüfung, fail-closed an der Seite.** Wer durchgelassen wird, sieht trotzdem
+  nur „gerade nicht erreichbar".
+
+**Gegenprobe zur entgegengesetzten Regel:** Die Drosselungs-Tore von PROJ-1 fallen bei jeder Störung
+**zu**. Das bleibt so, und es widerspricht dem hier nicht. Dort entscheidet die Regel darüber, ob
+jemand ein Passwort raten darf — fällt sie aus, ist Durchwinken das Risiko. Hier entscheidet nichts
+über Zugang, weil die Seite dahinter ohnehin nichts herausgibt.
+
+### Was die Person sieht
+
+| Ort | Verhalten |
+|---|---|
+| `/` und `/konto` | An der Stelle des Inhalts eine Karte: ein Satz, was gerade nicht geht, plus **„Erneut versuchen"**. Kopfzeile und Rahmen bleiben stehen — die App wirkt nicht abgestürzt |
+| Server Actions | Formularweite Meldung über den Feldern; **alle Eingaben bleiben stehen** (EC-4) |
+| `/konto/export` | HTTP **503** mit kurzem deutschsprachigem Text. Eine Route, die eine Datei liefert, kann keine Karte zeigen |
+
+**Der Text** (überall derselbe, wie die übrigen Meldungen ohne Schuldzuweisung):
+„Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch
+einmal."
+
+**Kein automatischer Neuversuch, kein selbsttätiges Nachladen.** Wer erneut versuchen will, drückt
+darauf. Ein Hintergrundversuch alle paar Sekunden schickt eine bereits überlastete Gegenstelle
+zusätzliche Anfragen und verändert die Seite unter den Händen der Person.
+
+### Neue Rahmen-Komponente
+
+Eine Komponente `UnavailableNotice` unter `src/components/shell/` — sie gehört zum Rahmen, und den
+besitzt PROJ-2. Sie nimmt den Satz und die Schaltfläche und wird von `/` und `/konto` an derselben
+Stelle eingesetzt. `docs/app-shell.md` ist bereits nachgezogen: Seitenmuster um den
+**Nicht-erreichbar-Zustand**, Anmeldezustände um **„nicht prüfbar"**.
+
+### Was das für PROJ-1 heißt
+
+Der Mechanismus sitzt an der gemeinsamen Stelle, also gilt er auch für Anmeldung und Registrierung.
+**Kein Kriterium von PROJ-1 kehrt sich dadurch um:** Dessen EC-4 verlangt eine verständliche
+Meldung, wenn die Datenbank nicht erreichbar ist — die kommt jetzt nach 2 Sekunden statt nach 50.
+Dessen EC-3 (Sitzung abgelaufen) bleibt unberührt, weil „nicht feststellbar" ein Fall ist, den EC-3
+nie beansprucht hat. Die Tore behalten ihre eigene 2-Sekunden-Frist und fallen weiterhin zu.
+
+---
+
 ## Zustände je Seite
 
-| Seite | Laden | Leer | Fehler |
-|---|---|---|---|
+| Seite | Laden | Leer | Fehler | Nicht erreichbar (EC-4, EC-12) |
+|---|---|---|---|---|
 | `/` | Skeletons in `--muted` an der Stelle von Kopf, Summe, Übersicht und drei Listenzeilen — über eine Suspense-Grenze in der Seite, kein Spinner | Ausformulierter Leerzustand statt leerer Tabelle; die Erfassungszeile bleibt bedienbar (AC-12) | Feldfehler am verursachenden Feld, formularweite Fehler als Zeile darüber; Toast nur für Rückmeldungen |
-| `/konto` | unverändert von PROJ-1 (`konto/loading.tsx`), ergänzt um eine Skeleton-Karte für den Export-Abschnitt | — | Der Export-Link führt zu einer Datei; scheitert der Abruf, zeigt der Browser seinen eigenen Fehler |
+| `/konto` | unverändert von PROJ-1 (`konto/loading.tsx`), ergänzt um eine Skeleton-Karte für den Export-Abschnitt | — | Der Export-Link führt zu einer Datei; scheitert der Abruf, zeigt der Browser seinen eigenen Fehler | `UnavailableNotice` an der Stelle der Karten; der Export selbst antwortet mit HTTP 503 |
 
 **Text des Leerzustands** (AC-12): „Für **August 2026** ist noch nichts erfasst. Trag deine erste
 Ausgabe oben ein — Betrag, Kategorie, Datum, fertig."
@@ -520,6 +618,9 @@ Bewusst **nicht** hinzugefügt:
   bedienen als jedes Nachbaubare (TD-14)
 - **keine Diagrammbibliothek**: der Anteilsbalken einer Kategoriezeile ist ein Rechteck mit einer
   Breite in Prozent
+- **kein Paket für Fristen oder Wiederholversuche** (etwa `fetch-retry`): `AbortSignal.timeout` ist
+  Teil der Laufzeit, und die Wiederholversuche werden gerade **abgeschaltet**, nicht ergänzt
+  (TD-27, TD-28)
 - **keine Datumsbibliothek**: gebraucht werden Monatsgrenzen und „heute in Wien" — das leistet die
   Laufzeit
 - **kein `react-hook-form`**: die Formulare laufen wie bei PROJ-1 über Server Actions mit
@@ -572,6 +673,10 @@ Punkte* und in `docs/privacy.md`.
 | **TD-24** `spent_on` ist ein **reines Datum**, „heute" kommt vom Server in Europe/Vienna | Ein Datum ohne Uhrzeit kann beim Anzeigen nicht in eine andere Zeitzone rutschen. Am 1. um 00:30 Uhr Wiener Zeit gehört die Ausgabe damit in den neuen Monat, auch wenn der Server in UTC noch im alten steht (EC-6) | Zeitstempel mit Zeitzone speichern und beim Anzeigen umrechnen | Die Uhrzeit einer Ausgabe geht verloren — sie wird nirgends gebraucht, und ihr Fehlen ist zugleich eine Angabe weniger über den Tagesablauf der Person | 2026-08-29 |
 | **TD-25** Row Level Security mit **vier Policies** plus Zugehörigkeitsprüfung im Anwendungscode | Genau das Muster, das PROJ-1 an `profiles` etabliert hat — kein zweites daneben. AC-24 verlangt die Datenbankschicht, AC-25 die Anwendungsschicht; beide, weil früher oder später eine davon umgangen wird | Nur die Prüfung im Anwendungscode | Zwei Stellen, an denen dieselbe Regel steht. Das ist hier gewollt: der öffentliche Schlüssel steckt in jedem Browser, und ohne RLS liest ihn jeder direkt aus | 2026-08-29 |
 | **TD-26** AC-26 entsteht durch die **Löschweitergabe**, nicht durch eigenen Code | `expenses` hängt an `profiles`, `profiles` an `auth.users`, und die Kontolöschung von PROJ-1 entfernt die Zeile in `auth.users`. Damit sind die Ausgaben mit weg, ohne dass die Löschfunktion geändert werden müsste | Die Löschfunktion von PROJ-1 um ein Löschen der Ausgaben erweitern | Die Löschfunktion von PROJ-1 bleibt unangetastet — und kann bei einem künftigen Feature nicht vergessen werden, weil die Datenbank die Kette hält und nicht eine Liste im Code | 2026-08-29 |
+| **TD-27** Die Frist sitzt im **gemeinsamen `fetch` des Clients**, nicht je Abfrage | Ein eigener `fetch` gilt laut Supabase-Dokumentation für **alle** Aufrufe des Clients — Auth eingeschlossen. Eine Frist je Abfrage (`abortSignal`) träfe nur die Datenbank und ließe ausgerechnet den Auth-Aufruf aus, der als erster hängt und in `proxy.ts` vor jeder Anfrage steht | `.abortSignal()` an jede Abfrage hängen; jede Server Action einzeln in ein Zeitlimit wickeln | Eine Zahl für alle Aufrufe: Ein Sonderfall, der legitim länger braucht, lässt sich nicht einzeln großzügiger stellen, ohne die Stelle wieder aufzubrechen. Bei einer App ohne lange Abfragen ist das kein Verlust | 2026-09-01 |
+| **TD-28** Die **eingebauten Wiederholversuche** von `supabase-js` werden abgeschaltet | Seit 2.102.0 wiederholt der Client Netzwerkfehler bei Datenbankabfragen selbsttätig mit wachsenden Wartezeiten; installiert ist 2.112.4. Die Frist wäre damit **je Versuch** wirksam und EC-4s „höchstens 2 Sekunden" schlicht unwahr — der Fehler wäre still geblieben, weil niemand die Summe der Versuche misst | Wiederholversuche belassen und die Frist als Gesamtbudget über die ganze Operation legen | Ein kurzer Aussetzer, den ein Neuversuch überbrückt hätte, wird jetzt sichtbar. Dafür liegt der Neuversuch dort, wo die Person ihn sieht und selbst auslöst (EC-12), statt unsichtbar ihre Wartezeit zu verlängern | 2026-09-01 |
+| **TD-29** Die **Vorprüfung lässt durch**, wenn sie die Anmeldung nicht feststellen kann — statt umzuleiten | EC-12: `/login` braucht denselben Auth-Server, die dort angebotene Handlung könnte also gar nicht gelingen. Die Vorprüfung war nie die Zugriffskontrolle, sondern eine Vorfilterung (TD-2); die echte Prüfung sitzt auf der Seite und zeigt ohne Datenbank ohnehin nichts an | Weiterleitung mit eigenem Grund (`reason=unavailable`); Fehlerseite direkt aus der Vorprüfung | Fail-open an einer Stelle, die bisher fail-closed war. Getragen davon, dass die Seite dahinter dieselbe Prüfung wiederholt und ohne erreichbare Datenbank keine Zeile liefert — RLS inbegriffen | 2026-09-01 |
+| **TD-30** Die Sitzungsprüfung hat **drei Ausgänge**, unterschieden an der **Art des Fehlers** | „Nicht angemeldet" und „nicht feststellbar" sehen im Code heute gleich aus — beide enden bei `null`, und daraus wurde „Sitzung abgelaufen". Ein abgebrochener Netzaufruf ist aber etwas anderes als eine beantwortete Ablehnung. Derselbe Schnitt wie bei PROJ-3s Kursdienst: dauerhaft gegen vorübergehend | Am Fehlen der Person unterscheiden (geht nicht, beide liefern nichts); einen Zeitstempel mitführen und daraus schließen | Jede aufrufende Stelle muss den dritten Fall behandeln — zwei Seiten, eine Route, drei Actions und die Vorprüfung. Der Preis dafür, dass die App nie etwas über die Sitzung behauptet, was sie nicht geprüft hat | 2026-09-01 |
 
 ---
 
@@ -612,7 +717,8 @@ Punkte* und in `docs/privacy.md`.
 | EC-1 Doppelklick | Vorgangskennung + Eindeutigkeit (TD-4) |
 | EC-2 In einem Tab gelöscht | Betroffene Zeilen zählen, nie Upsert (TD-6) |
 | EC-3 Gleichzeitig geändert | Alle Felder in einer Anweisung (TD-5) |
-| EC-4 Datenbank nicht erreichbar | Formularweite Meldung; Zustand bleibt stehen |
+| EC-4 Datenbank oder Auth-Server antwortet nicht | Frist im gemeinsamen `fetch` (TD-27), Wiederholversuche aus (TD-28); formularweite Meldung, Zustand bleibt stehen |
+| EC-12 Anmeldung nicht feststellbar | Drei Ausgänge (TD-30), Vorprüfung lässt durch (TD-29), `UnavailableNotice` statt `/login` |
 | EC-5 Sitzung abgelaufen | `requireUser()` aus PROJ-1 (Routen und Zugriffsschutz) |
 | EC-6 Monatsgrenze um Mitternacht | Zeitzone (TD-24) |
 | EC-7 Rundung der Prozentwerte | Summen |
