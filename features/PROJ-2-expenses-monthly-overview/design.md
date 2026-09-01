@@ -643,6 +643,55 @@ Punkte* und in `docs/privacy.md`.
 
 ---
 
+## Das Zeitbudget einer Anfrage (EC-4, zwei Zahlen)
+
+_Nachgetragen von `/architecture PROJ-2` am 01.09.2026, nach dem zweiten `/refine`._
+
+**Das überraschende Ergebnis dieses Entwurfs: es wird nichts Neues gebaut.** Der `/refine` hat EC-4
+präzisiert, nicht verschärft — und die Anwendung erfüllt die präzisierte Fassung bereits. Das
+festzustellen und zu belegen ist die Arbeit; Code zu schreiben, den niemand braucht, wäre es nicht.
+
+### Woraus sich die Wartezeit zusammensetzt
+
+Jede Anfrage läuft durch bis zu drei Stationen, die auf eine Gegenstelle warten können. Jede hat
+ihre eigene Frist von 2 Sekunden (TD-27):
+
+| Station | Wartet worauf | Gemessen im Ausfall |
+|---|---|---|
+| **Vorprüfung** (`proxy.ts`) | prüft das Sitzungsmerkmal, meist **ohne** Netzaufruf | 1–67 ms |
+| **Sitzungsprüfung** der Seite oder der Action | fragt den Auth-Server | 2013 ms |
+| **Datenabfragen** der Monatsansicht | laufen über `Promise.all` **parallel**, zählen also **einmal** | 2019 ms |
+
+Daraus die realistischen Fälle:
+
+| Weg | Rechnung | Gemessen |
+|---|---|---|
+| Seite lesen, Auth und Datenbank aus | Vorprüfung schnell + Sitzung 2 s → Meldung, **keine** Abfragen | **2,12 s** |
+| Seite lesen, nur Datenzugriff aus | Vorprüfung + Sitzung schnell + Abfragen 2 s | **2,27 s** |
+| POST, Auth und Datenbank aus | Vorprüfung schnell + Sitzung 2 s (Action) + Sitzung 2 s (Neuaufbau) | **4,07 s** |
+
+**Alle drei liegen unter 5 Sekunden.** Die Grenze ist damit keine Hoffnung, sondern eine Ableitung
+mit Messung dahinter.
+
+### Wo die Grenze reißen könnte — benannt, nicht verschwiegen
+
+- **Eine dritte Station in Folge.** Käme ein Weg dazu, der nacheinander Sitzung *und* zwei
+  voneinander abhängige Abfragen macht, wären es 6 Sekunden. Genau deshalb sichert `/tasks` die
+  Grenze mit einem Test ab, statt sie nur aufzuschreiben.
+- **Eine kalte Vorprüfung.** Sie prüft das Sitzungsmerkmal normalerweise ohne Netzaufruf — muss sie
+  den Signaturschlüssel erst holen (erster Aufruf nach einem Neustart), kostet auch sie bis zu
+  2 Sekunden, und der POST-Weg käme auf 6. Das trifft die erste Anfrage nach einem Kaltstart, also
+  einen Moment, in dem ohnehin nichts eingeschwungen ist.
+
+### Was gebaut wird
+
+**Genau eine Sache: eine Zusicherung, die die Grenze festhält.** Sie misst die Antwortzeit bei
+angehaltener Gegenstelle und schlägt an, sobald ein Weg über 5 Sekunden braucht. Ohne sie wäre die
+zweite Zahl eine Behauptung im Vertrag, die niemand nachhält — und der erste Weg, der eine dritte
+wartende Station einführt, würde sie unbemerkt reißen.
+
+---
+
 ## Technical Decisions
 
 | Decision | Rationale | Alternative considered | Trade-off | Date |
@@ -677,6 +726,8 @@ Punkte* und in `docs/privacy.md`.
 | **TD-28** Die **eingebauten Wiederholversuche** von `supabase-js` werden abgeschaltet | Seit 2.102.0 wiederholt der Client Netzwerkfehler bei Datenbankabfragen selbsttätig mit wachsenden Wartezeiten; installiert ist 2.112.4. Die Frist wäre damit **je Versuch** wirksam und EC-4s „höchstens 2 Sekunden" schlicht unwahr — der Fehler wäre still geblieben, weil niemand die Summe der Versuche misst | Wiederholversuche belassen und die Frist als Gesamtbudget über die ganze Operation legen | Ein kurzer Aussetzer, den ein Neuversuch überbrückt hätte, wird jetzt sichtbar. Dafür liegt der Neuversuch dort, wo die Person ihn sieht und selbst auslöst (EC-12), statt unsichtbar ihre Wartezeit zu verlängern | 2026-09-01 |
 | **TD-29** Die **Vorprüfung lässt durch**, wenn sie die Anmeldung nicht feststellen kann — statt umzuleiten | EC-12: `/login` braucht denselben Auth-Server, die dort angebotene Handlung könnte also gar nicht gelingen. Die Vorprüfung war nie die Zugriffskontrolle, sondern eine Vorfilterung (TD-2); die echte Prüfung sitzt auf der Seite und zeigt ohne Datenbank ohnehin nichts an | Weiterleitung mit eigenem Grund (`reason=unavailable`); Fehlerseite direkt aus der Vorprüfung | Fail-open an einer Stelle, die bisher fail-closed war. Getragen davon, dass die Seite dahinter dieselbe Prüfung wiederholt und ohne erreichbare Datenbank keine Zeile liefert — RLS inbegriffen | 2026-09-01 |
 | **TD-30** Die Sitzungsprüfung hat **drei Ausgänge**, unterschieden an der **Art des Fehlers** | „Nicht angemeldet" und „nicht feststellbar" sehen im Code heute gleich aus — beide enden bei `null`, und daraus wurde „Sitzung abgelaufen". Ein abgebrochener Netzaufruf ist aber etwas anderes als eine beantwortete Ablehnung. Derselbe Schnitt wie bei PROJ-3s Kursdienst: dauerhaft gegen vorübergehend | Am Fehlen der Person unterscheiden (geht nicht, beide liefern nichts); einen Zeitstempel mitführen und daraus schließen | Jede aufrufende Stelle muss den dritten Fall behandeln — zwei Seiten, eine Route, drei Actions und die Vorprüfung. Der Preis dafür, dass die App nie etwas über die Sitzung behauptet, was sie nicht geprüft hat | 2026-09-01 |
+| **TD-31** Die Gesamtgrenze aus EC-4 wird **nicht durch einen neuen Mechanismus** erreicht, sondern durch die Struktur — und mit einem Test festgehalten | Die Rechnung oben zeigt: Die längste realistische Kette ist Vorprüfung (meist ohne Netzaufruf) + eine Sitzungsprüfung + eine Abfragestufe, gemessen 2,12 s / 2,27 s / 4,07 s. Alles unter 5 Sekunden. Ein zusätzliches Bauwerk dafür wäre Code ohne Zweck; was fehlt, ist nicht Mechanik, sondern eine Zusicherung, die es so hält | Ein gemeinsames Abbruchsignal über die ganze Anfrage (Gesamtbudget) | Ohne eigenen Mechanismus hängt die Einhaltung an der Struktur: Wer einen Weg mit einer dritten wartenden Station baut, reißt die Grenze. Genau das fängt der Test ab — später, aber sicher, statt nie | 2026-09-01 |
+| **TD-32** Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wird **verworfen** | Sie stand einen Schritt lang in der Spec und ist nicht sicher baubar. Gemessen: Server Action und anschließender Neuaufbau teilen **keinen** anfragebezogenen Bereich — die in `React.cache` umschlossene Prüfung lief in **einer** Anfrage trotzdem zweimal. Die Next.js-Doku sagt zu `React.cache` „scoped to the current request only"; diese beiden Durchgänge zählen offenbar nicht als derselbe | Modulweiter Zwischenspeicher; die Prüfung der Seite lokal statt beim Auth-Server | Der modulweite Speicher würde die Sitzung einer Person an die nächste ausliefern — ausgeschlossen. Die lokale Prüfung nähme PROJ-1 seine Zusage aus EC-5 (eine entzogene Sitzung fiele erst nach bis zu einer Stunde auf) und wäre ein `/refine PROJ-1`. Der Preis des Verzichts ist klein: Im Normalbetrieb kostet die zweite Prüfung rund 50 ms; teuer ist sie nur im Ausfall, also wenn ohnehin nichts geht | 2026-09-01 |
 
 ---
 

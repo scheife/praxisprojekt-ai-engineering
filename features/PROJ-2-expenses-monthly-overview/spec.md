@@ -240,11 +240,11 @@
   PROJ-1 seinen Drosselungs-Toren gibt, statt einer zweiten daneben. Der Mechanismus sitzt an der
   gemeinsamen Stelle, an der der Datenbank-Client erzeugt wird, und gilt damit auch für die Wege von
   PROJ-1; er widerspricht dort keinem Kriterium
-- **Die Anmeldung wird je Anfrage höchstens einmal beim Auth-Server geprüft.** Innerhalb einer
-  Anfrage kann sich die Antwort nicht ändern; ein zweiter Aufruf ist reine Wartezeit. Gemessen wurde
-  genau das: Ein POST auf `/` führte **zwei** Prüfungen zu je 2013 ms aus. Diese Anforderung steht
-  hier und nicht als eigenes Kriterium, weil sie ein Mechanismus ist — aber sie ist **verbindlich**:
-  ohne sie wäre EC-4 zwar erfüllt (4,07 s liegen unter 5), die Verschwendung bliebe jedoch bestehen
+- **Eine Anfrage darf die Anmeldung mehrfach prüfen.** Ein POST auf `/` tut das zweimal — einmal in
+  der Server Action, einmal im anschließenden Neuaufbau der Seite. Das ist bekannt und hingenommen:
+  Der Versuch, es auf **eine** Prüfung zu senken, wurde am 01.09.2026 von `/architecture` verworfen,
+  nachdem er gemessen gescheitert war (`design.md`, TD-32). Die Zusage an die Person bleibt die
+  Gesamtgrenze aus EC-4
 
 ## Open Questions
 
@@ -298,4 +298,5 @@
 | Eine **Frist von 2 Sekunden** auf jeden Datenbank- und Auth-Aufruf, und EC-4 gilt künftig auch fürs Lesen | `/qa PROJ-3` hat gemessen, was EC-4 bisher nur behauptete: Bei angehaltener Datenbank antwortet die Erfassung erst nach **50,4 Sekunden** mit HTTP 500 und ohne jede Meldung — und das bloße Laden der Seite ebenso. Es fehlte nicht die Meldung, es fehlte der Punkt, an dem die App aufgibt. 2 Sekunden ist dieselbe Zahl, die PROJ-1 seinen Drosselungs-Toren gibt (`GATE_TIMEOUT_MS`), statt einer zweiten Zahl daneben, und sie lässt gegenüber der zugesagten Obergrenze von 1 Sekunde das Doppelte an Luft. Dass EC-4 nur Erfassen und Ändern nannte, war die eigentliche Lücke: Gemessen wurde der Fehler auf dem **Lese**weg, den der Vertrag nicht abdeckte | 2026-09-01 |
 | EC-4 nennt **zwei** Zahlen: 2 Sekunden je Aufruf, 5 Sekunden je Anfrage | Die erste Fassung versprach „höchstens 2 Sekunden" für die ganze Anfrage — das kann keine Architektur halten, sobald mehrere Aufrufe nacheinander stattfinden, und der zweite QA-Lauf hat es mit 4,07 s auf dem POST-Pfad belegt (BUG-6). Ein Vertrag, der regelmäßig verfehlt wird, wird nicht ernst genommen; einer, der die Wahrheit sagt, ist prüfbar. Die 2 Sekunden bleiben als Mechanismus je Aufruf, die 5 Sekunden sind die Zusage an die Person | 2026-09-01 |
 | Ein **Gesamtbudget je Anfrage** wurde verworfen | Ein gemeinsames Abbruchsignal ab der ersten Anfrage hielte die 2 Sekunden buchstäblich — aber eine legitim langsame erste Abfrage (1,9 s) ließe die zweite nach 0,1 s scheitern, obwohl nichts kaputt ist. Das tauscht falsche Ausfälle im Normalbetrieb gegen eine Zahl im Vertrag. Technisch zudem nur begrenzt möglich: Vorprüfung und Seitenaufbau sind getrennte Abläufe | 2026-09-01 |
+| Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wurde noch am selben Tag **zurückgenommen** | Sie stand einen Schritt lang in den Technical Requirements und erwies sich beim Entwurf als nicht sicher baubar: Server Action und anschließender Neuaufbau teilen keinen anfragebezogenen Bereich — mit `React.cache` umschlossen lief die Prüfung trotzdem **zweimal** (gemessen). Ein modulweiter Zwischenspeicher wäre gefährlich, weil er die Sitzung einer Person an die nächste ausliefern könnte, und die Prüfung lokal statt beim Auth-Server zu machen nähme PROJ-1 seine Zusage aus EC-5. Eine Anforderung, die nur mit einem Sicherheitsverlust erfüllbar ist, gehört nicht in den Vertrag | 2026-09-01 |
 | „Nicht erreichbar" wird von „nicht angemeldet" unterschieden und führt **nicht** auf `/login` (EC-12) | Eine Frist allein hätte den Fehler nur schneller falsch gemacht: `getUser()` liefert bei Zeitüberschreitung `null`, und `requireUser()` leitet dann auf `/login?reason=session-expired`. Die App behauptete damit „deine Sitzung ist abgelaufen", obwohl sie es gar nicht wusste — und schickte die Person auf eine Seite, die denselben Auth-Server braucht. Die einzige angebotene Handlung könnte nicht gelingen. Verworfen wurde deshalb auch die mildere Variante, weiterhin auf `/login` zu leiten und nur den Grund ehrlicher zu benennen | 2026-09-01 |
