@@ -71,6 +71,12 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
   const [spentOn, setSpentOn] = useState(expense.spent_on)
   const [note, setNote] = useState(expense.note ?? '')
 
+  /**
+   * Die Kennung, über die die sichtbaren Felder zum Formular gehören, **ohne in ihm zu liegen** —
+   * dasselbe Muster wie in der Erfassungszeile, aus demselben Grund (Begründung am `<form>` unten).
+   */
+  const formId = `edit-expense-${expense.id}`
+
   async function submit(formData: FormData) {
     setPending(true)
     setFormError(undefined)
@@ -139,22 +145,30 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
           </DialogDescription>
         </DialogHeader>
 
-        <form action={submit} noValidate className="flex flex-col gap-4">
-          <input type="hidden" name="id" value={expense.id} />
-          <input type="hidden" name="category" value={category} />
-          <input type="hidden" name="currency" value={currency} />
-
-          {/* **Nicht `name` am `Select`** (BUG-2 aus `/e2e-tests`): Radix hängt bei gesetztem `name`
-              ein unkontrolliertes natives Auswahlfeld ins Formular und reicht dessen `change`-Ereignis
-              über `onValueChange` in den React-Zustand zurück. React 19 setzt das Formular nach einer
-              Server Action zurück — das native Feld fällt dann auf seinen Anfangswert und **löscht damit
-              die Auswahl**. Sichtbar war das als „Währung springt nach dem Speichern auf EUR" und
-              „Kategorie steht wieder auf Wählen" (PROJ-3 AC-6, PROJ-2 AC-3).
-
-              Ein kontrolliertes verstecktes Feld hat dieses Problem nicht: Ein Zurücksetzen löst hier
-              kein Ereignis aus, das den Zustand überschreibt, und React stellt den Wert ohnehin wieder
-              aus dem Zustand her. */}
-
+        <div className="flex flex-col gap-4">
+          {/**
+            * **Das Formular umschließt die Felder nicht — es steht neben ihnen.**
+            *
+            * Dasselbe Muster wie in der Erfassungszeile, und hier aus einem Grund, der erst beim
+            * Nachmessen sichtbar wurde: React 19 setzt ein Formular nach der Action zurück — auch
+            * bei einer Client-Funktion wie `submit`. Radix hängt zu jedem `Select`, dessen Trigger
+            * in einem Formular liegt, ein unkontrolliertes natives Auswahlfeld ein und reicht
+            * dessen `change` über `onValueChange` in den React-Zustand zurück.
+            *
+            * Beim Speichern **mit Erfolg** fiel das nicht auf: Der Dialog schließt. Auf dem
+            * **Fehlerweg** bleibt er offen — und dort sprang die eben gewählte Währung auf die
+            * gespeicherte zurück, während die Meldung noch von der gewählten sprach. Wer dann
+            * erneut auf „Speichern" drückte, schrieb still eine andere Währung als die, die er
+            * gewählt hatte. Dieselbe Klasse wie BUG-1 aus `/e2e-tests`, nur eine Ebene später.
+            *
+            * Liegen die Trigger außerhalb des Formulars, entsteht das native Auswahlfeld gar nicht
+            * erst. Die sichtbaren Felder gehören über `form={formId}` trotzdem dazu.
+            */}
+          <form id={formId} action={submit} noValidate hidden>
+            <input type="hidden" name="id" value={expense.id} />
+            <input type="hidden" name="category" value={category} />
+            <input type="hidden" name="currency" value={currency} />
+          </form>
 
           {formError && (
             <p
@@ -173,6 +187,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
               <Input
                 id={`amount-${expense.id}`}
                 name="amount"
+                form={formId}
                 inputMode="decimal"
                 autoComplete="off"
                 value={amount}
@@ -225,6 +240,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
               <Input
                 id={`spentOn-${expense.id}`}
                 name="spentOn"
+                form={formId}
                 type="date"
                 value={spentOn}
                 onChange={(event) => setSpentOn(event.target.value)}
@@ -269,6 +285,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
             <Input
               id={`note-${expense.id}`}
               name="note"
+              form={formId}
               autoComplete="off"
               value={note}
               onChange={(event) => setNote(event.target.value)}
@@ -294,11 +311,16 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending} className="h-9 font-grotesk">
+            <Button
+              type="submit"
+              form={formId}
+              disabled={isPending}
+              className="h-9 font-grotesk"
+            >
               {isPending ? 'Moment …' : 'Speichern'}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   )

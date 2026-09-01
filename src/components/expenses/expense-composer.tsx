@@ -2,7 +2,6 @@
 
 import {
   Fragment,
-  startTransition,
   useActionState,
   useEffect,
   useRef,
@@ -35,6 +34,14 @@ import {
 
 const LABEL =
   'font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground'
+
+/**
+ * Die Kennung, über die die sichtbaren Felder zum Formular gehören, **ohne in ihm zu liegen**.
+ *
+ * HTML erlaubt das seit jeher: Ein Feld mit `form="…"` wird mitgeschickt, egal wo es im Dokument
+ * steht. Genau darauf beruht die Lösung von BUG-2 und BUG-5 (Begründung am `<form>` unten).
+ */
+const FORM_ID = 'expense-composer'
 
 /**
  * Die Erfassungszeile (AC-1 bis AC-9, AC-28, AC-29, AC-30).
@@ -112,31 +119,41 @@ export function ExpenseComposer({
   const errorCount = fieldError ? Object.keys(fieldError).length : 0
 
   return (
-    <form
-      /**
-       * **Bewusst `onSubmit` statt `action={formAction}`** (BUG-2 aus `/e2e-tests`).
-       *
-       * React 19 setzt ein Formular nach einer Server Action automatisch zurück. Radix hängt zu
-       * jedem `Select` in einem Formular ein **unkontrolliertes** natives Auswahlfeld ein und
-       * reicht dessen `change`-Ereignis über `onValueChange` in den React-Zustand zurück — das
-       * Zurücksetzen löschte damit die Auswahl. Sichtbar war das als „Währung springt nach dem
-       * Speichern auf EUR" (AC-6) und „Kategorie steht wieder auf Wählen" (PROJ-2 AC-3); die
-       * einfachen Eingabefelder blieben verschont, weil sie kontrolliert sind.
-       *
-       * Über `onSubmit` findet kein automatisches Zurücksetzen statt. Was geleert werden soll,
-       * leert der Effekt weiter unten — ausdrücklich und nur Betrag und Notiz (AC-3).
-       *
-       * Abgeschickt wird weiterhin per POST über dieselbe Server Action; `preventDefault()`
-       * verhindert nur das native Abschicken, es umgeht nichts.
-       */
-      onSubmit={(event) => {
-        event.preventDefault()
-        const formData = new FormData(event.currentTarget)
-        startTransition(() => formAction(formData))
-      }}
-      noValidate
-      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
-    >
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      {/**
+        * **Das Formular umschließt die Felder nicht — es steht neben ihnen.**
+        *
+        * Zwei Zusicherungen stehen hier gegeneinander, und beide sind hart:
+        *
+        * 1. **`action={formAction}` ist Pflicht** (BUG-5 aus `/qa`). Nur damit steht
+        *    `method="POST"` im ausgelieferten Markup. Ein Formular ohne `method` sendet nativ per
+        *    **GET** — Betrag, Kategorie, Datum und die Notiz landen dann in der Adresszeile und
+        *    von dort im Browserverlauf, in Server-Protokollen und in `Referer`-Kopfzeilen
+        *    (`.claude/rules/security.md` → *Sensitive Data in URLs*). Der frühere Ausweg über
+        *    `onSubmit` hat genau das verloren.
+        * 2. **Die Auswahl darf das Speichern überleben** (BUG-2, AC-6 und PROJ-2 AC-3). React 19
+        *    setzt ein Formular nach einer Server Action zurück. Radix hängt zu **jedem** `Select`,
+        *    dessen Trigger in einem Formular liegt, ein unkontrolliertes natives Auswahlfeld ein —
+        *    unabhängig von `name` — und reicht dessen `change` über `onValueChange` in den
+        *    React-Zustand zurück. Beim Zurücksetzen fällt dieses Feld auf seine **erste** Option:
+        *    Währung auf EUR, Kategorie auf „Wählen".
+        *
+        * Beides zusammen geht nur, wenn die `Select`-Trigger **nicht im Formular liegen**. Dann
+        * ist Radix' `isFormControl` falsch, das native Auswahlfeld entsteht gar nicht erst, und es
+        * gibt nichts, was zurückgesetzt werden könnte. Die sichtbaren Felder gehören über
+        * `form={FORM_ID}` trotzdem dazu und werden mitgeschickt.
+        *
+        * **Verworfen:** das `reset`-Ereignis abzufangen. Es ist zwar abbrechbar, aber React setzt
+        * die Felder auch dann zurück — nachgemessen im Browser: `defaultPrevented=true`, und
+        * unmittelbar danach trotzdem `change → EUR`. Eine Behebung, die nur meistens greift, ist
+        * hier keine.
+        */}
+      <form id={FORM_ID} action={formAction} noValidate hidden>
+        <input type="hidden" name="clientToken" value={clientToken} />
+        <input type="hidden" name="category" value={category} />
+        <input type="hidden" name="currency" value={currency} />
+      </form>
+
       {state.status === 'error' && state.formError && (
         <p
           role="alert"
@@ -151,22 +168,6 @@ export function ExpenseComposer({
         </p>
       )}
 
-      <input type="hidden" name="clientToken" value={clientToken} />
-      <input type="hidden" name="category" value={category} />
-      <input type="hidden" name="currency" value={currency} />
-
-      {/* **Nicht `name` am `Select`** (BUG-2 aus `/e2e-tests`): Radix hängt bei gesetztem `name`
-          ein unkontrolliertes natives Auswahlfeld ins Formular und reicht dessen `change`-Ereignis
-          über `onValueChange` in den React-Zustand zurück. React 19 setzt das Formular nach einer
-          Server Action zurück — das native Feld fällt dann auf seinen Anfangswert und **löscht damit
-          die Auswahl**. Sichtbar war das als „Währung springt nach dem Speichern auf EUR" und
-          „Kategorie steht wieder auf Wählen" (PROJ-3 AC-6, PROJ-2 AC-3).
-
-          Ein kontrolliertes verstecktes Feld hat dieses Problem nicht: Ein Zurücksetzen löst hier
-          kein Ereignis aus, das den Zustand überschreibt, und React stellt den Wert ohnehin wieder
-          aus dem Zustand her. */}
-
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[7rem_6rem_minmax(8rem,1fr)_9.5rem] lg:grid-cols-[7rem_6rem_10.5rem_9.5rem_minmax(0,1fr)_auto]">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="amount" className={LABEL}>
@@ -175,6 +176,7 @@ export function ExpenseComposer({
           <Input
             id="amount"
             name="amount"
+            form={FORM_ID}
             ref={amountRef}
             inputMode="decimal"
             autoComplete="off"
@@ -224,8 +226,8 @@ export function ExpenseComposer({
           <Label htmlFor="category" className={LABEL}>
             Kategorie
           </Label>
-          {/* Radix liefert bei gesetztem `name` ein verstecktes natives Feld mit — das Formular
-              schickt die Kategorie also auch ohne eigenen Umweg mit. */}
+          {/* Die Kategorie geht über das versteckte Feld oben ins Formular, nicht über `name`
+              am `Select` (Begründung dort). */}
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger
               id="category"
@@ -255,6 +257,7 @@ export function ExpenseComposer({
           <Input
             id="spentOn"
             name="spentOn"
+            form={FORM_ID}
             type="date"
             value={spentOn}
             onChange={(event) => setSpentOn(event.target.value)}
@@ -271,6 +274,7 @@ export function ExpenseComposer({
           <Input
             id="note"
             name="note"
+            form={FORM_ID}
             autoComplete="off"
             placeholder="Wofür?"
             value={note}
@@ -290,7 +294,12 @@ export function ExpenseComposer({
           {/* Während des Absendens gesperrt — der zweite Klick wird gar nicht erst
               abgeschickt. Geht trotzdem eine zweite Anfrage durch, hält die
               Vorgangskennung (EC-1). */}
-          <Button type="submit" disabled={isPending} className="h-9 font-grotesk">
+          <Button
+            type="submit"
+            form={FORM_ID}
+            disabled={isPending}
+            className="h-9 font-grotesk"
+          >
             {isPending ? 'Moment …' : 'Erfassen'}
           </Button>
         </div>
@@ -311,6 +320,6 @@ export function ExpenseComposer({
           {fieldError.note && <p id="note-error">{fieldError.note}</p>}
         </div>
       )}
-    </form>
+    </div>
   )
 }

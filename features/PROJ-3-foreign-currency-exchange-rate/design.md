@@ -497,3 +497,37 @@ haben aus dem Quelltext geschlossen, dass „der Rücksetz-Effekt die Währung n
 stimmte und trotzdem das Falsche bewies. **Die Kategorie verhielt sich seit PROJ-2 so**, und PROJ-2s
 eigener E2E-Test prüfte unter der Überschrift „AC-3" Betrag, Notiz, Datum und Fokus — nur die
 Kategorie nicht. Diese Zusicherung ist jetzt nachgetragen (T20).
+
+---
+
+## Nachtrag: die Behebung aus `/qa`, Lauf 2 (01.09.2026)
+
+**TD-15 (neu): Das Formular umschließt die Felder nicht — es steht neben ihnen. TD-14 ist damit
+zurückgenommen.**
+
+| | |
+|---|---|
+| **Entscheidung** | `<form id="…" action={formAction} hidden>` trägt nur die versteckten Felder. Die sichtbaren Felder und der Absendeknopf gehören über `form="…"` dazu, liegen aber **außerhalb** des `<form>`-Elements. Gilt für die Erfassungszeile **und** den Änderungsdialog |
+| **Begründung** | TD-14 hat BUG-2 behoben und dabei BUG-5 erzeugt: Ohne `action=` steht kein `method="POST"` im ausgelieferten Markup, und ein Formular ohne `method` sendet nativ per **GET** — Betrag, Kategorie, Datum und Notiz in der Adresszeile. `action=` liefert drei Dinge zugleich: POST, die `$ACTION_*`-Felder und damit die Bedienbarkeit ohne JavaScript. Beides zusammen geht nur, wenn Radix' verstecktes natives Auswahlfeld **gar nicht erst entsteht** — und das hängt allein daran, ob der Trigger in einem Formular liegt (`isFormControl`, `index.mjs:89`) |
+| **Alternative erwogen** | Das `reset`-Ereignis abfangen. Es ist abbrechbar, und der Abbruch greift auch — im Browser nachgemessen: `defaultPrevented=true`. **Unmittelbar danach kam trotzdem `change → EUR`.** React setzt die Felder nicht nur über die DOM-Routine zurück. Eine Behebung, die nur meistens greift, wurde verworfen |
+| **Abgrenzung zu TD-14** | TD-14 hatte eine *andere* Variante des `form`-Attributs erwogen und verworfen: das versteckte Feld einem **nicht existierenden** Formular zuzuordnen. Das war tatsächlich zu clever. Hier ist das Formular echt, die Zuordnung ist die vorgesehene HTML-Semantik — und WebKit trägt sie: alle 14 Mobile-Safari-Tests grün |
+| **Preis** | Die Hülle ist ein `<div>` statt des `<form>`; jedes sichtbare Feld trägt ein `form={…}` mehr |
+
+**Der zweite Fund, den erst diese Messung ergab.** Derselbe Mechanismus traf den **Änderungsdialog**,
+und dort schwerer als gedacht: Auf dem Erfolgsweg schließt der Dialog, deshalb fiel nie etwas auf.
+Auf dem **Fehlerweg** bleibt er offen — und dort sprang die eben gewählte Währung auf die
+gespeicherte zurück, während die Meldung noch von der gewählten sprach. Wer dann erneut auf
+„Speichern" drückte, schrieb still eine andere Währung als die gewählte. Das ist dieselbe Klasse wie
+BUG-1 aus `/e2e-tests`, nur eine Ebene später, und es untergräbt die Zusage von AC-15, dass die
+Person die Lage versteht und korrigieren kann. Behoben mit demselben Muster, abgesichert durch einen
+eigenen Test.
+
+**Was daran methodisch zählt:** Die Ursache wurde **gemessen, nicht geschlossen**. Der Quelltext
+legte nahe, dass das Entfernen von `name` am `Select` das native Feld beseitigt — eine
+Browser-Instrumentierung zeigte zwei davon im DOM, mit `name=(kein)`. Genau diese Fehlannahme steht
+im alten Kommentar von TD-14 und hat den Bau in die falsche Richtung geführt.
+
+**Gemessen am Ende dieser Runde:** 214 Unit- und Integrationstests grün, **28 von 28 E2E** grün in
+Chromium und Mobile Safari (vorher 24 — zwei neue Zusicherungen, in beiden Browsern), Lint und Build
+ohne Befund. Für beide neuen Tests wurde der Rot-Nachweis geführt: Behebung zurückgesetzt, beide
+Tests rot mit genau der Meldung, für die sie geschrieben sind, Behebung zurückgeholt, beide grün.

@@ -278,3 +278,74 @@ test('Journey 3: Ohne Kurs entsteht keine Ausgabe, und die Eingaben bleiben steh
   await expect(page.getByLabel('Notiz')).toHaveValue('Flug')
   await expect(page.getByLabel('Währung')).toHaveText(/BRL/)
 })
+
+/**
+ * Die beiden Zusicherungen, die nach `/qa` (BUG-5) dazugekommen sind.
+ *
+ * Beide prüfen **nicht**, was die App rechnet, sondern **wie sie ausgeliefert und bedient wird** —
+ * genau die Lücke, durch die BUG-5 gefallen ist: Die Suite lief mit JavaScript und blieb grün,
+ * während das ausgelieferte Markup seine Zusicherung verloren hatte.
+ */
+test('Die Erfassungszeile wird als POST ausgeliefert — nie als GET (BUG-5)', async ({ page }) => {
+  await registriere(page, 'p3post')
+
+  // **Das rohe HTML, nicht das hydrierte DOM.** Im Browser ersetzt React `action` durch einen
+  // `javascript:`-Platzhalter; die Zusicherung gilt dem, was der Server sendet — denn genau dann
+  // greift sie: wenn JavaScript nicht zur Verfügung steht oder scheitert.
+  const html = await (await page.request.get('/')).text()
+  const formular = /<form[^>]*id="expense-composer"[^>]*>/.exec(html)?.[0]
+
+  expect(formular, 'Die Erfassungszeile fehlt im ausgelieferten HTML').toBeTruthy()
+
+  // Ein Formular ohne `method` sendet nativ per GET — Betrag, Kategorie, Datum und **die Notiz**
+  // landen dann in der Adresszeile und von dort im Browserverlauf, in Server-Protokollen und in
+  // `Referer`-Kopfzeilen (`.claude/rules/security.md` → *Sensitive Data in URLs*).
+  expect(formular).toMatch(/method="POST"/i)
+
+  // Und die Server-Action-Felder sind da — ohne sie gäbe es zwar POST, aber keine Wirkung.
+  expect(html).toContain('name="$ACTION_ID_')
+})
+
+test('Der Änderungsdialog behält die Auswahl, wenn das Speichern scheitert (AC-11, AC-15)', async ({
+  page,
+}) => {
+  await registriere(page, 'p3dlg')
+
+  await page.goto(`/?monat=${KURSMONAT}`)
+  await erfasse(page, {
+    betrag: '1250,00',
+    waehrung: 'USD',
+    kategorie: 'Software & Abos',
+    datum: KURSTAG,
+    notiz: 'Jahreslizenz',
+  })
+  await expect(page.locator('tbody tr')).toHaveCount(1, AKTION)
+
+  await page.getByRole('button', { name: 'Ändern' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByLabel('Währung')).toHaveText(/USD/, AKTION)
+
+  // Auf eine Kombination stellen, für die es keinen Kurs gibt — den Brasilianischen Real führten
+  // die EZB-Referenzkurse im Jahr 2000 noch nicht (dieselbe 404-Klasse wie in Journey 3).
+  await waehleWaehrung(page, dialog, 'BRL')
+  await dialog.getByLabel('Datum').fill('2000-01-03')
+  await dialog.getByLabel('Kategorie').click()
+  await page.getByRole('option', { name: 'Reise & Fahrt', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Speichern' }).click()
+
+  await expect(dialog.getByText(/keinen Kurs/)).toBeVisible(AKTION)
+
+  // **Der Kern dieser Zusicherung.** Der Dialog bleibt offen — und was gewählt wurde, muss stehen
+  // bleiben. Zuvor sprang die Währung auf die gespeicherte zurück, während die Meldung noch von
+  // der gewählten sprach: Wer dann erneut „Speichern" drückte, schrieb still eine andere Währung.
+  await expect(dialog.getByLabel('Währung')).toHaveText(/BRL/)
+  await expect(dialog.getByLabel('Kategorie')).toHaveText('Reise & Fahrt')
+  await expect(dialog.getByLabel('Betrag')).toHaveValue('1250,00')
+  await expect(dialog.getByLabel('Datum')).toHaveValue('2000-01-03')
+
+  // AC-15 — und die gespeicherte Ausgabe ist vollständig unangetastet.
+  await dialog.getByRole('button', { name: 'Abbrechen' }).click()
+  const zelle = await leseBetragszelle(page)
+  expect(zelle.waehrung).toBe('USD')
+  expect(zelle.kursdatum).toBe('17.08.2026')
+})

@@ -77,6 +77,15 @@ solchen Aufgaben in PROJ-1 ist das erwähnenswert, nicht selbstverständlich.
 - [x] **T19**  **BUG-4:** Der zugängliche Name der Währungsoptionen lautete „USDUS-Dollar". Ein echtes Leerzeichen zwischen Code und Anzeigename  · files: `src/components/expenses/expense-composer.tsx`, `src/components/expenses/edit-expense-dialog.tsx`  · → AC-1
 - [x] **T20**  Die fehlende Zusicherung nachtragen, die den Fehler hätte zeigen müssen: PROJ-2s Journey 1 prüft unter „AC-3" jetzt auch die **Kategorie**  · files: `tests/PROJ-2-expenses-monthly-overview.spec.ts`  · → PROJ-2 AC-3
 
+### Ebene 7 — Behebung aus `/qa`, Lauf 2 (01.09.2026)
+
+<!-- Kein neuer Bauteil, sondern die Rücknahme von T18: dessen Behebung hatte eine harte
+     Zusicherung des Projekts gebrochen. T22 ist ein Fund aus derselben Messung. -->
+
+- [x] **T21**  **BUG-5:** Die Erfassungszeile wurde ohne `method` ausgeliefert und sendete ohne JavaScript nativ per **GET** — Betrag, Kategorie, Datum und Notiz in der Adresszeile. Ursache war T18: der Wechsel von `action=` auf `onSubmit`. Jetzt trägt ein `<form … hidden>` nur die versteckten Felder, die sichtbaren gehören über `form="…"` dazu und liegen außerhalb — so entsteht Radix' verstecktes natives Auswahlfeld gar nicht erst, und `action={formAction}` kann bleiben. `method="POST"` und die `$ACTION_*`-Felder stehen wieder im ausgelieferten Markup  · files: `src/components/expenses/expense-composer.tsx`  · → AC-6 (und `.claude/rules/security.md` → *Sensitive Data in URLs*)
+- [x] **T22**  **Neuer Fund derselben Messung:** Im Änderungsdialog griff derselbe Mechanismus. Auf dem Erfolgsweg unsichtbar, weil der Dialog schließt — auf dem **Fehlerweg** sprang die gewählte Währung auf die gespeicherte zurück, während die Meldung noch von der gewählten sprach. Ein zweiter Klick auf „Speichern" hätte still eine andere Währung geschrieben. Dasselbe Muster angewandt  · files: `src/components/expenses/edit-expense-dialog.tsx`  · → AC-11, AC-15
+- [x] **T23**  Die zwei fehlenden Zusicherungen nachtragen: dass die Erfassungszeile **als POST ausgeliefert** wird (am rohen HTML geprüft, nicht am hydrierten DOM — genau dort lag die Lücke), und dass der Änderungsdialog seine Auswahl behält, wenn das Speichern scheitert  · files: `tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`  · → AC-11, AC-15
+
 ---
 
 ## Abdeckung
@@ -88,16 +97,16 @@ solchen Aufgaben in PROJ-1 ist das erwähnenswert, nicht selbstverständlich.
 | AC-3 | T1, T3, T8 |
 | AC-4 | T3, T13 |
 | AC-5 | T3, T7, T8, T9 |
-| AC-6 | T9 |
+| AC-6 | T9, T21 |
 | AC-7 | T4, T6, T10 |
 | AC-8 | T3, T4, T10, T13, T14 |
 | AC-9 | T6 |
 | AC-10 | T6, T8 |
-| AC-11 | T11 |
+| AC-11 | T11, T22, T23 |
 | AC-12 | T8 |
 | AC-13 | T8 |
 | AC-14 | T8 |
-| AC-15 | T8, T11 |
+| AC-15 | T8, T11, T22, T23 |
 | AC-16 | T1, T8 |
 | AC-17 | T1, T5, T14 |
 | AC-18 | T1, T8 |
