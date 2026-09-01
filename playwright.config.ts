@@ -20,6 +20,18 @@ export default defineConfig({
   // Dauerhaft nötig: Die Registrierungs-Drosselung zählt ohne erklärten Proxy alle Versuche
   // gemeinsam — bewusst so (AC-17, TD-23). Siehe clearThrottle in tests/helpers.ts.
   globalSetup: './tests/global-setup.ts',
+  /**
+   * **Die Ausfall-Zusicherung läuft nicht im Alltag mit** (PROJ-2, T28).
+   *
+   * Sie hält einen Container an, um die Gesamtgrenze aus EC-4 zu messen. Bei zwei Arbeitern
+   * risse das jeden gleichzeitig laufenden Test mit — und ein Test, der grundlos rot wird, wird
+   * abgeschaltet; dann ist er gar nicht da. Deshalb ist er hier ausgeschlossen und wird über
+   * `npm run test:outage` gezielt gestartet, das `E2E_OUTAGE` setzt.
+   *
+   * **Der Preis ist benannt:** Wer `npm run test:e2e` grün sieht, hat die 5-Sekunden-Grenze
+   * **nicht** geprüft. Das tut erst `/qa`.
+   */
+  grepInvert: process.env.E2E_OUTAGE ? undefined : /@outage/,
   fullyParallel: true,
   // Acht Tests gleichzeitig gegen `next dev` überlasten den Entwicklungsserver: jede
   // Registrierung lässt Supabase Auth ein Passwort hashen, und die Server Actions liefen

@@ -78,6 +78,7 @@ npm run start        # Production server
 npm test             # Vitest unit/integration tests
 npm run test:e2e     # Playwright E2E tests
 npm run test:all     # Both test suites
+npm run test:outage  # Ausfall-Zusicherung (EC-4): hält kurz einen Container an, läuft NICHT im Standardlauf
 ```
 
 ## Product Context

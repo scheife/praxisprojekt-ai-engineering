@@ -76,3 +76,34 @@ describe('Der Lesepfad, wenn der Datenzugriff nicht antwortet (EC-4, BUG-4)', ()
     expect(enthaelt(baum, UnavailableNotice)).toBe(false)
   })
 })
+
+describe('Das Zeitbudget der Anfrage (EC-4)', () => {
+  it('startet beide Abfragen, bevor die erste geantwortet hat', async () => {
+    /**
+     * **Diese Zusicherung trägt die Gesamtgrenze aus EC-4** (`design.md` → *Das Zeitbudget einer
+     * Anfrage*). Die Rechnung dort zählt die Abfragen der Monatsansicht als **eine** Wartestation,
+     * weil sie parallel laufen. Würde jemand die zweite hinter die erste hängen — die häufigste
+     * Art, versehentlich eine dritte Wartestation einzubauen —, würden aus 2 Sekunden Wartezeit 4,
+     * und die 5-Sekunden-Zusage kippte auf dem POST-Weg.
+     *
+     * Geprüft wird die **Reihenfolge**, nicht die Uhrzeit: Die erste Abfrage bleibt absichtlich
+     * offen. Läuft es parallel, ist die zweite trotzdem schon gestartet. Liefe es nacheinander,
+     * wäre sie noch nicht einmal aufgerufen worden.
+     */
+    let ersteAufloesen: ((zeilen: never[]) => void) | undefined
+    listMonth.mockReturnValue(
+      new Promise((aufloesen) => {
+        ersteAufloesen = aufloesen as (zeilen: never[]) => void
+      }),
+    )
+    oldestMonth.mockResolvedValue('2026-08')
+
+    const laeuft = MonthView({ userId: 'uid-1', month: '2026-08' })
+    await Promise.resolve()
+
+    expect(oldestMonth).toHaveBeenCalled()
+
+    ersteAufloesen?.([])
+    await laeuft
+  })
+})

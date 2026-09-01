@@ -673,6 +673,12 @@ Daraus die realistischen Fälle:
 **Alle drei liegen unter 5 Sekunden.** Die Grenze ist damit keine Hoffnung, sondern eine Ableitung
 mit Messung dahinter.
 
+> **Nachtrag aus dem Bau (T28):** Die 4,07 s sind die **vollständige HTTP-Antwort** — gemessen mit
+> `curl`, inklusive des Seitenneuaufbaus, der nach der Action noch streamt. Im Browser steht die
+> **Meldung** rund **2,4 s** nach dem Klick auf dem Bildschirm. Beide Zahlen stimmen und messen
+> Verschiedenes. EC-4 spricht von der Meldung, deshalb misst die Zusicherung sie — und die Luft zur
+> Grenze ist größer, als die Tabelle allein nahelegt.
+
 ### Wo die Grenze reißen könnte — benannt, nicht verschwiegen
 
 - **Eine dritte Station in Folge.** Käme ein Weg dazu, der nacheinander Sitzung *und* zwei
@@ -910,3 +916,34 @@ brauche 4,5 s, weil sich die zwei Abfragen der Monatsansicht addierten. `MonthVi
 `getUser 58 ms` und `Abfragen gescheitert nach 2019 ms`, gesamt **2,21 s**. Die vorher gemessenen
 4,46 s und 3,28 s waren die Erstübersetzung der Route durch den Entwicklungsserver. BUG-6 bleibt
 bestehen, aber nur für den POST-Fall — dort sind zwei Sitzungsprüfungen zu je 2013 ms belegt.
+
+---
+
+## Notiz aus dem Bau der Ebene 11 (`/build`, 01.09.2026)
+
+**Zwei Dinge, die erst beim Schreiben der Zusicherung sichtbar wurden.**
+
+**1. Der Schreibweg ist während eines Ausfalls über die Oberfläche gar nicht erreichbar** — wenn
+man ihn erst dann öffnet. Steht der Datenzugriff schon beim Laden, zeigt die Seite den
+Nicht-erreichbar-Zustand, und es gibt keine Erfassungszeile mehr zum Ausfüllen. Der Test füllt sie
+deshalb **vorher** aus und lässt die Gegenstelle danach ausfallen. Das ist zugleich die wirkliche
+Reihenfolge: Die Person hat die Seite offen, tippt, und *dann* antwortet niemand mehr.
+
+**2. Die erste Fassung der Zusicherung maß nichts und sah dabei grün aus.** Sie wartete auf
+`getByRole('alert')` und traf damit ein leeres `alert`-Element der Next.js-Entwicklungswerkzeuge,
+das immer im Dokument steht. Gemeldet wurden **86 ms** für einen Weg, der eine Zwei-Sekunden-Frist
+enthält — eine Zahl, die nur auffällt, wenn man sie liest, statt auf das grüne Häkchen zu schauen.
+Geprüft wird jetzt auf den **Text** der Meldung, nicht auf die Rolle.
+
+**Gemessen mit der fertigen Zusicherung** (`npm run test:outage`):
+
+| Fall | Gemessen | Grenze |
+|---|---|---|
+| Nur Datenzugriff aus — erfassen | 2402 ms | 5000 ms |
+| Nur Datenzugriff aus — laden | 2340 ms | 5000 ms |
+| Datenbank **und** Auth aus — erfassen (der teuerste Weg) | 2391 ms | 5000 ms |
+
+**Prüfstand:** 247 Unit- und Integrationstests grün (vorher 246), 28 von 28 E2E im Standardlauf
+(die Zusicherung ist ausgeschlossen — nachgewiesen über `--list`: 28 gesammelt, 30 ohne den
+Ausschluss), Lint und Build ohne Befund. Rot-Nachweis für beide Aufgaben geführt: die Abfragen
+nacheinander statt parallel → T29 rot; die Grenze auf 1000 ms → T28 rot mit der richtigen Meldung.
