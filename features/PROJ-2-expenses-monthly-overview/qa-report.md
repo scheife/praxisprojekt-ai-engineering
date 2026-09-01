@@ -187,6 +187,190 @@ Sicherheit und Regression. Die übrigen Kriterien stehen aus den ersten beiden D
 - [x] **Rot-Nachweis der neuen Tests** — im Bau geführt: `catch` entfernt → 2 Tests rot; jeden Fehler
   abfangen statt nur das Nichterreichen → 1 Test rot; danach alle vier grün
 
+## Vierter Durchlauf — 01.09.2026 (nach `/refine`, `/architecture`, `/tasks`, `/build` der Ebene 11)
+
+**Getestet:** 2026-09-01 · **App-URL:** `http://localhost:3300` (`next dev`) gegen das lokale
+Supabase auf `127.0.0.1:55321` · **Testsuite:** `npm test` → **247 Tests, 19 Dateien, alle grün**
+(vorher 246) · **E2E als Regression:** `npm run test:e2e` → **28 von 28 grün** in Chromium und
+Mobile Safari · **Ausfall-Zusicherung:** `npm run test:outage` → **grün**
+
+**Was dieser Durchlauf prüft.** Der zweite `/refine` vom 01.09.2026 hat **EC-4 auf zwei Zahlen
+umgestellt** — höchstens 2 Sekunden je Aufruf, höchstens 5 Sekunden je Anfrage — und `/build` hat
+dazu die Ebene 11 gebaut: **T28** (die Ausfall-Zusicherung) und **T29** (die strukturelle
+Zusicherung). Geprüft werden deshalb: die neue Fassung von EC-4 an der laufenden Anwendung, die
+beiden neuen Zusicherungen selbst, der Verbleib von **BUG-6**, dazu Sicherheit und Regression.
+Die 30 AC und die übrigen 11 EC wurden **nicht einzeln neu durchgespielt** — sie sind über beide
+Suiten, die Datenbankprüfungen unten und gezielte Stichproben abgesichert. Das steht hier, damit
+niemand mehr Abdeckung annimmt, als dieser Lauf hergibt.
+
+**Wie geprüft wurde.** Der Ausfall wurde **viermal wirklich herbeigeführt** (`docker pause`),
+getrennt nach „nur PostgREST steht" und „die Datenbank steht, die Anmeldung hängt mit dran".
+Gemessen wurde mit **zwei unabhängigen Methoden**: über HTTP mit `curl` und echter Sitzung, und
+über einen gesteuerten Browser, der die **wirkliche Server Action** auslöst und sowohl die
+vollständige Antwort als auch das Erscheinen der Meldung stoppt. Die Prüfbahnen liefen
+nacheinander, nicht über Subagenten.
+
+### EC-4 — die zwei Zahlen, an der laufenden Anwendung gemessen
+
+Alle Messwerte gegen die **Zusage von 5 Sekunden je Anfrage**. Warmgelaufene Route (die
+Erstübersetzung durch `next dev` ist keine Wartezeit auf eine Gegenstelle und hatte frühere
+Messungen verfälscht).
+
+| Weg | Gegenstelle aus | Messwerte | Grenze |
+|---|---|---|---|
+| `GET /` | nur PostgREST | 3,19 s · 2,58 s · 2,29 s | 5 s ✓ |
+| `POST /` | nur PostgREST | 2,12 s · 2,16 s · 2,26 s | 5 s ✓ |
+| `GET /` | Datenbank **und** Auth | 2,08 s · 2,06 s · 2,10 s | 5 s ✓ |
+| `POST /` | Datenbank **und** Auth | 2,04 s · 2,06 s · 2,07 s | 5 s ✓ |
+
+- [x] **Höchstens 5 Sekunden je Anfrage** — **erfüllt auf allen vier Wegen.** Der höchste gemessene
+  Wert ist **3,19 s**, also 64 % des Budgets · *Nachweis: `curl -w '%{time_total}'` mit echter
+  Sitzung, je drei Läufe, bei `docker pause` auf `supabase_rest_…` bzw. `supabase_db_…`*
+- [x] **Echte Server Action, nicht nur ein einfacher POST** — der Erfassen-Knopf im gesteuerten
+  Browser geklickt, beide Zahlen gestoppt: **vollständige POST-Antwort 2,31 s / Meldung sichtbar
+  2,34 s** (nur PostgREST) und **2,08 s / 2,17 s** (alles aus) · *Nachweis: Playwright-Skript mit
+  `waitForResponse` + `resp.body()`, Messung ab Klick*
+- [x] **Höchstens 2 Sekunden je Aufruf** — die Abbrüche liegen durchweg bei 2,04–2,10 s, also genau
+  an der Frist · *Nachweis: die Messreihe oben; die Frist selbst in `src/lib/supabase/deadline.ts:18`
+  (`DEADLINE_MS = 2000`) und in `src/lib/supabase/deadline.test.ts`*
+- [x] **Verständliche Meldung statt Hängen** — „Wir erreichen deine Daten gerade nicht" und „Erneut
+  versuchen" im ausgelieferten HTML, auf beiden Ausfallarten · *Nachweis: `grep` auf den
+  `curl`-Rumpf*
+- [x] **Normalbetrieb unbeeinträchtigt** — `GET /` 0,10 s, `POST /` 0,09 s (je drei Läufe)
+  · *Nachweis: dieselbe Messreihe vor dem `docker pause`*
+
+> **Warum es besser läuft, als `design.md` rechnet — und was das bedeutet.** Die Entwurfstabelle
+> führt den POST-Weg mit **4,07 s** und begründet ihn mit **zwei** Sitzungsprüfungen (TD-32).
+> Gemessen wurden jetzt **2,08 s**. Die Ursache steht im Code: Meldet `requireUser()` ein
+> Nichterreichen, kehrt die Action **sofort mit der formularweiten Meldung zurück und ruft
+> `refresh()` gar nicht erst auf** (`src/lib/actions/expenses.ts:198-201`, ebenso `:277-280` und
+> `:361-364`). Der Seitenneuaufbau, der die zweite Prüfung tragen würde, findet im Ausfall also
+> nicht statt — es bleibt bei **einer** Wartestation. Die Zusage hat damit mehr Luft als der Entwurf
+> annimmt. Als **BUG-7 (Low)** festgehalten, weil die veraltete Zahl die Sicherheitsreserve
+> unterschätzt und künftige Entwürfe unnötig eng führt.
+
+### EC-12 — „nicht erreichbar" bleibt von „nicht angemeldet" unterschieden
+
+- [x] **Keine Weiterleitung auf `/login` im Ausfall** — bei stehender Datenbank **und** stehendem
+  Auth-Server antwortet `/` mit **HTTP 200** und **leerem `redirect_url`**
+  · *Nachweis: `curl -w 'redirect_url=[%{redirect_url}] http=%{http_code}'` → `redirect_url=[] http=200`*
+- [x] **Der Unterschied hält in die Gegenrichtung** — ohne Sitzung leiten `/`, `/konto` und
+  `/konto/export` weiterhin mit **307 auf `/login`** um, ein gefälschtes Cookie auf
+  `/login?reason=session-expired` · *Nachweis: `curl -o /dev/null -w '%{http_code} %{redirect_url}'`*
+
+### Die beiden neuen Zusicherungen (T28, T29)
+
+- [x] **T28 läuft und misst wirklich** — `npm run test:outage` grün; die Zusicherung hält PostgREST
+  bzw. die Datenbank selbst an und meldet **2387 ms (Schreiben ohne Datenzugriff) · 2416 ms (Lesen
+  ohne Datenzugriff) · 2397 ms (Schreiben ohne alles)** gegen die Grenze von 5000 ms
+  · *Nachweis: Ausgabe des Laufs*
+- [x] **T28 ist wirklich aus dem Alltagslauf ausgeschlossen** — `npm run test:e2e` führt **28** Tests
+  aus, `tests/outage.spec.ts` ist nicht darunter; der `grepInvert`-Schalter greift also
+  · *Nachweis: Testliste des Laufs, `playwright.config.ts:31`*
+- [x] **T28 gibt die Container auch im Fehlerfall frei** — beide `docker pause` stehen in einem
+  `try/finally` · *Nachweis: `tests/outage.spec.ts:84-96` und `:112-120`; nach dem Lauf sind alle
+  sechs Container `Up`, keiner `Paused`*
+- [x] **T29 kann rot werden** — nachgewiesen, nicht angenommen: `Promise.all` in `MonthView`
+  probeweise durch zwei aufeinanderfolgende `await` ersetzt → der Test fällt mit
+  „expected 'vi.fn()' to be called at least once" (`month-view.test.tsx:104`); danach
+  zurückgesetzt, Baum wieder sauber · *Nachweis: `npx vitest run src/components/expenses/month-view.test.tsx`*
+- [x] **Die Eigenschaft, die T29 schützt, ist da** — beide Abfragen laufen über `Promise.all`
+  · *Nachweis: `src/components/expenses/month-view.tsx:20`*
+
+### Sicherheit (Red Team, vierter Durchlauf)
+
+Vollständig durchgespielt, nicht als Stichprobe. Zwei frische Konten A und B, Zugriff **am
+Anwendungscode vorbei** direkt gegen PostgREST mit gültigen Zugangs-Token.
+
+- [x] **Zugriffsschutz ohne Sitzung** — `/`, `/konto`, `/konto/export`, `/?monat=…` antworten alle
+  mit **307 auf `/login`** · *Nachweis: `curl` je Route*
+- [x] **AC-24 quer über zwei Konten** — A **liest** B's Zeile → `[]`; A **ändert** sie → `[]`;
+  A **löscht** sie → `[]`; B's Zeile ist danach unverändert vorhanden
+  · *Nachweis: `GET`/`PATCH`/`DELETE` auf `/rest/v1/expenses?id=eq.<B>` mit A's Bearer-Token*
+- [x] **Fremdzuschreibung beim Anlegen** — A legt eine Ausgabe mit **B's `user_id`** an →
+  `42501 new row violates row-level security policy` · *Nachweis: `POST /rest/v1/expenses`*
+- [x] **Ohne Anmeldung gar kein Zugriff** — `anon` auf `expenses` → `42501 permission denied for
+  table expenses` · *Nachweis: `curl` nur mit `apikey`*
+- [x] **`login_attempts` bleibt für jeden Client verschlossen** — auch als **angemeldete** Person →
+  `42501 permission denied for table login_attempts` · *Nachweis: `curl` mit gültigem Bearer-Token*
+- [x] **AC-10 / AC-29 / AC-30 am Anwendungscode vorbei** — erfundene Kategorie →
+  `expenses_category_known`; Betrag 10.000.000,00 € → `expenses_amount_cents_range`; Datum
+  31.12.1999 → `expenses_spent_on_not_ancient`; alle drei `23514` · *Nachweis: drei `POST` direkt
+  gegen PostgREST*
+- [x] **EC-1 auf Datenbankebene** — dieselbe Vorgangskennung zweimal → **201**, dann **409**
+  · *Nachweis: zwei `POST` mit identischem `client_token`*
+- [x] **Einschleusung (XSS und SQL) in die Notiz** — Nutzlast
+  `<script>alert(1)</script> ' OR 1=1--` gespeichert und ausgeliefert: im HTML **escaped**
+  (`&lt;script&gt;` bzw. `<script>`), **kein** roher `<script>`-Block; die
+  SQL-Zeichenfolge bleibt Text · *Nachweis: `grep` auf den ausgelieferten Seitenrumpf*
+- [x] **Keine Server-Geheimnisse im Client-Bundle** — `.next/static` nach `sb_secret_`,
+  `service_role`, `SERVICE_ROLE`, `JWT_SECRET`, `GATE_SECRET` und dem Dienst-Token durchsucht:
+  **null Treffer** · *Nachweis: `grep -rl` je Muster nach `npm run build`*
+- [x] **Keine Zugangsdaten in der Adresse** — kein `method="get"` in `src/app` oder
+  `src/components`; alle Formulare laufen über Server Actions (`<form action={…}>`)
+  · *Nachweis: `grep -rn`; dazu der E2E-Test „Die Erfassungszeile wird als POST ausgeliefert"*
+- [x] **Sicherheits-Kopfzeilen** — `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: origin-when-cross-origin`, `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` · *Nachweis: `curl -D -` auf `/`*
+- [x] **Export gibt nichts preis, was nicht der Person gehört** — Kopfzeilen `text/csv;
+  charset=utf-8`, `attachment; filename="auslage-export-2026-09-01.csv"`, `Cache-Control:
+  no-store, must-revalidate`, `X-Content-Type-Options: nosniff` · *Nachweis: `curl -D -` auf
+  `/konto/export`*
+- [!] **Drosselung auf den Ausgaben-Wegen** — **nicht vorhanden, bewusst** (TD-22): PROJ-2 prüft
+  keine Zugangsdaten, alles liegt hinter PROJ-1s Anmeldung und zusätzlich hinter RLS. Kein Befund,
+  aber auch **keine bestandene Prüfung**
+
+### Regression
+
+- [x] **Unit-/Integrationstests** — **247 von 247 grün**, 19 Dateien (+1 gegenüber dem dritten Lauf:
+  die Zusicherung aus T29) · *Nachweis: `npm test`*
+- [x] **E2E-Suite** — **28 von 28 grün** in Chromium und Mobile Safari, also PROJ-1, PROJ-2 **und**
+  PROJ-3 · *Nachweis: `npm run test:e2e`, 2,7 min*
+- [x] **Lint** — ohne Befund · *Nachweis: `npm run lint`*
+- [x] **Produktions-Build** — übersetzt sauber, TypeScript ohne Fehler, sechs Routen
+  · *Nachweis: `npm run build`*
+- [x] **PROJ-1: Drosselung greift noch** — nach fünf festgehaltenen Versuchen wird selbst das
+  **richtige** Passwort abgelehnt: „Zu viele Fehlversuche. Bitte versuche es in 15 Minuten erneut.",
+  keine Sitzung, Verbleib auf `/login` · *Nachweis: fünf Zeilen in `login_attempts` gesetzt, dann
+  Anmeldung im gesteuerten Browser; Regel `v_max = 5` je 15 Minuten in `login_attempt_gate`*
+- [x] **PROJ-1: keine Kontoauskunft über die Fehlermeldung** — bestehendes Konto mit falschem
+  Passwort und unbekannte Adresse liefern **denselben Satz** („E-Mail-Adresse oder Passwort stimmt
+  nicht.") bei vergleichbarer Dauer (2121 ms gegen 2037 ms) · *Nachweis: zwei Anmeldeversuche im
+  gesteuerten Browser*
+- [x] **AC-26 nebenbei belegt** — beim Aufräumen 30 Testkonten gelöscht, danach **0 Zeilen** in
+  `expenses`: die Löschweitergabe lässt keine verwaiste Ausgabe zurück · *Nachweis: `delete from
+  auth.users where email like '%@e2e.example.com'`, dann `select count(*) from public.expenses`*
+- [x] **Umgebung sauber hinterlassen** — alle sechs Container `Up`, keiner `Paused`; Git-Baum ohne
+  Änderung · *Nachweis: `docker ps`, `git status --short`*
+
+### Nicht geprüft in diesem Durchlauf
+
+- [!] **Darstellung auf verschiedenen Bildschirmbreiten** (375 / 768 / 1440 px) — `/qa` hat keinen
+  Browser für Layoutfragen. Die E2E-Suite fährt Mobile Safari auf iPhone-13-Maßen, prüft dort aber
+  **Funktion**, nicht Aussehen
+- [!] **Andere Browser-Engines als Chromium und WebKit** — Firefox läuft in keiner Suite
+- [!] **Der Knopf „Erneut versuchen"** aus `UnavailableNotice` — dass er da ist und `role="alert"`
+  trägt, ist belegt; **dass ein Klick darauf die Seite neu lädt**, wurde nie ausgeführt
+- [!] **Die 30 AC und die übrigen 11 EC einzeln** — sie stehen aus den Durchläufen eins bis drei und
+  wurden hier nicht neu durchgespielt, sondern über beide Suiten, die Datenbankprüfungen und
+  Stichproben abgesichert. AC-24, AC-26, AC-27, AC-10, AC-29, AC-30, EC-1, EC-7 und EC-10 sind
+  dabei **doch** einzeln belegt worden (siehe Sicherheit und Regression oben)
+- [!] **Drosselung auf den Ausgaben-Wegen** — in PROJ-2 bewusst nicht vorhanden (TD-22). Kein
+  Befund, aber keine bestandene Prüfung
+- [!] **Ob die 2-Sekunden-Frist außerhalb des lokalen Stacks passt** — offene Frage der Spec.
+  Gemessen wurde gegen Supabase in Docker auf derselben Maschine; ein gehostetes Projekt mit kalten
+  Netzverbindungen kann legitim länger brauchen
+
+### Bug-Stand nach diesem Durchlauf
+
+- **BUG-6 (Medium) — geschlossen.** Siehe unten; der Befund war gegen die **alte** Fassung von EC-4
+  geschrieben und ist gegen die neue erfüllt, mit Messung statt Behauptung
+- **BUG-3 (Medium) — geschlossen.** Auf `/konto` steht jetzt **genau eine** „Abmelden"-Schaltfläche
+  (im Header) · *Nachweis: `grep -c` auf den ausgelieferten Seitenrumpf → `1`; im Quelltext gibt es
+  nur noch `src/components/account/logout-button.tsx`, die Konto-Karte trägt keine zweite mehr*
+- **BUG-2 (Low) — unverändert offen**, in diesem Lauf erneut nachgestellt
+- **BUG-7 (Low) — neu**, siehe oben: `design.md` rechnet den POST-Weg mit einer Wartestation zu viel
+
 
 ## Acceptance Criteria
 
@@ -533,9 +717,20 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Wo:** `src/lib/expenses/summary.ts:41` (`Math.round`) und `src/components/expenses/category-breakdown.tsx:61` (Balkenbreite = Prozentwert)
 - **Vorschlag:** „<1 %" statt „0 %", und dem Balken eine Mindestbreite geben, sobald der Betrag größer 0 ist
 - **Priorität:** Nächste Runde
-
-### BUG-3: `/konto` zeigt zwei gleich benannte „Abmelden"-Schaltflächen
+- **Stand 01.09.2026 (vierter Durchlauf): unverändert offen, erneut nachgestellt.** Monat Juli
+  mit 5.000,00 € Hardware · 9,00 € Gebühren · 3,50 € Reise · 2,00 € Sonstiges: die drei kleinen
+  Kategorien zeigen 0 % und tragen `width:0%`, sind also unsichtbar. Der Code ist unangetastet
+  (`src/lib/expenses/summary.ts:39`, `src/components/expenses/category-breakdown.tsx:58,63`).
+  **EC-7 bleibt davon unberührt:** Die Euro-Summen ergeben exakt die angezeigte Gesamtsumme
+  (5.000,00 + 9,00 + 3,50 + 2,00 = 5.014,50 €) · *Nachweis: Daten eingespielt, `/?monat=2026-07`
+  mit echter Sitzung abgerufen, Balkenbreiten aus dem HTML gelesen*
+### BUG-3: `/konto` zeigt zwei gleich benannte „Abmelden"-Schaltflächen — **BEHOBEN**
 - **Severity:** ~~Low~~ → **Medium** (hochgestuft am 2026-08-31 durch `/e2e-tests`)
+- **Status:** **behoben und verifiziert am 01.09.2026 (vierter Durchlauf).** Auf `/konto` steht
+  genau **eine** Abmelden-Schaltfläche, im Header. Die Routing-Frage wurde über `/refine PROJ-1`
+  entschieden (Commits `2384585` / `e125ec0`), nicht nebenbei im Code · *Nachweis: `grep -c` auf
+  den ausgelieferten Rumpf von `/konto` mit echter Sitzung → **1**; im Quelltext existiert nur
+  noch `src/components/account/logout-button.tsx`, die Konto-Karte trägt keine zweite mehr*
 - **Betrifft:** Bedienbarkeit und Barrierefreiheit; PROJ-1 AC-14 ist doppelt erfüllt statt gar nicht
 - **Schritte zur Reproduktion:** angemeldet `/konto` aufrufen → einer im Header, einer in der Karte „Konto"
 - **Warum nicht mehr nur kosmetisch:** Der E2E-Lauf ist daran gescheitert —
@@ -584,8 +779,22 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Tatsächlich:** die Person sieht Next.js' eigene, englische Standardseite „This page couldn't load — A server error occurred." in einer sonst durchgehend deutschsprachigen Anwendung (im `/build`-Durchlauf einmal so beobachtet)
 - **Priorität:** Nächste Runde — eine `error.tsx` mit einem deutschen Satz und einem „Neu laden"-Knopf schließt das
 
-### BUG-6: Die Frist gilt je Aufruf, nicht je Anfrage — mehrere Aufrufe addieren sich
-- **Severity:** Medium · **Status:** offen · **Betrifft:** **EC-4** · gefunden im zweiten Durchlauf
+### BUG-6: Die Frist gilt je Aufruf, nicht je Anfrage — mehrere Aufrufe addieren sich — **GESCHLOSSEN**
+- **Severity:** Medium · **Status:** **geschlossen am 01.09.2026 im vierten Durchlauf** ·
+  **Betrifft:** **EC-4** · gefunden im zweiten Durchlauf
+
+> **Wie er geschlossen wurde — und wie ausdrücklich nicht.** Nicht durch einen neuen Mechanismus:
+> Der `/refine` vom 01.09.2026 hat **den Vertrag** berichtigt, statt die Anwendung zu einer Zahl zu
+> zwingen, die keine Architektur mit mehreren Aufrufen halten kann. EC-4 nennt seither **zwei**
+> Zahlen — 2 Sekunden je Aufruf (Mechanismus) und 5 Sekunden je Anfrage (Zusage an die Person).
+> Gegen die neue Fassung ist der Befund **erfüllt und gemessen**: der höchste Wert über vier Wege
+> und je drei Läufe ist **3,19 s**, der POST-Weg liegt bei **2,04–2,26 s**. Der im Befund genannte
+> Wert von 4,07 s ließ sich im vierten Durchlauf **nicht mehr reproduzieren** — auch nicht mit der
+> echten Server Action im Browser (2,08 s). Grund: Bei Nichterreichen kehrt die Action zurück, ohne
+> `refresh()` aufzurufen, sodass die zweite Sitzungsprüfung im Ausfall gar nicht stattfindet
+> (`src/lib/actions/expenses.ts:198-201`). Festgehalten wird die Grenze jetzt von **T28**
+> (`tests/outage.spec.ts`) und **T29** (`month-view.test.tsx`), damit sie nicht unbemerkt reißt.
+> Der ursprüngliche Befund steht unverändert darunter.
 - **Was passiert:** EC-4 sagt „gibt die App **nach höchstens 2 Sekunden** auf". Gemessen wurde beim
   Lesen der Seite 2,1 s — beim **POST auf dieselbe Seite** aber **4,1 s**
 
@@ -621,6 +830,29 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
   oder EC-4 über `/refine` auf „je Aufruf" präzisieren. Das ist eine Vertragsfrage, keine reine
   Codefrage — deshalb steht sie hier und wird nicht nebenbei entschieden
 
+### BUG-7: `design.md` rechnet den POST-Weg mit einer Wartestation zu viel
+- **Severity:** **Low** · **Status:** offen · **Betrifft:** `design.md` → *Das Zeitbudget einer
+  Anfrage* und TD-32 · gefunden im vierten Durchlauf
+- **Was nicht stimmt:** Die Entwurfstabelle führt den Weg „POST, Auth und Datenbank aus" mit
+  **4,07 s** und begründet das mit **zwei** Sitzungsprüfungen hintereinander. Gemessen wurden im
+  vierten Durchlauf **2,04–2,26 s** über HTTP und **2,08 s** mit der echten Server Action im
+  Browser — also **eine** Wartestation, nicht zwei
+- **Ursache:** Meldet `requireUser()` ein Nichterreichen, kehrt die Action sofort mit der
+  formularweiten Meldung zurück und ruft **`refresh()` gar nicht erst auf**
+  (`src/lib/actions/expenses.ts:198-201`, ebenso `:277-280` und `:361-364`). Der Seitenneuaufbau,
+  der die zweite Prüfung tragen würde, findet im Ausfall also nicht statt. Die 4,07 s stammen aus
+  dem zweiten Durchlauf und beschreiben einen Zustand, den der Code heute nicht mehr durchläuft
+- **Warum das trotzdem ein Befund ist:** Die Zahl trägt im Entwurf den Abschnitt *Wo die Grenze
+  reißen könnte* — mit 4,07 s sieht die 5-Sekunden-Zusage aus, als hinge sie an einem Faden (81 %
+  des Budgets), tatsächlich sind es 48 %. Ein künftiger Entwurf, der sich daran orientiert,
+  verzichtet auf Wege, die problemlos möglich wären, oder hält die Grenze für unhaltbar
+- **Warum Low:** Kein Fehlverhalten der Anwendung. Der Vertrag wird eingehalten, die Reserve ist
+  **größer** als dokumentiert — die Richtung des Fehlers ist die ungefährliche
+- **Fix-Richtung (nicht hier entschieden):** Die Tabelle in `design.md` auf die Messwerte des
+  vierten Durchlaufs bringen und dabei festhalten, **warum** der POST-Weg im Ausfall nur eine
+  Prüfung macht. TD-32 selbst bleibt richtig: Im **Normalbetrieb** prüft ein POST die Sitzung
+  weiterhin zweimal (dort rund 50 ms, wie TD-32 schreibt)
+
 ### BUG-5: Nach einer Änderung blieb der Dialog dauerhaft auf „Moment …" stehen — **BEHOBEN**
 - **Severity:** **High**
 - **Status:** behoben am 2026-08-31, nachgeprüft — Journey 3 läuft auf beiden Engines grün
@@ -637,6 +869,44 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Der Fix:** `setPending(false)` steht in beiden Dialogen jetzt in einem `finally`, nicht am Ende des Fehlerpfads — so kann kein künftiger Pfad das Zurücksetzen wieder vergessen, auch keiner, der eine Ausnahme wirft
 - **Der Lösch-Dialog trug dieselbe Falle**, nur verdeckt: dort verschwindet die Zeile immer, die Komponente wird also stets ausgehängt. Mitgefixt, weil verdeckt nicht abwesend heißt
 - **Nachweis:** `npm run test:e2e` → 18 von 18 grün; vorher fiel Journey 3 auf **beiden** Engines an genau diesem Schritt
+
+---
+
+## Zusammenfassung — vierter Durchlauf (01.09.2026)
+
+- **Geprüft:** die neu gefasste EC-4 (zwei Zahlen) an der laufenden Anwendung, die beiden neuen
+  Zusicherungen aus Ebene 11 (T28, T29), der Verbleib von BUG-6, BUG-3 und BUG-2, dazu die
+  vollständige Angriffsliste und Regression über alle drei Features
+- **Ergebnis:** **EC-4 vollständig erfüllt und gemessen** — höchster Wert 3,19 s gegen eine Zusage
+  von 5 s. **BUG-6 geschlossen**, **BUG-3 geschlossen**
+- **Bugs:** 0 Critical · 0 High · **0 Medium** · **2 Low** (BUG-2 unverändert, BUG-7 neu)
+- **Security:** **12 Prüfungen bestanden**, **1 NICHT GEPRÜFT** (Drosselung auf den
+  Ausgaben-Wegen — in PROJ-2 bewusst nicht vorhanden, TD-22)
+- **Tests:** 247 Unit-/Integrationstests grün (vorher 246) · 28 von 28 E2E grün in beiden Browsern ·
+  Ausfall-Zusicherung grün · Lint und Produktions-Build ohne Befund
+- **Production Ready:** **JA** — kein Critical- oder High-Befund, und die Kriterien, um die es in
+  dieser Runde ging, wurden an der laufenden Anwendung **wirklich ausgeführt**, nicht nur gelesen
+
+**Was jetzt trägt — und warum es diesmal mehr ist als eine Behauptung.** Der Ausfall wurde viermal
+echt herbeigeführt und mit zwei unabhängigen Methoden gemessen: über HTTP mit `curl` und über einen
+gesteuerten Browser, der die wirkliche Server Action auslöst. Beide kommen auf dieselben
+Größenordnungen, und alle vier Wege liegen unter der Hälfte bis zu zwei Dritteln des Budgets. Aus
+den 50,4 Sekunden des ersten Durchlaufs sind gut 2 Sekunden mit einer verständlichen Meldung
+geworden — und die Grenze hängt nicht mehr am Gedächtnis der nächsten Person, die den Code anfasst:
+**T29 wurde nachweislich rot**, als die beiden Abfragen probeweise nacheinander liefen, und **T28**
+misst den echten Ausfall.
+
+**Der eine Befund, der neu ist, geht in die ungefährliche Richtung.** `design.md` rechnet den
+POST-Weg pessimistischer, als er ist (BUG-7, Low): Die dort genannten 4,07 s entstehen aus zwei
+Sitzungsprüfungen, die im Ausfall gar nicht beide stattfinden, weil die Action ohne `refresh()`
+zurückkehrt. Die Anwendung ist also besser als ihr Entwurf — dokumentiert werden sollte trotzdem,
+was wirklich passiert.
+
+**Was dieser Lauf nicht geprüft hat.** Darstellung auf verschiedenen Bildschirmbreiten und in
+anderen Browser-Engines (`/qa` hat keinen Browser für Layoutfragen; die 28 E2E-Journeys decken
+Chromium und Mobile Safari funktional ab, nicht optisch), die Wirkung des Knopfes „Erneut
+versuchen", und die 30 AC samt der übrigen 11 EC einzeln — die stehen aus den Durchläufen eins bis
+drei und wurden hier über beide Suiten, die Datenbankprüfungen und Stichproben abgesichert.
 
 ---
 
