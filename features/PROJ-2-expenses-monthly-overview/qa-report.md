@@ -21,6 +21,108 @@ aktualisiert; alles andere steht unverändert aus dem ursprünglichen Durchlauf.
 
 ---
 
+---
+
+## Zweiter Durchlauf — 01.09.2026 (nach `/refine`, `/architecture`, `/tasks`, `/build`)
+
+**Getestet:** 2026-09-01 · **App-URL:** `http://localhost:3300` (`next dev`) gegen das lokale
+Supabase auf `127.0.0.1:55321` · **Testsuite:** `npm test` → **242 Tests, 18 Dateien, alle grün**
+(vorher 214) · **E2E als Regression:** `npx playwright test` → **28 von 28 grün** in Chromium und
+Mobile Safari
+
+**Was dieser Durchlauf prüft.** Der `/refine` vom 01.09.2026 hat **EC-4 neu gefasst** (gilt jetzt
+für Lesen *und* Schreiben, für Datenbank *und* Auth-Server, mit einer Frist von zwei Sekunden) und
+**EC-12 ergänzt**. Geprüft werden diese beiden Kriterien vollständig, dazu Sicherheit und Regression.
+Die übrigen 30 AC und 10 EC stehen unverändert aus dem ersten Durchlauf — sie wurden hier **nicht
+erneut einzeln durchgespielt**, sondern über die beiden Suiten und gezielte Stichproben abgesichert.
+Das ist ausdrücklich gesagt, damit niemand mehr Abdeckung annimmt, als dieser Lauf hergibt.
+
+**Wie geprüft wurde.** Über HTTP mit einer echten Sitzung, die über den echten Registrierungsweg
+entstanden ist (`$ACTION_*`-Felder, multipart-POST) — also **mit einer anderen Methode als der
+`/build`-Lauf**, der den Browser benutzt hat. Der Ausfall wurde zweimal wirklich herbeigeführt:
+einmal `docker pause` auf den Datenbank-Container, einmal **nur** auf PostgREST, damit die Anmeldung
+prüfbar bleibt. Die Prüfbahnen (Sicherheit, Regression) liefen nacheinander, nicht über Subagenten.
+
+### EC-4 — Datenbank oder Auth-Server antwortet nicht
+
+- [x] **Lesen, Seite `/`** — `docker pause` auf die Datenbank, angemeldete Sitzung: **HTTP 200 nach
+  2,12 s** (vorher 50,4 s), Meldung „Wir erreichen deine Daten gerade nicht", Knopf „Erneut
+  versuchen", `role="alert"`, Kopfzeile steht · *Nachweis: `curl -b cookies.txt -w '%{time_total}'`,
+  drei Wiederholungen 2,05–2,12 s*
+- [x] **Lesen, Seite `/konto`** — HTTP 200 nach 2,39 s mit derselben Meldung · *Nachweis: ebenso*
+- [x] **Export `/konto/export`** — **HTTP 503** nach 2,02 s, `text/plain; charset=utf-8`, Rumpf
+  „Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch
+  einmal." · *Nachweis: `curl -w '%{http_code} %{content_type}'`*
+- [x] **Nach dem Freigeben** — `docker unpause`, sofort wieder HTTP 200 in 0,34 s, normale Ansicht
+- [ ] **BUG** **Lesen, wenn NUR der Datenzugriff steht** — siehe **BUG-4** (hochgestuft auf High).
+  Bleibt der Auth-Server erreichbar und fällt nur PostgREST aus, greift die Sitzungsprüfung nicht,
+  die Monatsabfrage wirft, und es gibt **keinen Fehlerzustand**: Die Person sieht dauerhaft das
+  Ladegerüst, sichtbarer Text nur „auslage." · *Nachweis: `docker pause supabase_rest_…`, HTTP 200
+  nach 4,46 s, `grep` auf die Meldung = 0 Treffer, Server-Log `⨯ Error: {"message":"Error:
+  auslage/unreachable: …"} digest: '3984802547@E394'`*
+- [ ] **BUG** **Die Frist gilt je Aufruf, nicht je Anfrage** — siehe **BUG-6** (Medium). Gemessen
+  4,1 s beim POST und 4,5 s beim Lesen mit zwei Abfragen, gegen die zugesagten „höchstens 2 Sekunden"
+- [!] **NICHT GEPRÜFT — Schreibweg zur Laufzeit.** „Eingegebene Werte bleiben im Formular stehen"
+  ist Zustand im Browser und über HTTP nicht beobachtbar; die RSC-Kodierung der Formularfelder ließ
+  sich mit `curl` nicht nachbauen (die Action **ist** erreichbar — sie hat mit Feldfehlern geantwortet,
+  siehe Sicherheitsteil). Abgedeckt durch **drei Unit-Tests** in `src/lib/actions/expenses.test.ts`
+  (nichts geschrieben, kein Kursdienst gerufen, Meldung zurückgegeben) und indirekt durch PROJ-3
+  Journey 3, wo die Eingaben nach einer formularweiten Fehlermeldung nachweislich stehen bleiben
+
+### EC-12 — Anmeldung nicht feststellbar
+
+- [x] **Keine Weiterleitung auf `/login`** — bei angehaltener Datenbank antwortet `/` mit **HTTP 200
+  und leerem `redirect_url`**, die Adresse bleibt stehen · *Nachweis: `curl -w '%{http_code} %{redirect_url}'`
+  ohne `-L` → `200 ''`; mit `-L` → `num_redirects: 0`*
+- [x] **Eigener Zustand statt Leer- oder Feldfehler** — `UnavailableNotice` mit `role="alert"`,
+  Satz und Schaltfläche im ausgelieferten Markup · *Nachweis: `grep` auf `Erneut versuchen` = 1*
+- [x] **Der Rahmen bleibt stehen** — Kopfzeile im Markup vorhanden · *Nachweis: `grep auslage` = 1*
+- [x] **„Nicht angemeldet" wird weiterhin unterschieden** — ohne Sitzung und bei angehaltener
+  Datenbank leitet `/` unverändert mit **307 auf `/login`**. Die Vorprüfung fragt niemanden, wenn
+  kein Sitzungs-Cookie da ist · *Nachweis: `curl` ohne Cookie während des Ausfalls*
+- [x] **Der Unterschied ist im Code verankert, nicht geraten** — `isUnreachable` prüft die eigene
+  Markierung aus `deadlineFetch` **und** `AuthRetryableFetchError`; eine beantwortete Ablehnung
+  (`AuthApiError` 401, PostgREST `42501`, `23505`) fällt nicht darunter ·
+  *Nachweis: `src/lib/supabase/deadline.ts:78`, sieben Tests in `deadline.test.ts`*
+- [!] **NICHT GEPRÜFT — der Knopf „Erneut versuchen".** Er ruft `router.refresh()`; ein Klick braucht
+  einen Browser. Im Markup vorhanden und korrekt benannt, die Wirkung ist ungeprüft
+
+### Sicherheit (Red Team, zweiter Durchlauf)
+
+- [x] **Zugriffsschutz** — `/`, `/konto`, `/konto/export` ohne Sitzung je **HTTP 307 → `/login`**
+  · *Nachweis: `curl -o /dev/null -w '%{http_code} %{redirect_url}'` je Route*
+- [x] **Row Level Security** — `expenses`, `profiles`, `login_attempts` mit **gültigem anon-Schlüssel**
+  direkt gegen PostgREST: alle drei **HTTP 401 / `42501`** · *Nachweis: `curl http://127.0.0.1:55321/rest/v1/<t>`
+  mit `apikey` und `Authorization: Bearer`, Schlüssel aus `npx supabase status`*
+- [x] **Keine Zugangsdaten in der Adresse** — `/login`, `/signup` und die Erfassungszeile tragen alle
+  drei `method="POST"` im ausgelieferten Markup · *Nachweis: `grep '<form[^>]*>'` je Seite*
+- [x] **Keine Secrets im Client** — `service_role` und `GATE_SECRET` kommen weder im Markup noch in
+  `.next/static` vor (0 Dateien) · *Nachweis: `grep -rl` über das Bundle*
+- [x] **Serverseitige Eingabeprüfung** — die Server Action, direkt über `Next-Action` aufgerufen,
+  antwortet auf leere Felder mit `{"status":"error","fieldErrors":{…}}` statt zu schreiben ·
+  *Nachweis: `curl -X POST -H "Next-Action: 60e660f5…"`, Antwortrumpf im Protokoll*
+- [x] **Drosselung beim Anmelden (Regression auf PROJ-1)** — nach **6 Fehlversuchen** greift die
+  Sperre, 5 Versuche protokolliert. Meine Änderung am gemeinsamen Client (Frist, abgeschaltete
+  Wiederholversuche) hat sie nicht beschädigt · *Nachweis: Schleife über 12 POSTs auf `/login`,
+  danach `select count(*) from login_attempts`*
+- [x] **Die Frist schwächt den Zugriffsschutz nicht** — die Vorprüfung lässt zwar durch, die Seite
+  dahinter zeigt aber keine Daten, und RLS liefert bei stehender Datenbank ohnehin nichts ·
+  *Nachweis: der Ausfalltest oben — HTTP 200, aber ausschließlich die Meldung im Markup*
+- [!] **NICHT GEPRÜFT** — Zugriff quer über **zwei angemeldete** Konten: In diesem Lauf entstand keine
+  zweite Sitzung, und die Ausgabe von Konto A ließ sich über `curl` nicht anlegen (siehe EC-4 oben).
+  Der erste Durchlauf hat diesen Fall mit zwei echten Sitzungen geprüft; hier steht er offen
+
+### Regression
+
+- [x] **Unit-/Integrationstests** — 242 von 242 grün, 18 Dateien · *Nachweis: `npm test`*
+- [x] **E2E-Suite** — 28 von 28 grün in Chromium und Mobile Safari, also PROJ-1, PROJ-2 und PROJ-3
+  vollständig · *Nachweis: `npx playwright test`*
+- [x] **Normalbetrieb unbeeinträchtigt** — `/` mit Sitzung lädt in **0,34–0,56 s**; die Frist greift
+  im Alltag nicht · *Nachweis: `curl -w '%{time_total}'` bei laufender Datenbank*
+- [x] **Anmeldung und Registrierung** — Registrierung über den echten Formularweg erzeugt 4
+  `sb-`-Cookies und eine gültige Sitzung · *Nachweis: `curl -c cookies.txt`, danach `/` → HTTP 200*
+
+
 ## Acceptance Criteria
 
 ### Ausgabe erfassen
@@ -324,7 +426,19 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - [!] AC-16 — dass die Summen **ohne Neuladen** stimmen (Browser)
 - [!] AC-20 / AC-22 — Öffnen der Dialoge, „Abbrechen lässt alles unverändert" (Browser)
 - [!] EC-1 — die gesperrte Schaltfläche während des Absendens (Browser)
-- [!] EC-4 — der echte Datenbankausfall (hätte den lokalen Stack angehalten)
+- [x] ~~EC-4 — der echte Datenbankausfall (hätte den lokalen Stack angehalten)~~ → **im zweiten
+  Durchlauf am 01.09.2026 nachgeholt**, zweimal herbeigeführt (`docker pause` auf die Datenbank und
+  getrennt davon auf PostgREST). Der Stack wurde jedes Mal sofort wieder freigegeben
+
+**Nicht geprüft im zweiten Durchlauf (01.09.2026):**
+- [!] Der Schreibweg bei Nichterreichbarkeit zur Laufzeit — die RSC-Kodierung der Formularfelder ließ
+  sich mit `curl` nicht nachbauen. Abgedeckt durch drei Unit-Tests und indirekt durch PROJ-3 Journey 3
+- [!] Der Knopf „Erneut versuchen" — im Markup vorhanden, seine Wirkung (`router.refresh()`) braucht
+  einen Browser
+- [!] Zugriff quer über zwei **angemeldete** Konten — in diesem Lauf entstand nur eine Sitzung; im
+  ersten Durchlauf mit zwei echten Sitzungen geprüft und bestanden
+- [!] Die übrigen 30 AC und 10 EC wurden **nicht einzeln neu durchgespielt** — sie stehen unverändert
+  aus dem ersten Durchlauf, abgesichert über 242 Unit-Tests und 28 E2E-Tests
 - [!] CSRF — nur als Indiz belegt, siehe Sicherheitsaudit
 - [!] Drosselung — bewusst nicht implementiert (TD-22)
 
@@ -368,11 +482,70 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Priorität:** Eine **Routing-Frage**, kein einfacher Fix — den Knopf aus der Karte zu nehmen ändert PROJ-1s Vertrag und gehört über `/refine PROJ-1`
 
 ### BUG-4: Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert
-- **Severity:** Low
-- **Betrifft:** keine AC — EC-4 deckt das **Schreiben** ab, für das Lesen sieht `design.md` → *Zustände je Seite* keinen Seitenfehler vor
+- **Severity:** ~~Low~~ → **High** (hochgestuft am 2026-09-01 im zweiten Durchlauf)
+- **Betrifft:** ~~keine AC~~ → **EC-4**. Der `/refine` vom 01.09.2026 hat EC-4 ausdrücklich auf das
+  **Lesen** ausgeweitet: „… wenn eine geschützte Seite **geladen** … wird, dann gibt die App nach
+  höchstens 2 Sekunden auf und zeigt eine verständliche Meldung." Genau das leistet dieser Pfad nicht
+- **Warum die Behebung vom 01.09.2026 ihn nicht schließt:** Sie hängt an der **Sitzungsprüfung**.
+  Fallen Datenbank und Auth-Server zusammen aus — der Fall, den `/build` gemessen hat —, greift sie
+  und alles ist gut. Bleibt der Auth-Server aber erreichbar und steht **nur der Datenzugriff**, ist
+  die Sitzung feststellbar, `requireUser()` liefert die Person, und erst die Monatsabfrage wirft.
+  Dort fängt sie niemand
+- **Was die Person dann sieht — schlechter als im ersten Durchlauf beschrieben:** nicht Next.js'
+  englische Fehlerseite, sondern **dauerhaft das Ladegerüst**. HTTP 200, und der sichtbare Text der
+  ganzen Seite lautet: „auslage." Keine Meldung, kein Knopf, kein Hinweis, dass etwas nicht stimmt
+- **Schritte zur Reproduktion:**
+  1. Angemeldet sein
+  2. `docker pause supabase_rest_praxisprojekt-ai-engineering` (**nur** PostgREST, nicht die Datenbank)
+  3. `/` aufrufen
+  4. Erwartet (EC-4): binnen 2 Sekunden eine verständliche Meldung
+  5. Tatsächlich: HTTP 200 nach **4,46 s**, nur das Ladegerüst, keine Meldung
+- **Nachweis:** `curl -b cookies.txt -w "%{http_code} %{time_total}"` → `200 4.464443`; `grep` auf
+  „Wir erreichen deine Daten" = **0** Treffer; Seitentext nach Entfernen aller Tags: `auslage.
+  auslage .`; im Server-Log `⨯ Error: {"message":"Error: auslage/unreachable: The operation was
+  aborted due to timeout", …, "code":""}` mit `digest: 3984802547@E394`
+- **Warum das nicht exotisch ist:** Es braucht keinen Ausfall. **Jede** Datenabfrage, die die
+  Zwei-Sekunden-Frist reißt — eine langsame Abfrage unter Last, ein hängender Verbindungspool —
+  landet auf demselben Pfad. Der Ausfall ist nur die zuverlässigste Art, ihn herbeizuführen
+- **Fix-Richtung (für `/build`, nicht hier entschieden):** Der Lesepfad braucht denselben Ausgang wie
+  die Sitzungsprüfung — die Abfragen in `queries.ts` abfangen und `UnavailableNotice` zeigen, oder
+  eine `error.tsx` für `/`, die `isUnreachable` auswertet. Der Baustein dafür existiert bereits
+- **Was der Export richtig macht:** `src/app/konto/export/route.ts` fängt genau diesen Fall ab und
+  antwortete im selben Test korrekt mit **HTTP 503** — dort wurde daran gedacht, auf der Seite nicht
 - **Schritte zur Reproduktion:** Schlägt die Monatsabfrage fehl, wirft `queries.ts` weiter (`src/lib/expenses/queries.ts:40,61,76`), und es gibt weder `error.tsx` noch `global-error.tsx` in `src/app/`
 - **Tatsächlich:** die Person sieht Next.js' eigene, englische Standardseite „This page couldn't load — A server error occurred." in einer sonst durchgehend deutschsprachigen Anwendung (im `/build`-Durchlauf einmal so beobachtet)
 - **Priorität:** Nächste Runde — eine `error.tsx` mit einem deutschen Satz und einem „Neu laden"-Knopf schließt das
+
+### BUG-6: Die Frist gilt je Aufruf, nicht je Anfrage — mehrere Aufrufe addieren sich
+- **Severity:** Medium · **Status:** offen · **Betrifft:** **EC-4** · gefunden im zweiten Durchlauf
+- **Was passiert:** EC-4 sagt „gibt die App **nach höchstens 2 Sekunden** auf". Gemessen wurde beim
+  Lesen der Seite 2,1 s — beim **POST auf dieselbe Seite** aber **4,1 s**, und beim Lesen mit
+  ausgefallenem Datenzugriff **4,5 s**
+- **Ursache, gemessen statt vermutet:** vorübergehend eingebaute Zeitmessung in `proxy.ts` und
+  `auth.ts`, dann je ein Aufruf bei angehaltener Datenbank:
+
+  | | Vorprüfung | `getUser()` | gesamt |
+  |---|---|---|---|
+  | `GET /` | 67 ms | **2013 ms** | 2,1 s |
+  | `POST /` | 1 ms | **2013 ms + 2015 ms** | 4,1 s |
+
+  Ein POST auf die Seite führt **zwei** Sitzungsprüfungen hintereinander aus, jede mit eigener
+  Zwei-Sekunden-Frist. Auf dem Lesepfad mit ausgefallenem Datenzugriff addieren sich ebenso die
+  **zwei Abfragen** der Monatsansicht
+- **Schritte zur Reproduktion:** `docker pause` auf den Datenbank-Container, dann mit gültiger
+  Sitzung `curl -w "%{time_total}" -X POST http://localhost:3300/` → 4,06 s, 4,09 s, 4,13 s in drei
+  aufeinanderfolgenden Läufen
+- **Warum Medium und nicht High:** Der Vertrag wird um den Faktor zwei verfehlt, aber die Meldung
+  kommt, es wird nichts geschrieben, nichts geht verloren, und gegenüber den 50,4 s des ersten
+  Durchlaufs ist es eine Verbesserung um mehr als das Zehnfache. Es tritt nur ein, wenn die
+  Gegenstelle ohnehin steht
+- **Warum nicht Low:** Die Zahl „zwei Sekunden" ist nicht Beiwerk, sie war der **Zweck** des
+  `/refine`. Und sie wächst mit jeder weiteren Abfrage, die ein Pfad macht — der Fehler ist nicht
+  auf die gemessenen 4 Sekunden begrenzt
+- **Fix-Richtung (für `/build`, nicht hier entschieden):** entweder die Frist als **Budget je
+  Anfrage** führen (ein gemeinsames Abbruchsignal, das mit der ersten Anfrage zu laufen beginnt),
+  oder EC-4 über `/refine` auf „je Aufruf" präzisieren. Das ist eine Vertragsfrage, keine reine
+  Codefrage — deshalb steht sie hier und wird nicht nebenbei entschieden
 
 ### BUG-5: Nach einer Änderung blieb der Dialog dauerhaft auf „Moment …" stehen — **BEHOBEN**
 - **Severity:** **High**
@@ -392,6 +565,45 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 - **Nachweis:** `npm run test:e2e` → 18 von 18 grün; vorher fiel Journey 3 auf **beiden** Engines an genau diesem Schritt
 
 ---
+
+## Zusammenfassung — zweiter Durchlauf (01.09.2026)
+
+- **Geprüfte Kriterien:** **EC-4** (neu gefasst) und **EC-12** (neu) — die beiden, die der `/refine`
+  verändert hat. Die übrigen 30 AC und 10 EC stehen unverändert aus dem ersten Durchlauf und wurden
+  hier über die Suiten und Stichproben abgesichert, **nicht** einzeln neu durchgespielt
+- **Ergebnis:** **EC-12 vollständig erfüllt.** **EC-4 teilweise** — der Fall, für den das `/refine`
+  angestoßen wurde (BUG-3 aus PROJ-3: 50,4 Sekunden Hängen), ist geschlossen und mit **2,12 s**
+  belegt. Zwei Lücken bleiben
+- **Bugs:** 0 Critical · **1 High** (BUG-4, von Low hochgestuft) · **2 Medium** (BUG-6 neu, BUG-3
+  unverändert) · 1 Low (BUG-2)
+- **Security:** 7 Prüfungen bestanden, **1 nicht geprüft** (Zugriff quer über zwei angemeldete
+  Konten — im ersten Durchlauf bestanden). Zugriffsschutz, RLS mit gültigem anon-Schlüssel,
+  POST-Formulare, keine Secrets im Bundle, serverseitige Prüfung, Drosselung nach 6 Fehlversuchen
+- **Tests:** 242 Unit-/Integrationstests grün (vorher 214) · 28 von 28 E2E grün in beiden Browsern ·
+  Lint und Build ohne Befund
+- **Production Ready:** **NEIN** — ein High-Befund steht offen
+
+**Was gut ist.** Die Ursache aus dem PROJ-3-Bericht ist beseitigt und doppelt belegt: einmal über
+den Browser im `/build`-Lauf, einmal hier über HTTP mit einer anderen Methode. Aus 50,4 Sekunden
+ohne Text sind 2,1 Sekunden mit einer verständlichen Meldung geworden, die Weiterleitung mit der
+falschen Begründung („Sitzung abgelaufen") ist weg, der Rahmen bleibt stehen, und der Export
+antwortet sauber mit 503. Die Unterscheidung „Antwort gegen Nichterreichen" ist im Code verankert
+und durch Tests abgesichert, nicht bloß behauptet.
+
+**Was fehlt — und beides hat dieselbe Wurzel.** Die Behebung hängt vollständig an der
+**Sitzungsprüfung**. Das deckt den gemessenen Fall ab, weil dort Datenbank und Auth-Server zusammen
+ausfielen. Es deckt **nicht** ab, was passiert, wenn nur der Datenzugriff wegbricht: Dann ist die
+Sitzung feststellbar, die Monatsabfrage wirft, und die Person sieht dauerhaft ein Ladegerüst ohne
+ein Wort Erklärung (**BUG-4**). Und weil jede Abfrage ihre eigene Frist bekommt statt eines Budgets
+je Anfrage, addieren sich die Wartezeiten auf das Doppelte des Zugesagten (**BUG-6**).
+
+**Die Lehre für den nächsten Durchgang.** Der `/build`-Lauf hat den Ausfall am
+**Datenbank-Container** herbeigeführt — und damit unabsichtlich den einen Fall gewählt, in dem die
+gebaute Lösung greift. Erst das Anhalten **nur** von PostgREST hat die Lücke gezeigt. Wer eine
+Zusicherung über Erreichbarkeit prüft, muss die Bestandteile **einzeln** ausfallen lassen, nicht
+gemeinsam: Ein gemeinsamer Ausfall ist der freundlichste aller Fälle, weil er zuerst dort auffällt,
+wo man schon hinsieht.
+
 
 ## Zusammenfassung
 
