@@ -67,6 +67,16 @@ solchen Aufgaben in PROJ-1 ist das erwähnenswert, nicht selbstverständlich.
 - [x] **T15** `[P]`  Tests für den Export: eine Euro- und eine Fremdwährungsausgabe in derselben Datei, Kurs-Spalten bei Euro leer, bestehende Spalten unverändert an ihrer Stelle  · files: `src/lib/expenses/csv.test.ts`  · → AC-19
 - [x] **T16** `[P]`  Tests für die Verzweigung beim Ändern — **im Plan übersehen, beim Bau nachgetragen** (siehe Notiz unten): Währung oder Datum geändert ⇒ Kurs wird neu geholt; nur Betrag geändert ⇒ bestehender Kurs bleibt, Euro-Wert neu gerechnet; nur Kategorie oder Notiz ⇒ kein Abruf; Umstellung auf EUR ⇒ Kurs und Kursdatum werden geleert; gescheiterter Abruf ⇒ es wird nicht geschrieben  · files: `src/lib/actions/expenses.test.ts`  · → AC-12, AC-13, AC-14, AC-15, AC-16
 
+### Ebene 6 — Behebungen aus `/e2e-tests` (01.09.2026)
+
+<!-- Keine neuen Bauteile, sondern drei Fehler, die erst ein echter Browser gezeigt hat. Die
+     Ursache von T18 sitzt in PROJ-2 und wird dort mitbehoben. -->
+
+- [x] **T17**  **BUG-1:** Der Änderungsdialog belegte den Betrag beim Öffnen aus `amount_cents` vor — bei 1.250,00 USD stand dort der Euro-Betrag 1078,24, und Speichern schrieb ihn als Dollar-Betrag zurück. Jetzt aus `amount_original`, und die Währung wird beim Öffnen mit zurückgesetzt. Die Initialisierung war beim Bau schon korrigiert worden, diese **zweite** Stelle war übersehen  · files: `src/components/expenses/edit-expense-dialog.tsx`  · → AC-11 (und PROJ-2 AC-20)
+- [x] **T18**  **BUG-2:** Nach dem Speichern verloren Währung **und** Kategorie ihren Wert. Ursache: React 19 setzt ein Formular nach einer Server Action zurück, Radix hängt zu jedem `Select` ein unkontrolliertes natives Auswahlfeld ein und reicht dessen `change`-Ereignis in den React-Zustand zurück. Behoben, indem die Erfassungszeile über `onSubmit` + `startTransition` abschickt statt über `action=` — dann gibt es kein automatisches Zurücksetzen. Die Auswahl geht zusätzlich über eigene versteckte Felder ins Formular  · files: `src/components/expenses/expense-composer.tsx`  · → AC-6 (und PROJ-2 AC-3)
+- [x] **T19**  **BUG-4:** Der zugängliche Name der Währungsoptionen lautete „USDUS-Dollar". Ein echtes Leerzeichen zwischen Code und Anzeigename  · files: `src/components/expenses/expense-composer.tsx`, `src/components/expenses/edit-expense-dialog.tsx`  · → AC-1
+- [x] **T20**  Die fehlende Zusicherung nachtragen, die den Fehler hätte zeigen müssen: PROJ-2s Journey 1 prüft unter „AC-3" jetzt auch die **Kategorie**  · files: `tests/PROJ-2-expenses-monthly-overview.spec.ts`  · → PROJ-2 AC-3
+
 ---
 
 ## Abdeckung

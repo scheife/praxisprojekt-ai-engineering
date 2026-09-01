@@ -81,6 +81,11 @@ test('Journey 1: Erfassen, Summen und Filter — der Weg, für den man die App �
   await expect(page.getByLabel('Betrag')).toHaveValue('')
   await expect(page.getByLabel('Notiz')).toHaveValue('')
   await expect(page.getByLabel('Datum')).toHaveValue(heute)
+  // **Die Kategorie war hier nie geprüft** — und genau sie fiel nach dem Speichern auf „Wählen"
+  // zurück, seit es dieses Feature gibt. Aufgedeckt hat es erst `/e2e-tests` von PROJ-3, wo
+  // derselbe Fehler die Währung traf und aus einem Dollar-Beleg still einen Euro-Beleg machte.
+  // Die eine fehlende Zusicherung war die, auf die es ankam.
+  await expect(page.getByLabel('Kategorie')).toHaveText('Software & Abos')
   await expect(page.getByLabel('Betrag')).toBeFocused()
 
   // AC-13, AC-16 — die Gesamtsumme steht hervorgehoben und stimmt ohne Neuladen.

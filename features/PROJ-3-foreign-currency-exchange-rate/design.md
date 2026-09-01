@@ -477,3 +477,23 @@ Nachgetragen als **T16**, samt Lehre für den nächsten Plan (siehe `tasks.md`, 
 grün als Regression gegen PROJ-1 und PROJ-2, Lint und Build ohne Befund. Für die neuen Tests wurde
 der Rot-Nachweis geführt: sieben gezielte Brüche an `rate.ts` und `actions/expenses.ts`, jeder von
 genau dem Test gefangen, der ihn verhindern soll.
+
+---
+
+## Nachtrag: die Behebungen aus `/e2e-tests` (01.09.2026)
+
+**TD-14 (neu): Die Erfassungszeile schickt über `onSubmit` ab, nicht über `action=`.**
+
+| | |
+|---|---|
+| **Entscheidung** | `<form onSubmit={…}>` mit `startTransition(() => formAction(formData))` statt `<form action={formAction}>` |
+| **Begründung** | React 19 setzt ein Formular nach einer Server Action **automatisch** zurück. Radix hängt zu jedem `Select` in einem Formular ein **unkontrolliertes** natives Auswahlfeld ein und reicht dessen `change`-Ereignis über `onValueChange` in den React-Zustand zurück (`@radix-ui/react-select`, `index.mjs:1122` und `:1126`). Das Zurücksetzen löschte damit Währung **und** Kategorie. Die einfachen Eingabefelder blieben verschont, weil sie kontrolliert sind — genau dieses Muster war messbar |
+| **Alternative erwogen** | Das versteckte Feld per `form="…"` einem nicht existierenden Formular zuordnen. Funktionierte in Chromium und **brach die Auswahlliste in WebKit** — zu clever und von Radix-Interna abhängig |
+| **Preis** | Ein `preventDefault()` mehr. Abgeschickt wird weiter per POST über dieselbe Server Action; die Zusicherung „Formulare senden nie nativ per GET" bleibt unberührt |
+
+**Warum das erst der Browser zeigen konnte.** Der Fehler lebt ausschließlich im Zustand der
+Oberfläche nach einem Formular-Zurücksetzen. Weder `/build` noch `/qa` konnten ihn sehen: Beide
+haben aus dem Quelltext geschlossen, dass „der Rücksetz-Effekt die Währung nicht anfasst" — was
+stimmte und trotzdem das Falsche bewies. **Die Kategorie verhielt sich seit PROJ-2 so**, und PROJ-2s
+eigener E2E-Test prüfte unter der Überschrift „AC-3" Betrag, Notiz, Datum und Fokus — nur die
+Kategorie nicht. Diese Zusicherung ist jetzt nachgetragen (T20).

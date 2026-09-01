@@ -57,24 +57,43 @@ async function registriere(page: Page, tag: string): Promise<string> {
  */
 async function waehleWaehrung(page: Page, scope: Page | Locator, code: string) {
   await scope.getByLabel('Währung').click()
-  // Bewusst nur ein Präfix und **keine** Wortgrenze: Der zugängliche Name der Option lautet
-  // derzeit „USDUS-Dollar" — Code und Anzeigename laufen ohne Trennzeichen zusammen (BUG-2 im
-  // QA-Bericht). Dieses Muster trifft die Option vor **und** nach der Behebung, damit der Test
-  // den Fehler nicht festschreibt.
-  await page.getByRole('option', { name: new RegExp(`^${code}`) }).click()
+
+  // **Über die Tastatur, nicht per Klick.** Die Liste hat 30 Einträge; auf einem Telefonbildschirm
+  // scrollt Radix beim Öffnen zur ausgewählten Position und blendet Bildlaufschalter ein. Ein Klick
+  // auf einen Eintrag wartet dann in WebKit endlos darauf, dass er „stabil" wird. Die Schnellsuche
+  // von Radix springt direkt zum Eintrag — das ist auch der Weg, den eine Person am Telefon geht.
+  await page.keyboard.type(code)
+  await expect(page.getByRole('option', { name: new RegExp(`^${code}`) })).toHaveAttribute(
+    'data-highlighted',
+    '',
+    { timeout: 10_000 },
+  )
+  await page.keyboard.press('Enter')
+  await expect(scope.getByLabel('Währung')).toHaveText(new RegExp(`^${code}`), { timeout: 10_000 })
 }
 
-/** Füllt die Erfassungszeile inklusive Währung und schickt sie ab. */
+/**
+ * Füllt die Erfassungszeile inklusive Währung und schickt sie ab.
+ *
+ * **Reihenfolge mit Bedacht:** Erst die beiden Auswahlfelder, dann die Textfelder. Die Auswahl
+ * läuft über die Tastatur, und getippte Zeichen haben in WebKit vereinzelt ein zuvor gefülltes
+ * Betragsfeld wieder geleert — die Erfassung scheiterte dann an „Bitte gib einen Betrag ein."
+ * statt an dem, was der Test prüfen wollte. Vor dem Absenden wird deshalb noch einmal
+ * nachgesehen, dass wirklich dasteht, was dastehen soll.
+ */
 async function erfasse(
   page: Page,
   werte: { betrag: string; waehrung?: string; kategorie: string; datum: string; notiz?: string },
 ): Promise<void> {
-  await page.getByLabel('Betrag').fill(werte.betrag)
   if (werte.waehrung) await waehleWaehrung(page, page, werte.waehrung)
   await page.getByLabel('Kategorie').click()
   await page.getByRole('option', { name: werte.kategorie, exact: true }).click()
+
+  await page.getByLabel('Betrag').fill(werte.betrag)
   await page.getByLabel('Datum').fill(werte.datum)
   if (werte.notiz !== undefined) await page.getByLabel('Notiz').fill(werte.notiz)
+
+  await expect(page.getByLabel('Betrag')).toHaveValue(werte.betrag)
   await page.getByRole('button', { name: 'Erfassen' }).click()
 }
 
@@ -88,7 +107,11 @@ function zahl(text: string): number {
  * Originalbetrag und Kurs — plus das ausgewiesene Kursdatum.
  */
 async function leseBetragszelle(page: Page) {
-  const text = await page.locator('tbody tr').first().locator('td').nth(3).innerText()
+  // Erst warten, dass die Zeile wirklich da ist. Ohne das liest der Test auf einem
+  // langsameren Motor ins Leere, statt auf das Erscheinen der Ausgabe zu warten.
+  const zelle = page.locator('tbody tr').first().locator('td').nth(3)
+  await expect(zelle).toBeVisible(AKTION)
+  const text = await zelle.innerText()
   const euro = /([\d.]+,\d{2})\s*€/.exec(text)
   const original = /([\d.]+,\d{2})\s*([A-Z]{3})/.exec(text)
   const kurs = /1\s*€\s*=\s*([\d.,]+)\s*([A-Z]{3})/.exec(text)

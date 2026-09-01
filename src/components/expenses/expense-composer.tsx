@@ -1,6 +1,13 @@
 'use client'
 
-import { Fragment, useActionState, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  startTransition,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -106,7 +113,27 @@ export function ExpenseComposer({
 
   return (
     <form
-      action={formAction}
+      /**
+       * **Bewusst `onSubmit` statt `action={formAction}`** (BUG-2 aus `/e2e-tests`).
+       *
+       * React 19 setzt ein Formular nach einer Server Action automatisch zurück. Radix hängt zu
+       * jedem `Select` in einem Formular ein **unkontrolliertes** natives Auswahlfeld ein und
+       * reicht dessen `change`-Ereignis über `onValueChange` in den React-Zustand zurück — das
+       * Zurücksetzen löschte damit die Auswahl. Sichtbar war das als „Währung springt nach dem
+       * Speichern auf EUR" (AC-6) und „Kategorie steht wieder auf Wählen" (PROJ-2 AC-3); die
+       * einfachen Eingabefelder blieben verschont, weil sie kontrolliert sind.
+       *
+       * Über `onSubmit` findet kein automatisches Zurücksetzen statt. Was geleert werden soll,
+       * leert der Effekt weiter unten — ausdrücklich und nur Betrag und Notiz (AC-3).
+       *
+       * Abgeschickt wird weiterhin per POST über dieselbe Server Action; `preventDefault()`
+       * verhindert nur das native Abschicken, es umgeht nichts.
+       */
+      onSubmit={(event) => {
+        event.preventDefault()
+        const formData = new FormData(event.currentTarget)
+        startTransition(() => formAction(formData))
+      }}
       noValidate
       className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
     >
@@ -125,6 +152,20 @@ export function ExpenseComposer({
       )}
 
       <input type="hidden" name="clientToken" value={clientToken} />
+      <input type="hidden" name="category" value={category} />
+      <input type="hidden" name="currency" value={currency} />
+
+      {/* **Nicht `name` am `Select`** (BUG-2 aus `/e2e-tests`): Radix hängt bei gesetztem `name`
+          ein unkontrolliertes natives Auswahlfeld ins Formular und reicht dessen `change`-Ereignis
+          über `onValueChange` in den React-Zustand zurück. React 19 setzt das Formular nach einer
+          Server Action zurück — das native Feld fällt dann auf seinen Anfangswert und **löscht damit
+          die Auswahl**. Sichtbar war das als „Währung springt nach dem Speichern auf EUR" und
+          „Kategorie steht wieder auf Wählen" (PROJ-3 AC-6, PROJ-2 AC-3).
+
+          Ein kontrolliertes verstecktes Feld hat dieses Problem nicht: Ein Zurücksetzen löst hier
+          kein Ereignis aus, das den Zustand überschreibt, und React stellt den Wert ohnehin wieder
+          aus dem Zustand her. */}
+
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[7rem_6rem_minmax(8rem,1fr)_9.5rem] lg:grid-cols-[7rem_6rem_10.5rem_9.5rem_minmax(0,1fr)_auto]">
         <div className="flex flex-col gap-1.5">
@@ -153,7 +194,7 @@ export function ExpenseComposer({
           {/* Steht direkt neben dem Betrag, weil es ihn liest: „1.250,00" heißt erst etwas,
               wenn danebensteht, worin. Bei EUR — der Vorbelegung — wird kein Kurs geholt und
               gar kein fremder Dienst aufgerufen (AC-2). */}
-          <Select name="currency" value={currency} onValueChange={setCurrency}>
+          <Select value={currency} onValueChange={setCurrency}>
             <SelectTrigger
               id="currency"
               aria-invalid={Boolean(fieldError?.currency)}
@@ -167,8 +208,11 @@ export function ExpenseComposer({
                 <Fragment key={item.code}>
                   {index === PINNED_CURRENCY_COUNT && <SelectSeparator />}
                   <SelectItem value={item.code}>
-                    <span className="tabular-nums">{item.code}</span>
-                    <span className="ml-2 text-muted-foreground">{item.label}</span>
+                    {/* Das Leerzeichen ist kein Versehen: Ohne es lautet der zugängliche
+                        Name „USDUS-Dollar" und ein Screenreader liest ein Wortmonster vor
+                        (BUG-4 aus `/e2e-tests`). */}
+                    <span className="tabular-nums">{item.code}</span>{' '}
+                    <span className="text-muted-foreground">{item.label}</span>
                   </SelectItem>
                 </Fragment>
               ))}
@@ -182,7 +226,7 @@ export function ExpenseComposer({
           </Label>
           {/* Radix liefert bei gesetztem `name` ein verstecktes natives Feld mit — das Formular
               schickt die Kategorie also auch ohne eigenen Umweg mit. */}
-          <Select name="category" value={category} onValueChange={setCategory}>
+          <Select value={category} onValueChange={setCategory}>
             <SelectTrigger
               id="category"
               aria-invalid={Boolean(fieldError?.category)}

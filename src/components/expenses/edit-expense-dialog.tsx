@@ -108,7 +108,13 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
   /** Beim Öffnen wieder auf den gespeicherten Stand — nicht auf den letzten Tippversuch. */
   function onOpenChange(next: boolean) {
     if (next) {
-      setAmount(toAmountField(expense.amount_cents))
+      // **Der Originalbetrag**, nicht der Euro-Betrag (BUG-1 aus `/e2e-tests`): Bei
+      // 1.250,00 USD stand hier zuvor 1078,24 — wer dann irgendetwas speicherte,
+      // schrieb diesen Euro-Betrag als Dollar-Betrag zurück und verkleinerte die
+      // Ausgabe still. Die Initialisierung oben war schon richtig; diese zweite
+      // Stelle war übersehen worden.
+      setAmount(toAmountField(expense.amount_original))
+      setCurrency(expense.currency)
       setCategory(expense.category)
       setSpentOn(expense.spent_on)
       setNote(expense.note ?? '')
@@ -135,6 +141,20 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
 
         <form action={submit} noValidate className="flex flex-col gap-4">
           <input type="hidden" name="id" value={expense.id} />
+          <input type="hidden" name="category" value={category} />
+          <input type="hidden" name="currency" value={currency} />
+
+          {/* **Nicht `name` am `Select`** (BUG-2 aus `/e2e-tests`): Radix hängt bei gesetztem `name`
+              ein unkontrolliertes natives Auswahlfeld ins Formular und reicht dessen `change`-Ereignis
+              über `onValueChange` in den React-Zustand zurück. React 19 setzt das Formular nach einer
+              Server Action zurück — das native Feld fällt dann auf seinen Anfangswert und **löscht damit
+              die Auswahl**. Sichtbar war das als „Währung springt nach dem Speichern auf EUR" und
+              „Kategorie steht wieder auf Wählen" (PROJ-3 AC-6, PROJ-2 AC-3).
+
+              Ein kontrolliertes verstecktes Feld hat dieses Problem nicht: Ein Zurücksetzen löst hier
+              kein Ereignis aus, das den Zustand überschreibt, und React stellt den Wert ohnehin wieder
+              aus dem Zustand her. */}
+
 
           {formError && (
             <p
@@ -173,7 +193,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
                   (AC-12). Bleibt beides stehen und nur der Betrag ändert sich, bleibt der
                   eingefrorene Kurs unangetastet (AC-13). Umstellung auf EUR entfernt ihn
                   (AC-16). */}
-              <Select name="currency" value={currency} onValueChange={setCurrency}>
+              <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger
                   id={`currency-${expense.id}`}
                   aria-invalid={Boolean(fieldError?.currency)}
@@ -186,8 +206,8 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
                     <Fragment key={item.code}>
                       {index === PINNED_CURRENCY_COUNT && <SelectSeparator />}
                       <SelectItem value={item.code}>
-                        <span className="tabular-nums">{item.code}</span>
-                        <span className="ml-2 text-muted-foreground">{item.label}</span>
+                        <span className="tabular-nums">{item.code}</span>{' '}
+                        <span className="text-muted-foreground">{item.label}</span>
                       </SelectItem>
                     </Fragment>
                   ))}
@@ -221,7 +241,7 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
             <Label htmlFor={`category-${expense.id}`} className={LABEL}>
               Kategorie
             </Label>
-            <Select name="category" value={category} onValueChange={setCategory}>
+            <Select value={category} onValueChange={setCategory}>
               <SelectTrigger
                 id={`category-${expense.id}`}
                 aria-invalid={Boolean(fieldError?.category)}
