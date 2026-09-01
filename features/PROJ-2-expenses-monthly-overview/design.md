@@ -831,3 +831,31 @@ sechs gezielte Rückbauten (Frist entfernt · Wiederholversuche wieder an · `is
 `false` · Durchlassen in der Vorprüfung entfernt · Nichterreichen wieder als „abgemeldet" ·
 Unerreichbar-Zweig der Actions entfernt), jeder von genau den Tests gefangen, die ihn verhindern
 sollen, danach alle wieder grün.
+
+---
+
+## Notiz aus dem Bau zu BUG-4 (`/build`, 01.09.2026)
+
+**Der Entwurf hatte eine Lücke, und sie lag in der Annahme, nicht im Code.** Die Ebenen 6–9 haben
+das Nichterreichen ausschließlich an der **Sitzungsprüfung** abgefangen. Das trug, solange
+Datenbank und Auth-Server zusammen ausfallen — und genau so wurde beim Bau gemessen (`docker pause`
+auf den Datenbank-Container). Bleibt der Auth-Server aber erreichbar und steht **nur** der
+Datenzugriff, ist die Sitzung feststellbar, `requireUser()` liefert die Person, und erst die
+Monatsabfrage scheitert. Dort fing sie niemand: Die Abfrage warf, es gab keinen Fehlerzustand, und
+die Person sah dauerhaft das Ladegerüst — sichtbarer Text der ganzen Seite: „auslage."
+
+`MonthView` fängt das jetzt ab, prüft mit `isUnreachable` und zeigt `UnavailableNotice`. **Jeder
+andere Fehler fliegt weiter** — ihn als „gerade nicht erreichbar" auszugeben wäre dieselbe falsche
+Behauptung, gegen die EC-12 geschrieben wurde, nur in die andere Richtung.
+
+**Die Lehre, und sie gilt über dieses Feature hinaus:** Wer eine Zusicherung über *Erreichbarkeit*
+prüft, muss die Bestandteile **einzeln** ausfallen lassen. Ein gemeinsamer Ausfall ist der
+freundlichste aller Fälle — er fällt zuerst dort auf, wo man ohnehin hinsieht, und verdeckt damit
+jeden Pfad, der erst danach liegt.
+
+**Nachgemessen und dabei eine falsche Angabe im QA-Bericht berichtigt.** Dort stand, der Lesepfad
+brauche 4,5 s, weil sich die zwei Abfragen der Monatsansicht addierten. `MonthView` führt sie über
+`Promise.all` **parallel** aus — es gibt dort nur *eine* Frist. Die Instrumentierung zeigt
+`getUser 58 ms` und `Abfragen gescheitert nach 2019 ms`, gesamt **2,21 s**. Die vorher gemessenen
+4,46 s und 3,28 s waren die Erstübersetzung der Route durch den Entwicklungsserver. BUG-6 bleibt
+bestehen, aber nur für den POST-Fall — dort sind zwei Sitzungsprüfungen zu je 2013 ms belegt.

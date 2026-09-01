@@ -483,6 +483,10 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 
 ### BUG-4: Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert
 - **Severity:** ~~Low~~ → **High** (hochgestuft am 2026-09-01 im zweiten Durchlauf)
+- **Status:** **Behebung eingebaut am 01.09.2026** (`/build BUG-4`) — `MonthView` fängt ein
+  Nichterreichen ab und zeigt `UnavailableNotice`; am echten Ausfall (`docker pause` auf PostgREST)
+  belegt: Meldung, Knopf und Kopfzeile stehen, sichtbarer Text nicht mehr nur „auslage.".
+  **Die Verifikation steht noch aus** — sie gehört in den nächsten `/qa`-Lauf, nicht in den Bau
 - **Betrifft:** ~~keine AC~~ → **EC-4**. Der `/refine` vom 01.09.2026 hat EC-4 ausdrücklich auf das
   **Lesen** ausgeweitet: „… wenn eine geschützte Seite **geladen** … wird, dann gibt die App nach
   höchstens 2 Sekunden auf und zeigt eine verständliche Meldung." Genau das leistet dieser Pfad nicht
@@ -519,8 +523,16 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 ### BUG-6: Die Frist gilt je Aufruf, nicht je Anfrage — mehrere Aufrufe addieren sich
 - **Severity:** Medium · **Status:** offen · **Betrifft:** **EC-4** · gefunden im zweiten Durchlauf
 - **Was passiert:** EC-4 sagt „gibt die App **nach höchstens 2 Sekunden** auf". Gemessen wurde beim
-  Lesen der Seite 2,1 s — beim **POST auf dieselbe Seite** aber **4,1 s**, und beim Lesen mit
-  ausgefallenem Datenzugriff **4,5 s**
+  Lesen der Seite 2,1 s — beim **POST auf dieselbe Seite** aber **4,1 s**
+
+> **Korrektur vom 01.09.2026 (im `/build`-Lauf zu BUG-4 nachgemessen).** Dieser Befund nannte
+> ursprünglich zusätzlich „4,5 s beim Lesen mit ausgefallenem Datenzugriff, weil sich die zwei
+> Abfragen der Monatsansicht addieren". **Das war falsch.** `MonthView` führt seine beiden Abfragen
+> über `Promise.all` **parallel** aus, es gibt dort also nur *eine* Frist. Die Instrumentierung zeigt
+> `getUser 58 ms` und `Abfragen gescheitert nach 2019 ms`, gesamt **2,21 s**. Die zuvor gemessenen
+> 4,46 s und 3,28 s waren die **Erstübersetzung** der Route durch den Entwicklungsserver, kein
+> Aufaddieren. Der Befund bleibt bestehen — aber **nur** für den POST-Fall, und der ist durch die
+> Zeitmessung unten sauber belegt.
 - **Ursache, gemessen statt vermutet:** vorübergehend eingebaute Zeitmessung in `proxy.ts` und
   `auth.ts`, dann je ein Aufruf bei angehaltener Datenbank:
 
@@ -530,8 +542,7 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
   | `POST /` | 1 ms | **2013 ms + 2015 ms** | 4,1 s |
 
   Ein POST auf die Seite führt **zwei** Sitzungsprüfungen hintereinander aus, jede mit eigener
-  Zwei-Sekunden-Frist. Auf dem Lesepfad mit ausgefallenem Datenzugriff addieren sich ebenso die
-  **zwei Abfragen** der Monatsansicht
+  Zwei-Sekunden-Frist. Der Lesepfad ist davon **nicht** betroffen (siehe Korrektur oben)
 - **Schritte zur Reproduktion:** `docker pause` auf den Datenbank-Container, dann mit gültiger
   Sitzung `curl -w "%{time_total}" -X POST http://localhost:3300/` → 4,06 s, 4,09 s, 4,13 s in drei
   aufeinanderfolgenden Läufen
@@ -540,8 +551,7 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
   Durchlaufs ist es eine Verbesserung um mehr als das Zehnfache. Es tritt nur ein, wenn die
   Gegenstelle ohnehin steht
 - **Warum nicht Low:** Die Zahl „zwei Sekunden" ist nicht Beiwerk, sie war der **Zweck** des
-  `/refine`. Und sie wächst mit jeder weiteren Abfrage, die ein Pfad macht — der Fehler ist nicht
-  auf die gemessenen 4 Sekunden begrenzt
+  `/refine`. Ein Vertrag, der um das Doppelte verfehlt wird, ist kein erfüllter Vertrag
 - **Fix-Richtung (für `/build`, nicht hier entschieden):** entweder die Frist als **Budget je
   Anfrage** führen (ein gemeinsames Abbruchsignal, das mit der ersten Anfrage zu laufen beginnt),
   oder EC-4 über `/refine` auf „je Aufruf" präzisieren. Das ist eine Vertragsfrage, keine reine

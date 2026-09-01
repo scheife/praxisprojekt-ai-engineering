@@ -188,6 +188,13 @@
       „nicht angemeldet" weiterhin um · der Unerreichbar-Zweig der Actions, mit stehen bleibenden
       Eingaben  · files: src/proxy.test.ts, src/lib/actions/expenses.test.ts  · → EC-12, EC-4
 
+### Ebene 10 — Behebung aus `/qa`, zweiter Durchlauf (01.09.2026)
+
+<!-- Kein neuer Bauteil, sondern die Lücke, die der zweite QA-Lauf gezeigt hat: Die Behebung der
+     Ebenen 6-9 hing vollständig an der Sitzungsprüfung und deckte den Lesepfad nicht ab. -->
+
+- [x] T27  **BUG-4 (High):** Der Lesepfad bekommt denselben Ausgang wie die Sitzungsprüfung. Fällt **nur** der Datenzugriff aus, während der Auth-Server erreichbar bleibt, ist die Sitzung feststellbar und erst die Monatsabfrage scheitert — dort fing sie niemand, und die Person sah dauerhaft das Ladegerüst. `MonthView` fängt jetzt ein **Nichterreichen** ab und zeigt `UnavailableNotice`; **jeder andere Fehler fliegt weiter**, denn ihn als „gerade nicht erreichbar" auszugeben wäre dieselbe falsche Behauptung, gegen die EC-12 geschrieben wurde  · files: `src/components/expenses/month-view.tsx`, `src/components/expenses/month-view.test.tsx`  · → EC-4
+
 **Nachtrag aus dem Bau (01.09.2026): `account.test.ts` fehlte in T26.** Ebene 9 hatte die
 Testdateien aufgezählt, deren Prüfgegenstand sich ändert — `expenses.test.ts` war dabei,
 `account.test.ts` nicht. Beide mocken aber `requireUser()`, und dessen Rückgabetyp hat sich
@@ -237,5 +244,5 @@ Alle **30 Acceptance Criteria** und alle **12 Edge Cases** sind mindestens einer
 | AC-26 | T1 · AC-27 T8, T10, T16 · AC-28 T12 · AC-29 T1, T5, T12 · AC-30 T1, T5, T12 |
 | EC-1 | T1, T9, T12 · EC-2 T9, T14 · EC-3 T9, T14 · EC-4 T12 · EC-5 T9, T15 · EC-6 T3 |
 | EC-7 | T6 · EC-8 T7 · EC-9 T7 · EC-10 T8, T10 · EC-11 T9, T14 |
-| **EC-4** (neu gefasst) | T17, T19, T22, T23, T24, T25, T26 — ersetzt die alte Zuordnung „T12" |
+| **EC-4** (neu gefasst) | T17, T19, T22, T23, T24, T25, T26, **T27** — ersetzt die alte Zuordnung „T12" |
 | **EC-12** (neu) | T18, T20, T21, T22, T25, T26 |
