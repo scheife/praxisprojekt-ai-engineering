@@ -46,9 +46,10 @@ Das Projekt ist erfolgreich, wenn die Prüfung besteht — und die misst zwei Di
 | **Zeitrahmen** | Ein Wochenende, ca. 6–8 Std. gesamt (2–3 Std. pro Feature inkl. komplettem Kit-Workflow) |
 | **Team** | Eine Person |
 | **Tech-Stack** | Durch das Kit vorgegeben: Next.js 16 (App Router) · TypeScript · Tailwind CSS · shadcn/ui · Supabase (Auth + Postgres) · Vitest · Playwright |
-| **Environment strategy** | `local` — Supabase läuft während der Entwicklung in Docker; Schemaänderungen als `supabase/migrations/*.sql` im Repo. Kein gehostetes Projekt, kein neuer Supabase-Account nötig |
+| **Environment strategy** | `local` — Supabase läuft während der Entwicklung in Docker; Schemaänderungen als `supabase/migrations/*.sql` im Repo. **Gilt weiter für die Entwicklung**; ob mit dem geplanten gehosteten Projekt (siehe Hosting) daraus `two-projects` wird, ist noch nicht entschieden — Sache eines `/refine` |
 | **Lokale Ports** | Supabase läuft auf **55321** (API) / 55322 (DB) / 55323 (Studio) / 55324 (Mailpit) statt der Standard-54xxx. Grund: das alexmacht Business OS hält lokal die Standard-Ports besetzt. Festgehalten in `supabase/config.toml`, damit der Stack reproduzierbar startet |
-| **Data region** | `eu-central-1` (Frankfurt) — gilt, falls später doch ein gehostetes Projekt entsteht. Die Region lässt sich nachträglich **nicht** ändern |
+| **Hosting** | Die App läuft lokal (`npm run dev`), kein Server-Deployment. **Datenhaltung: gehostetes Supabase-Projekt geplant** (bestätigt am 02.09.2026 bei `/dsgvo`) — bis dahin Supabase in Docker. Damit wird Supabase Auftragsverarbeiter; die fälligen Schritte stehen in `docs/privacy.md` → „Wenn es online geht" |
+| **Data region** | `eu-central-1` (Frankfurt) — **beim Anlegen des geplanten Projekts zu setzen**. Die Region lässt sich nachträglich **nicht** ändern, ein Wechsel bedeutet ein neues Projekt und eine vollständige Migration |
 | **Data protection law** | GDPR (EU/AT) |
 | **Data protection stance** | `lean` |
 | **Design system** | siehe `docs/design-system.md` — abgeleitet aus dem alexmacht.at Design System (Dark „Signature", Business-OS-Maßstab) |
