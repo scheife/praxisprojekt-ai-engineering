@@ -453,6 +453,42 @@ Die letzten beiden machen EC-3 überhaupt erst prüfbar: Ohne eine Grenze läuft
 nie ab. Läuft sie ab, führt die nächste Aktion auf `/login` **mit** dem Hinweis „Deine Sitzung ist
 abgelaufen" — nicht in eine stumme Fehlermeldung.
 
+### Nachtrag 02.09.2026 — die letzten beiden Zeilen gelten nur lokal
+
+Beim Umzug auf ein gehostetes Supabase-Projekt (`auslage.`, `eu-central-1`) hat `supabase config push`
+den ganzen `[auth]`-Block abgelehnt:
+
+```
+402: User sessions can only be configured on Pro Plans and up.
+```
+
+**`[auth.sessions]` ist ein Pro-Feature.** Im gehosteten Projekt stehen `timebox` und
+`inactivity_timeout` auf `0s` — also unbegrenzt — und lassen sich auf dem Free Plan nicht setzen.
+`supabase/config.toml` bleibt unverändert; die Werte dort gelten weiter für den lokalen Docker-Stack.
+Deshalb wird auch **jeder künftige `config push` an genau dieser Zeile scheitern**, solange das
+Projekt auf dem Free Plan liegt. Der Umweg: den Block vorübergehend auskommentieren, pushen,
+zurücknehmen — so ist der Rest des Blocks am 02.09.2026 angekommen (`auth: updated`).
+
+**Was das für EC-3 heißt** — genau dies, nicht mehr:
+
+| Hälfte von EC-3 | lokal | gehostet (Free Plan) |
+|---|---|---|
+| Die Sitzung läuft nach 8 h Untätigkeit / 24 h ab | ja | **nein** — kein zeitlicher Auslöser |
+| Eine ungültige Sitzung führt auf `/login` **mit** Hinweis | ja | **ja** — steckt im Anwendungscode |
+
+Die zweite Hälfte ist die, auf die es dem Kriterium ankommt, und sie greift überall: Sie feuert auch
+bei einem gelöschten Konto, was EC-5 unabhängig davon nachweist. Verloren geht nur der Ablauf **durch
+Zeit**.
+
+Der QA-Bericht hatte EC-3 ohnehin nur halb abgehakt: *„geprüft sind die gesetzten Werte und die
+Hinweiszeile, nicht das Verstreichen der Zeit."* Die Einschränkung ist also nicht neu — im
+gehosteten Projekt wird sie nur größer, weil dort auch die gesetzten Werte fehlen.
+
+**Wenn die Grenzen wirklich gebraucht werden**, gibt es zwei Wege, und beide sind bewusst nicht
+gegangen worden: den Pro Plan buchen, oder die Zwangsabmeldung im Anwendungscode nachbauen (Zeitpunkt
+der Sitzungserstellung prüfen und selbst abmelden). Das Zweite wäre eine Änderung am
+Authentifizierungsfluss und braucht damit eine eigene `/refine PROJ-1`-Runde, keinen stillen Zusatz.
+
 ---
 
 ## Zustände je Seite
