@@ -1821,3 +1821,84 @@ Zusicherung war für den kaputten Zustand formuliert und hat ihn dadurch festges
 Beide neuen Zusicherungen prüfen deshalb **Mengen und Verhalten** statt Abwesenheit: wie breit ist
 das Raster, wie viele Tage trägt der Monat, und was passiert beim Klick. Eine Zusicherung auf
 „etwas ist nicht da" ist genau dann grün, wenn zu viel weg ist.
+
+---
+
+## Siebter Durchlauf — 02.09.2026 (Elevation für Dialog und Toast nachgezogen)
+
+**Anlass:** Der sechste Durchlauf hat den Popover-Schatten auf die Werte aus
+`docs/design-system.md` §6.1 gebracht und dabei festgehalten, dass `dialog.tsx` und der Toast
+weiterhin abweichen — als offener Punkt, nicht als Befund. Auf Ansage nachgezogen.
+
+**Testsuite:** `npm test` → **325 Tests in 24 Dateien, alle grün** (vorher 310) · **E2E:**
+**32 von 32 grün** · **Ausfall-Zusicherung** grün · Lint, TypeScript und Build ohne Befund
+
+### BUG-13, zweiter Teil — die Dialoge und der Toast
+
+`docs/design-system.md` §6.1 nennt zwei Werte, und beide hatten keinen einzigen Träger im Code:
+Dialog `0 30px 80px rgba(0,0,0,.55)`, Toast `0 14px 40px rgba(0,0,0,.55)`. Jetzt liegen sie als
+Token in `globals.css` und werden benutzt.
+
+| Baustein | vorher | jetzt | gemessen an der laufenden App |
+|---|---|---|---|
+| `dialog.tsx` (Ändern) | `shadow-lg` | `shadow-dialog` | `rgba(0,0,0,0.55) 0px 30px 80px` |
+| `alert-dialog.tsx` (Löschen, Konto löschen) | `shadow-lg` | `shadow-dialog` | `rgba(0,0,0,0.55) 0px 30px 80px` |
+| `sonner.tsx` (der Toaster im Layout) | `shadow-lg` | Inline-Stil `var(--shadow-float)` | `rgba(0,0,0,0.55) 0px 14px 40px` |
+| `toast.tsx` (nicht eingebunden) | `shadow-lg` | `shadow-float` | — |
+
+**`alert-dialog.tsx` stand nicht in der Ansage und wurde trotzdem mitgezogen:** Es *ist* ein
+Dialog — die Löschbestätigung aus AC-22 und die Kontolöschung aus PROJ-1 laufen darüber. Die
+Löschbestätigung ohne Erhebung zu lassen, während der Änderungsdialog daneben eine bekommt, wäre
+dieselbe Inkonsequenz in klein.
+
+### Der Toast brauchte einen anderen Weg — und das war der eigentliche Fund
+
+Die Klasse `group-[.toaster]:shadow-float` stand am Toast und **wirkte nicht**. Gemessen wurde
+weiterhin `rgba(0,0,0,.1) 0 4px 12px`.
+
+**Ursache:** Sonner bringt ein eigenes Stylesheet mit und setzt darin
+`[data-sonner-toast][data-styled="true"] { box-shadow: … }` — Spezifität (0,2,0). Eine
+Tailwind-Klasse mit `group-[…]`-Variante kommt dagegen nicht an: **v4 schreibt den Gruppenteil in
+`:where()`, das null Spezifität beiträgt**, sodass am Ende nur die eine Klasse zählt (0,1,0).
+Die Klasse war also nicht falsch geschrieben — sie hatte nie eine Chance
+· *Nachweis: im Browser alle auf das Element passenden Regeln mit `box-shadow` aufgezählt; es war
+genau eine, und es war Sonners*
+
+**Der Fix ist Sonners dokumentierter Weg:** `toastOptions.style` — ein Inline-Stil, der jede
+Stylesheet-Regel schlägt, ohne `!important`, das die nächste Anpassung nur schwerer machen würde.
+Der Wert bleibt derselbe Token wie bei Popover und Dialog (`var(--shadow-float)`); die tote Klasse
+ist entfernt, statt sie stehen zu lassen.
+
+### Zusicherung
+
+**`src/components/ui/elevation.test.ts`** (neu, 15 Zusicherungen): Jeder der sieben schwebenden
+Bausteine benutzt seinen Token **und** trägt keinen Tailwind-Standardschatten mehr; dazu eine
+Zusicherung, dass die beiden Token-Werte wörtlich denen aus §6.1 entsprechen.
+
+Am Quelltext geprüft, aus demselben Grund wie bei BUG-11: `shadcn add` bringt den
+Standardschatten lautlos zurück.
+
+**Rot-Nachweis, drei Brüche:** `dialog.tsx` zurück auf `shadow-lg` (2 fallen) · Sonner verliert
+den Inline-Stil (1 fällt) · der Token-Wert weicht vom Design System ab (1 fällt). Danach sind die
+Quellen nachweislich unverändert.
+
+### Offener Punkt — Flächenfarben, nicht Elevation
+
+Beim Messen fiel auf, dass die **Fläche** des Toasts nicht aus diesem Projekt kommt:
+`rgb(0, 0, 0)` gegen eine Seite von `rgb(8, 8, 7)`. Der Toast ist damit **dunkler** als der
+Untergrund, obwohl er darüber schwebt — die Staffelung steht auf dem Kopf. Ursache ist dieselbe
+Spezifitätsfalle: Auch `group-[.toaster]:bg-background` wirkt nicht, es gewinnt Sonners
+Dark-Theme-Standard.
+
+`docs/design-system.md` weist in der Token-Tabelle `--popover` (`#111110`) ausdrücklich
+„Dialoge, Dropdowns, **Toast**" zu — der Toast müsste also `rgb(17,17,16)` tragen, so wie das
+Popover. Dasselbe gilt für `dialog.tsx`, das `bg-background` benutzt statt `--popover`.
+
+**Nicht behoben, bewusst:** Das ist eine Änderung an **Farben**, nicht an Elevation, und sie
+betrifft die Fläche jedes Dialogs im Produkt. Die Ansage lautete „Schatten nachziehen". Hier steht
+sie als benannte Entscheidung, nicht als stiller Rest.
+
+### Bug-Stand
+
+**0 Critical · 0 High · 0 Medium · 0 Low.** Alle Befunde BUG-2 und BUG-8 bis BUG-13 behoben und
+verifiziert.
