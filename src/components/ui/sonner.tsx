@@ -41,10 +41,24 @@ const Toaster = ({ ...props }: ToasterProps) => {
          * jede Stylesheet-Regel — ohne `!important`, das die nächste Anpassung nur schwerer
          * machen würde. Der Wert bleibt derselbe Token wie bei Popover und Dialog.
          */
-        style: { boxShadow: "var(--shadow-float)" },
+        style: {
+          boxShadow: "var(--shadow-float)",
+          // Dieselbe Fläche wie Dialoge und Dropdowns: `docs/design-system.md` §3.2 weist
+          // `--popover` ausdrücklich „Dialoge, Dropdowns, **Toast**" zu. Zuvor gewann Sonners
+          // Dark-Theme-Standard und der Toast war `rgb(0,0,0)` — also **dunkler** als die Seite
+          // (`rgb(8,8,7)`), obwohl er darüber schwebt. Die Staffelung stand auf dem Kopf.
+          //
+          // `hsl(...)` ist nötig, weil die Token dieses Projekts nur das HSL-Tripel halten und
+          // erst die Utility daraus eine Farbe macht — im Inline-Stil gibt es keine Utility.
+          background: "hsl(var(--popover))",
+          color: "hsl(var(--popover-foreground))",
+          borderColor: "hsl(var(--border))",
+        },
         classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border",
+          // Fläche, Text und Rahmen stehen oben im Inline-Stil, nicht hier: Die
+          // `group-[…]`-Varianten verlieren gegen Sonners eigenes Stylesheet (Begründung am
+          // `style` oben). Eine Klasse, die nachweislich nichts bewirkt, bleibt nicht stehen.
+          toast: "group toast",
           description: "group-[.toast]:text-muted-foreground",
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",

@@ -1902,3 +1902,77 @@ sie als benannte Entscheidung, nicht als stiller Rest.
 
 **0 Critical · 0 High · 0 Medium · 0 Low.** Alle Befunde BUG-2 und BUG-8 bis BUG-13 behoben und
 verifiziert.
+
+---
+
+## Achter Durchlauf — 02.09.2026 (Flächenfarben der schwebenden Bausteine angeglichen)
+
+**Anlass:** Der siebte Durchlauf hat die **Erhebung** in Ordnung gebracht und die **Fläche** als
+benannte Entscheidung offengelassen. Auf Ansage nachgezogen.
+
+**Testsuite:** `npm test` → **332 Tests in 24 Dateien, alle grün** (vorher 325) · **E2E:**
+**32 von 32 grün** · **Ausfall-Zusicherung** grün · Lint, TypeScript und Build ohne Befund
+
+### Was geändert wurde
+
+`docs/design-system.md` §3.2 weist `--popover` (`#111110`) ausdrücklich **„Dialoge, Dropdowns,
+Toast"** zu. Die Dropdowns lagen bereits richtig; die Dialoge lagen auf `--background`, der
+**Seitenfläche**, und der Toast auf Sonners Dark-Theme-Standard.
+
+| Baustein | Fläche vorher | Fläche jetzt |
+|---|---|---|
+| `dialog.tsx` (Ändern) | `bg-background` — `rgb(8,8,7)` | `bg-popover` + `text-popover-foreground` |
+| `alert-dialog.tsx` (Löschen) | `bg-background` | `bg-popover` + `text-popover-foreground` |
+| `sonner.tsx` (Toast) | Sonner-Standard — `rgb(0,0,0)` | Inline `hsl(var(--popover))`, dazu Text und Rahmen |
+| `popover`, `select`, `dropdown-menu` | schon `bg-popover` | unverändert |
+
+**An der laufenden App gemessen** — alle vier schwebenden Flächen tragen jetzt denselben Wert:
+
+| | Fläche | Text | Rahmen |
+|---|---|---|---|
+| Popover (Kalender) | `rgb(17, 17, 16)` | `rgb(245, 245, 240)` | `rgb(29, 29, 28)` |
+| Änderungsdialog | `rgb(17, 17, 16)` | `rgb(245, 245, 240)` | `rgb(29, 29, 28)` |
+| Löschbestätigung | `rgb(17, 17, 16)` | `rgb(245, 245, 240)` | `rgb(29, 29, 28)` |
+| Toast | `rgb(17, 17, 16)` | `rgb(245, 245, 240)` | `rgb(29, 29, 28)` |
+
+**Und die Staffelung stimmt wieder**, von unten nach oben heller, genau wie §3.2 sie festlegt:
+Seite `rgb(8,8,7)` → Karte `rgb(13,13,11)` → Schwebendes `rgb(17,17,16)`.
+
+Vorher stand sie beim Toast **auf dem Kopf**: `rgb(0,0,0)` ist dunkler als die Seite, über der er
+schwebt. Das ist nicht bloß ein anderer Farbton — es kehrt das Zeichen um, an dem man ohne
+Nachdenken erkennt, was über was liegt. Ein Toast, der dunkler ist als sein Untergrund, liest sich
+wie ein Loch, nicht wie eine Karte darüber.
+
+### Der Toast brauchte wieder den Inline-Weg
+
+Dieselbe Spezifitätsfalle wie beim Schatten: `group-[.toaster]:bg-background`,
+`…:text-foreground` und `…:border-border` standen am Toast und wirkten **alle drei** nicht.
+Sonners eigenes Stylesheet gewinnt, weil Tailwind v4 den Gruppenteil in `:where()` schreibt
+(null Spezifität). Fläche, Text und Rahmen stehen jetzt in `toastOptions.style`; die toten Klassen
+sind entfernt statt stehen zu bleiben — eine Klasse, die nachweislich nichts bewirkt, sieht im
+Quelltext nach einer Entscheidung aus und ist damit schlimmer als keine.
+
+`hsl(…)` ist dabei nötig, weil die Token dieses Projekts nur das HSL-Tripel halten und erst die
+Tailwind-Utility daraus eine Farbe macht — im Inline-Stil gibt es keine Utility.
+
+### Zusicherung
+
+`elevation.test.ts` heißt jetzt **`floating-surfaces.test.ts`** und deckt beides ab: Erhebung
+(§6.1) und Fläche (§3.2). **22 Zusicherungen**, davon 7 neu:
+
+- Jeder klassenbasierte Baustein legt seine **schwebende Ebene** auf `bg-popover` und nicht auf
+  `bg-background`. Geprüft wird nur die Ebene mit `z-50` — `select.tsx` enthält auch den Auslöser,
+  ein gewöhnliches Formularfeld, das zu Recht nicht auf `--popover` liegt. Eine Prüfung über die
+  ganze Datei wäre am falschen Ort rot geworden
+- `sonner.tsx` setzt Fläche und Text über den Inline-Stil und trägt die tote Klasse nicht mehr
+- **Die Staffelung selbst** wird aus den Tripeln in `globals.css` gelesen: Seite dunkler als Karte,
+  Karte dunkler als Schwebendes. Damit dreht ein Umfärben die Reihenfolge nicht unbemerkt um
+
+**Rot-Nachweis, drei Brüche:** Dialog zurück auf die Seitenfläche (1 fällt) · Toast zurück auf die
+tote Klasse (1 fällt) · `--popover` dunkler als `--card` gesetzt (1 fällt — die Staffelungsprüfung).
+Die Quellen sind danach nachweislich unverändert.
+
+### Bug-Stand
+
+**0 Critical · 0 High · 0 Medium · 0 Low.** BUG-2 und BUG-8 bis BUG-13 sind behoben und
+verifiziert; der im siebten Durchlauf benannte offene Punkt zu den Flächenfarben ist geschlossen.
