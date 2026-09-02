@@ -500,7 +500,7 @@ Die Sitzungsprüfung liefert künftig nicht mehr „Person" oder „niemand", so
 |---|---|---|
 | **Angemeldet** | Der Auth-Server hat die Sitzung bestätigt | wie bisher |
 | **Nicht angemeldet** | Der Auth-Server hat **geantwortet**: die Sitzung gilt nicht | wie bisher — Weiterleitung auf `/login` (EC-5, PROJ-1 EC-3) |
-| **Nicht feststellbar** | Frist abgelaufen, Netzwerkfehler oder Serverfehler — es kam **keine** Antwort | **keine** Weiterleitung, Nicht-erreichbar-Zustand (EC-12) |
+| **Nicht feststellbar** | Frist abgelaufen, Netzwerkfehler oder Serverfehler — es kam **keine** Antwort | **keine** Weiterleitung, Zeitüberschreitungs-Zustand (EC-12) |
 
 Unterschieden wird an der **Art des Fehlers**, nicht am Fehlen der Person: ein abgebrochener oder
 fehlgeschlagener Netzaufruf ist etwas anderes als eine beantwortete Ablehnung. Das ist derselbe
@@ -514,7 +514,7 @@ den ersten Blick wie eine Lücke aus und ist keine:
 - Die Vorprüfung war **nie** die Zugriffskontrolle, sondern eine Vorfilterung (TD-2). Die echte
   Prüfung sitzt auf jeder geschützten Seite.
 - Die Seite kommt zum selben Ergebnis und zeigt deshalb **gar keine Daten**, sondern den
-  Nicht-erreichbar-Zustand.
+  Zeitüberschreitungs-Zustand.
 - Und es sind auch keine zu holen: Steht der Weg zur Datenbank, liefert Row Level Security nichts.
 - **Fail-open an der Vorprüfung, fail-closed an der Seite.** Wer durchgelassen wird, sieht trotzdem
   nur „gerade nicht erreichbar".
@@ -532,9 +532,27 @@ jemand ein Passwort raten darf — fällt sie aus, ist Durchwinken das Risiko. H
 | Server Actions | Formularweite Meldung über den Feldern; **alle Eingaben bleiben stehen** (EC-4) |
 | `/konto/export` | HTTP **503** mit kurzem deutschsprachigem Text. Eine Route, die eine Datei liefert, kann keine Karte zeigen |
 
-**Der Text** (überall derselbe, wie die übrigen Meldungen ohne Schuldzuweisung):
-„Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch
-einmal."
+**Der Text** (überall derselbe, seit 02.09.2026 — EC-13, TD-33):
+
+> **Das hat zu lange gedauert.**
+> Das liegt nicht an dir — versuch es in einem Moment noch einmal.
+
+Als eine Zeile, wo nur eine passt (Server Actions, `/konto/export`):
+„Das hat zu lange gedauert. Das liegt nicht an dir — versuch es in einem Moment noch einmal."
+
+**Was dieser Text bewusst nicht sagt, und warum das die eigentliche Zusicherung ist (EC-13):**
+
+| Nicht gesagt wird | Weil |
+|---|---|
+| „Wir erreichen deine Daten nicht" · „Die Datenbank ist nicht erreichbar" | Aus einer abgelaufenen Frist folgt das nicht. Die App hat gewartet und aufgegeben — ob die Gegenstelle steht, nur langsam ist oder die Antwort bloß unterwegs verloren ging, hat sie nicht geprüft. Bis zum 01.09.2026 stand genau diese Behauptung da |
+| „Es wurde nichts gespeichert" (Schreibweg) | Die Frist kann zuschlagen, **nachdem** die Datenbank die Zeile angenommen hat — dann geht nur die Antwort verloren. Gefährlich ist das nicht: Die Vorgangskennung aus EC-1 verhindert beim zweiten Versuch ein Duplikat. Falsch wäre allein, das Gegenteil zu behaupten |
+| eine Zahl („nach 2 Sekunden abgebrochen") | Der Rest der App spricht nirgends über interne Grenzen. Die Zielgruppe sind Gewerbetreibende, keine Entwickler:innen |
+
+„Das liegt nicht an dir" **bleibt** — das ist keine Aussage über die Gegenstelle, sondern über die
+Person, und sie stimmt: Ein Fristablauf ist nie ihr Fehler.
+
+**Wo die Wahrheit dann steht:** in der Liste, nach dem nächsten Laden. Das ist der Grund, warum die
+Karte eine Schaltfläche „Erneut versuchen" trägt und keinen erklärenden Absatz.
 
 **Kein automatischer Neuversuch, kein selbsttätiges Nachladen.** Wer erneut versuchen will, drückt
 darauf. Ein Hintergrundversuch alle paar Sekunden schickt eine bereits überlastete Gegenstelle
@@ -542,10 +560,28 @@ zusätzliche Anfragen und verändert die Seite unter den Händen der Person.
 
 ### Neue Rahmen-Komponente
 
-Eine Komponente `UnavailableNotice` unter `src/components/shell/` — sie gehört zum Rahmen, und den
+Eine Komponente `TimeoutNotice` unter `src/components/shell/` — sie gehört zum Rahmen, und den
 besitzt PROJ-2. Sie nimmt den Satz und die Schaltfläche und wird von `/` und `/konto` an derselben
-Stelle eingesetzt. `docs/app-shell.md` ist bereits nachgezogen: Seitenmuster um den
-**Nicht-erreichbar-Zustand**, Anmeldezustände um **„nicht prüfbar"**.
+Stelle eingesetzt.
+
+> **Umbenannt am 02.09.2026** von `UnavailableNotice` (TD-33). Eine Komponente, die „unavailable"
+> heißt, während ihr Vertrag ihr genau diese Behauptung verbietet, ist eine Falle für die nächste
+> Person, die sie einsetzt. Kosten: eine Datei, zwei Importe.
+
+**Die vier Stellen, an denen der Satz steht** — sie müssen zusammen wandern, sonst widersprechen
+sich die Wege (EC-13):
+
+| Stelle | Was dort steht |
+|---|---|
+| `src/components/shell/timeout-notice.tsx` | die Karte mit Überschrift, Satz und „Erneut versuchen" |
+| `src/lib/actions/expenses.ts` | die formularweite Meldung beim Erfassen, Ändern, Löschen |
+| `src/lib/actions/account.ts` | dieselbe Meldung auf dem Kontoweg |
+| `src/app/konto/export/route.ts` | der Text im HTTP-503-Rumpf |
+
+**PROJ-1 bleibt unangetastet.** Seine Meldungen („Die Anmeldung ist gerade nicht möglich",
+„Die Registrierung ist gerade nicht möglich") behaupten schon heute nur, dass die *Handlung* nicht
+ging — nie, woran es lag. Sie erfüllen EC-13 bereits und werden nicht angefasst. `docs/app-shell.md` ist nachgezogen: Seitenmuster um den
+**Zeitüberschreitungs-Zustand** (bis 02.09.2026 „Nicht-erreichbar-Zustand"), Anmeldezustände um **„nicht prüfbar"**.
 
 ### Was das für PROJ-1 heißt
 
@@ -559,7 +595,7 @@ nie beansprucht hat. Die Tore behalten ihre eigene 2-Sekunden-Frist und fallen w
 
 ## Zustände je Seite
 
-| Seite | Laden | Leer | Fehler | Nicht erreichbar (EC-4, EC-12) |
+| Seite | Laden | Leer | Fehler | Zeitüberschreitung (EC-4, EC-12, EC-13) |
 |---|---|---|---|---|
 | `/` | Skeletons in `--muted` an der Stelle von Kopf, Summe, Übersicht und drei Listenzeilen — über eine Suspense-Grenze in der Seite, kein Spinner | Ausformulierter Leerzustand statt leerer Tabelle; die Erfassungszeile bleibt bedienbar (AC-12) | Feldfehler am verursachenden Feld, formularweite Fehler als Zeile darüber; Toast nur für Rückmeldungen |
 | `/konto` | unverändert von PROJ-1 (`konto/loading.tsx`), ergänzt um eine Skeleton-Karte für den Export-Abschnitt | — | Der Export-Link führt zu einer Datei; scheitert der Abruf, zeigt der Browser seinen eigenen Fehler | `UnavailableNotice` an der Stelle der Karten; der Export selbst antwortet mit HTTP 503 |
@@ -734,6 +770,7 @@ wartende Station einführt, würde sie unbemerkt reißen.
 | **TD-30** Die Sitzungsprüfung hat **drei Ausgänge**, unterschieden an der **Art des Fehlers** | „Nicht angemeldet" und „nicht feststellbar" sehen im Code heute gleich aus — beide enden bei `null`, und daraus wurde „Sitzung abgelaufen". Ein abgebrochener Netzaufruf ist aber etwas anderes als eine beantwortete Ablehnung. Derselbe Schnitt wie bei PROJ-3s Kursdienst: dauerhaft gegen vorübergehend | Am Fehlen der Person unterscheiden (geht nicht, beide liefern nichts); einen Zeitstempel mitführen und daraus schließen | Jede aufrufende Stelle muss den dritten Fall behandeln — zwei Seiten, eine Route, drei Actions und die Vorprüfung. Der Preis dafür, dass die App nie etwas über die Sitzung behauptet, was sie nicht geprüft hat | 2026-09-01 |
 | **TD-31** Die Gesamtgrenze aus EC-4 wird **nicht durch einen neuen Mechanismus** erreicht, sondern durch die Struktur — und mit einem Test festgehalten | Die Rechnung oben zeigt: Die längste realistische Kette ist Vorprüfung (meist ohne Netzaufruf) + eine Sitzungsprüfung + eine Abfragestufe, gemessen 2,12 s / 2,27 s / 4,07 s. Alles unter 5 Sekunden. Ein zusätzliches Bauwerk dafür wäre Code ohne Zweck; was fehlt, ist nicht Mechanik, sondern eine Zusicherung, die es so hält | Ein gemeinsames Abbruchsignal über die ganze Anfrage (Gesamtbudget) | Ohne eigenen Mechanismus hängt die Einhaltung an der Struktur: Wer einen Weg mit einer dritten wartenden Station baut, reißt die Grenze. Genau das fängt der Test ab — später, aber sicher, statt nie | 2026-09-01 |
 | **TD-32** Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wird **verworfen** | Sie stand einen Schritt lang in der Spec und ist nicht sicher baubar. Gemessen: Server Action und anschließender Neuaufbau teilen **keinen** anfragebezogenen Bereich — die in `React.cache` umschlossene Prüfung lief in **einer** Anfrage trotzdem zweimal. Die Next.js-Doku sagt zu `React.cache` „scoped to the current request only"; diese beiden Durchgänge zählen offenbar nicht als derselbe | Modulweiter Zwischenspeicher; die Prüfung der Seite lokal statt beim Auth-Server | Der modulweite Speicher würde die Sitzung einer Person an die nächste ausliefern — ausgeschlossen. Die lokale Prüfung nähme PROJ-1 seine Zusage aus EC-5 (eine entzogene Sitzung fiele erst nach bis zu einer Stunde auf) und wäre ein `/refine PROJ-1`. Der Preis des Verzichts ist klein: Im Normalbetrieb kostet die zweite Prüfung rund 50 ms; teuer ist sie nur im Ausfall, also wenn ohnehin nichts geht | 2026-09-01 |
+| **TD-33** Die Meldung bei Fristablauf nennt **nur den Fristablauf** — und die Komponente heißt danach | `/qa PROJ-3` hat gemessen, dass die Frist auch bei gesunder Gegenstelle reißt, sobald die Maschine ausgelastet ist. Der bisherige Satz „Wir erreichen deine Daten gerade nicht" behauptete dann eine Ursache, die die App nie geprüft hatte. Sie weiß in diesem Moment genau eines: Sie hat gewartet und aufgegeben. Es ist derselbe Schnitt wie bei PROJ-3s Kursdienst, wo „gibt es nicht" von „gerade nicht erreichbar" getrennt ist — die eine Meldung hat eine Prüfung hinter sich, die andere nicht. Deshalb wandert der Name mit: `UnavailableNotice` → `TimeoutNotice`, und im Rahmen heißt der Zustand Zeitüberschreitungs-Zustand | Nur den Text ändern und die Komponente `UnavailableNotice` lassen; alternativ an der Zahl drehen statt an der Aussage | Der Rename kostet eine Datei und zwei Importe. Dagegen steht: Eine Komponente, die „unavailable" heißt und laut Vertrag gerade **nicht** behaupten darf, dass etwas nicht verfügbar ist, ist eine Falle für die nächste Person, die sie benutzt. An der Zahl wurde bewusst nicht gedreht — die 2 Sekunden sind nirgends als falsch nachgewiesen (`spec.md`, Offene Fragen) | 2026-09-02 |
 
 ---
 
@@ -775,7 +812,8 @@ wartende Station einführt, würde sie unbemerkt reißen.
 | EC-2 In einem Tab gelöscht | Betroffene Zeilen zählen, nie Upsert (TD-6) |
 | EC-3 Gleichzeitig geändert | Alle Felder in einer Anweisung (TD-5) |
 | EC-4 Datenbank oder Auth-Server antwortet nicht | Frist im gemeinsamen `fetch` (TD-27), Wiederholversuche aus (TD-28); formularweite Meldung, Zustand bleibt stehen |
-| EC-12 Anmeldung nicht feststellbar | Drei Ausgänge (TD-30), Vorprüfung lässt durch (TD-29), `UnavailableNotice` statt `/login` |
+| EC-12 Anmeldung nicht feststellbar | Drei Ausgänge (TD-30), Vorprüfung lässt durch (TD-29), `TimeoutNotice` statt `/login` |
+| EC-13 Die Meldung behauptet keine ungeprüfte Ursache | Ein Text für alle vier Stellen (TD-33); der Schreibweg sagt nichts über den Ausgang |
 | EC-5 Sitzung abgelaufen | `requireUser()` aus PROJ-1 (Routen und Zugriffsschutz) |
 | EC-6 Monatsgrenze um Mitternacht | Zeitzone (TD-24) |
 | EC-7 Rundung der Prozentwerte | Summen |
@@ -947,3 +985,34 @@ Geprüft wird jetzt auf den **Text** der Meldung, nicht auf die Rolle.
 (die Zusicherung ist ausgeschlossen — nachgewiesen über `--list`: 28 gesammelt, 30 ohne den
 Ausschluss), Lint und Build ohne Befund. Rot-Nachweis für beide Aufgaben geführt: die Abfragen
 nacheinander statt parallel → T29 rot; die Grenze auf 1000 ms → T28 rot mit der richtigen Meldung.
+
+---
+
+## Nachtrag: die Ergänzung aus `/refine` (02.09.2026, EC-13)
+
+**Was der Anlass war.** `/qa PROJ-3` hat im dritten Lauf (dort BUG-6) gemessen, dass die Frist aus
+EC-4 auch dann reißt, wenn die Gegenstelle gesund ist — es genügt eine ausgelastete Maschine. Im
+vollständigen E2E-Lauf scheiterten je nach Lauf 2 bis 16 von 28 Journeys daran; jede davon einzeln
+gefahren grün. Die Datenbank beantwortete zeitgleich 40 Abfragen in 35 ms.
+
+**Was daran der Fehler war — und was nicht.** Nicht die Frist: Sie tut, wofür sie gebaut wurde, und
+ohne sie hing die App 50 Sekunden (BUG-3). Der Fehler lag in der **Meldung**. „Wir erreichen deine
+Daten gerade nicht" ist eine Aussage über die Gegenstelle, die aus einem Fristablauf nicht folgt.
+Die App weiß in diesem Moment genau eines: Sie hat gewartet und aufgegeben.
+
+**Warum das mehr als Wortklauberei ist.** Es ist exakt der Schnitt, den PROJ-3 beim Kursdienst mit
+großer Sorgfalt zieht: „Für diese Währung gibt es zum 03.01.2000 keinen Kurs" ist dort von „gerade
+nicht erreichbar" getrennt, weil hinter der einen Meldung eine Prüfung steht und hinter der anderen
+nicht. Dieselbe Disziplin an der eigenen Infrastruktur nicht anzuwenden, wäre eine Inkonsequenz, die
+man beim Debuggen bezahlt: Wer die Datenbank sucht, während der Rechner der Engpass ist, sucht lange.
+
+**Was ausdrücklich nicht geändert wurde.** Die 2 Sekunden. Sie sind nirgends als falsch nachgewiesen,
+und eine geratene Zahl ersetzt die Messung nicht, die dieses Projekt mangels Deployment nicht machen
+kann. Die offene Frage dazu steht weiter in `spec.md` und trägt jetzt die neue Beobachtung: Es
+braucht kein Netz, ein beschäftigter Rechner reicht.
+
+**Der Umfang für `/build`** ist klein und vollständig benannt: ein Satz an vier Stellen, eine
+umbenannte Komponente mit zwei Importen, und zwei Zusicherungen — dass die Meldung bei Fristablauf
+keine Ursache nennt, und dass sie auf dem Schreibweg nichts über den Ausgang behauptet. Die
+bestehende Ausfall-Zusicherung (`npm run test:outage`) prüft weiterhin die Zeit; sie prüft ab jetzt
+zusätzlich den **Wortlaut**, sonst fällt eine zurückfallende Meldung niemandem auf.
