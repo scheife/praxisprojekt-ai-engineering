@@ -40,6 +40,12 @@ Konto-Karte der einzige Ort; danach standen zwei identisch benannte Schaltfläch
 für Screenreader nicht unterscheidbar (QA-Bericht von PROJ-2, BUG-3). Die Karte auf `/konto` trägt
 jetzt nur noch die E-Mail-Adresse. **Die Aktion bleibt PROJ-1**, nur ihr Ort liegt im Rahmen.
 
+**Der Rückweg von `/konto`** (ergänzt von `/refine PROJ-2`, 02.09.2026, AC-33): Die Seite trägt über
+ihrem Inhalt einen **als solchen erkennbaren Weg zurück zur Monatsübersicht**. Die Wortmarke im Kopf
+ist und bleibt ein Link auf `/` — sie wird aber nicht als Rückweg gelesen, und ein Rückweg, den
+niemand als solchen erkennt, gibt es praktisch nicht. `/konto` ist die einzige Seite, die einen
+braucht: Sie ist die einzige, von der man wieder weg will, ohne eine Aufgabe erledigt zu haben.
+
 **Der Export-Abschnitt auf `/konto`** (ergänzt von `/architecture PROJ-2`): Die Karte „Deine Daten
 mitnehmen" und die Route `/konto/export`, die die CSV-Datei bei jedem Abruf erzeugt, gehören **PROJ-2** —
 sie betreffen Ausgabendaten. Der **Bereich `/konto` selbst und sein Zugriffsschutz bleiben bei PROJ-1**.

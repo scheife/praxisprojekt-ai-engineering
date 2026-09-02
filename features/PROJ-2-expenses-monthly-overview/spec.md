@@ -97,6 +97,24 @@
   abgeschickt wird, dann erscheint eine Fehlermeldung am Datumsfeld, die auf die Jahreszahl hinweist,
   und es wird nichts gespeichert
 
+<!-- AC-31 bis AC-34 und EC-14/EC-15: ergänzt am 02.09.2026 aus dem Feedback am laufenden Stand. -->
+
+- [ ] **AC-31** — Angenommen ein Datumsfeld wird angezeigt — in der Erfassungszeile **oder** im
+  Änderungsdialog —, wenn es bedient wird, dann führen **zwei Wege zum selben Wert**: Das Datum
+  lässt sich weiterhin **tippen**, und daneben öffnet ein Kalender, in dem sich ein Tag anklicken
+  lässt. Der Kalender zeigt die Wochentage als Spalten und lässt sich Monat für Monat blättern
+- [ ] **AC-32** — Angenommen ein Datum steht in einem Datumsfeld, wenn das Feld angezeigt wird, dann
+  ist der **Wochentag** dieses Datums ablesbar, ohne den Kalender zu öffnen
+
+### Rahmen und Lesbarkeit
+
+- [ ] **AC-33** — Angenommen jemand ist auf `/konto`, wenn die Seite angezeigt wird, dann gibt es
+  dort einen **als solchen erkennbaren Weg zurück zur Monatsübersicht** — nicht nur die Wortmarke im
+  Kopf
+- [ ] **AC-34** — Angenommen eine Ausgabe mit Notiz steht in der Liste, wenn die Zeile angezeigt
+  wird, dann ist die Notiz **so gut lesbar wie Datum und Kategorie derselben Zeile** — sie ist
+  Inhalt, den die Person selbst geschrieben hat, und keine Nebeninformation
+
 ### Liste des Monats
 
 - [ ] **AC-11** — Angenommen jemand ist angemeldet, wenn `/` angezeigt wird, dann listet die Seite
@@ -233,6 +251,13 @@
   Auth-Server nicht erreichbar sei. Sie behauptet auf dem Schreibweg auch **nicht**, ob die Änderung
   wirksam wurde; das steht nach dem nächsten Laden in der Liste
   *(neu am 02.09.2026, siehe Decision Log)*
+- **EC-14** — Angenommen der Kalender aus AC-31 ist offen, wenn ein Tag außerhalb des zulässigen
+  Bereichs angezeigt wird — nach heute (AC-7) oder vor dem 01.01.2000 (AC-30) —, dann lässt er sich
+  **gar nicht erst auswählen**. Käme ein solches Datum trotzdem an, gelten AC-7 und AC-30 unverändert
+- **EC-15** — Angenommen ein Datum wird über den Kalender statt über die Tastatur gesetzt, wenn
+  gespeichert wird, dann verhält sich die Ausgabe **in jeder Hinsicht** wie bei getipptem Datum —
+  insbesondere holt PROJ-3 den Wechselkurs für das neue Datum neu (dort AC-12). Ein zweiter
+  Eingabeweg darf keinen zweiten Verhaltensweg schaffen
 
 ## Technical Requirements
 
@@ -278,6 +303,11 @@
   klären.
 - [ ] **Datenschutzerklärung** (Art. 13 DSGVO) muss den Export und die Speicherung der Ausgaben
   abdecken — fällig vor dem ersten öffentlichen Zugang, nicht vorher.
+- [ ] **Gehört der Wochentag auch in die Listenzeile?** AC-32 zeigt ihn nur am Eingabefeld. In der
+  Liste hätte er einen zweiten Nutzen, den das Feedback gar nicht im Blick hatte: Er erklärt, warum
+  eine Ausgabe vom Samstag den Kurs vom Freitag trägt (PROJ-3, AC-4). Dagegen steht das Rauschen in
+  einem Monat mit dreißig Zeilen. Erst zu beantworten, wenn jemand einen vollen Monat vor sich hat —
+  und wenn ja, ist es ein `/refine PROJ-3`, weil das Kursdatum dessen Vertrag ist.
 - [ ] **Hält die 2-Sekunden-Frist auch außerhalb des lokalen Stacks?** Gewählt wurde sie am lokalen
   Supabase in Docker, wo die Datenbank nebenan läuft. Ein gehostetes Projekt mit kalten Verbindungen
   über das Netz kann legitim länger brauchen — dann schlägt die Frist zu, wo nichts kaputt ist. Vor
@@ -320,3 +350,7 @@
 | Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wurde noch am selben Tag **zurückgenommen** | Sie stand einen Schritt lang in den Technical Requirements und erwies sich beim Entwurf als nicht sicher baubar: Server Action und anschließender Neuaufbau teilen keinen anfragebezogenen Bereich — mit `React.cache` umschlossen lief die Prüfung trotzdem **zweimal** (gemessen). Ein modulweiter Zwischenspeicher wäre gefährlich, weil er die Sitzung einer Person an die nächste ausliefern könnte, und die Prüfung lokal statt beim Auth-Server zu machen nähme PROJ-1 seine Zusage aus EC-5. Eine Anforderung, die nur mit einem Sicherheitsverlust erfüllbar ist, gehört nicht in den Vertrag | 2026-09-01 |
 | „Nicht erreichbar" wird von „nicht angemeldet" unterschieden und führt **nicht** auf `/login` (EC-12) | Eine Frist allein hätte den Fehler nur schneller falsch gemacht: `getUser()` liefert bei Zeitüberschreitung `null`, und `requireUser()` leitet dann auf `/login?reason=session-expired`. Die App behauptete damit „deine Sitzung ist abgelaufen", obwohl sie es gar nicht wusste — und schickte die Person auf eine Seite, die denselben Auth-Server braucht. Die einzige angebotene Handlung könnte nicht gelingen. Verworfen wurde deshalb auch die mildere Variante, weiterhin auf `/login` zu leiten und nur den Grund ehrlicher zu benennen | 2026-09-01 |
 | **Bei abgelaufener Frist sagt die App nur, dass es zu lange gedauert hat** (EC-13); der Zustand heißt nicht mehr „nicht erreichbar" | `/qa PROJ-3` hat den Fall gefunden (dort BUG-6): Unter Last der Maschine reißt die Frist, und die Person liest „Wir erreichen deine Daten gerade nicht" — eine Aussage über die Gegenstelle, die aus einer abgelaufenen Frist überhaupt nicht folgt. Die App weiß in diesem Moment nur eines: Sie hat aufgegeben. Es ist derselbe Schnitt, den PROJ-3 beim Kursdienst sorgfältig zieht — „gibt es nicht" ist dort von „gerade nicht erreichbar" getrennt, weil die eine Meldung eine Prüfung hinter sich hat und die andere nicht. Beim Schreiben gilt dasselbe für den Ausgang: Die Frist kann zuschlagen, **nachdem** die Datenbank die Zeile angenommen hat, also darf die Meldung auch nicht behaupten, es sei nichts gespeichert worden. Verworfen wurde, stattdessen an der Zahl zu drehen: Die 2 Sekunden sind nirgends als falsch nachgewiesen, und eine geratene Zahl ersetzt keine Messung | 2026-09-02 |
+| **Das Datumsfeld bleibt tippbar, der Kalender kommt daneben** (AC-31) | Die Rückmeldung am laufenden Stand war: Man sieht dem Feld nicht an, ob der 15. ein Samstag ist. Ein Kalender löst das — ihn an die Stelle des Tippens zu setzen aber nicht: Wer einen Stapel Belege nachträgt, erfasst mit der Tastatur, und das PRD verspricht 30 Sekunden je Ausgabe. Zwei Wege zum selben Wert kosten Bauaufwand, aber der schnelle Weg bleibt schnell und der sichtbare kommt dazu | 2026-09-02 |
+| **Der Wochentag steht am Feld, nicht in der Liste** (AC-32) | Das eigentliche Bedürfnis war, das Wochenende zu erkennen — dafür genügt der Wochentag dort, wo das Datum eingegeben wird. In jeder Listenzeile ein „Sa" wäre in einem Monat mit dreißig Zeilen Rauschen, das die Spalte verbreitert, ohne je gelesen zu werden. Ob er dort trotzdem hilft — nämlich um PROJ-3s Kursdatum zu erklären —, steht als offene Frage | 2026-09-02 |
+| **Ein erkennbarer Rückweg auf `/konto`, statt die Wortmarke zu erklären** (AC-33) | Der Weg zurück gab es längst: Die Wortmarke ist ein Link mit `aria-label="Zur Übersicht"`. Gefunden wurde er trotzdem nicht — und ein Rückweg, den niemand als solchen liest, gibt es praktisch nicht. Verworfen wurde, stattdessen einen Pfeil vor die Wortmarke zu setzen: Das ändert den Rahmen für **alle** Seiten und lässt den Weg an der Stelle, an der er ohnehin nicht gesucht wird | 2026-09-02 |
+| **Die Notiz ist Inhalt, keine Nebeninformation** (AC-34) | Sie stand in `--muted-foreground` und war damit blasser als Datum und Kategorie daneben. Formal war das kein Verstoß — `docs/design-system.md` weist der Farbe 5,3:1 aus, über den geforderten 4,5:1. Falsch war die **Einstufung**: Die Notiz ist der einzige Text in der Zeile, den die Person selbst geschrieben hat. Sie als Meta-Text zu führen kehrt die Rangfolge um. Kein Kontrastfehler, ein Hierarchiefehler | 2026-09-02 |
