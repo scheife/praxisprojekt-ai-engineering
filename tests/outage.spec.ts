@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 import { PASSWORD, clearThrottle, uniqueEmail } from './helpers'
+import { TIMEOUT_TITLE } from '../src/lib/supabase/deadline'
 
 /**
  * Die Zusicherung für die **Gesamtgrenze** aus EC-4 (PROJ-2, T28).
@@ -32,13 +33,29 @@ const DB = process.env.SUPABASE_DB_CONTAINER ?? 'supabase_db_praxisprojekt-ai-en
  */
 const GRENZE_MS = 5000
 
+/** Für den Einsatz in einem regulären Ausdruck. */
+const roh = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /**
  * Die beiden Meldungen, die ein gescheiterter Schreibversuch zeigen darf.
  *
  * EC-4 schreibt keinen Wortlaut vor — es verlangt „eine verständliche Meldung". Zulässig sind
- * deshalb beide: die des gescheiterten Speicherns und die des Nicht-erreichbar-Zustands.
+ * deshalb beide: die des gescheiterten Speicherns und die der Zeitüberschreitung.
+ *
+ * **Der Wortlaut kommt aus der Quelle, nicht aus einer Abschrift** (EC-13, TD-34). Genau das ist
+ * der Zweck: `deadline.test.ts` prüft, was die Konstante sagen darf — dieser Test prüft, dass sie
+ * auf dem **echten Weg** auch ankommt. Ohne das Zweite fiele es niemandem auf, wenn eine der vier
+ * Stellen den Import wieder gegen einen eigenen Satz tauscht.
  */
-const MELDUNG = /Das Speichern hat gerade nicht geklappt|Wir erreichen deine Daten gerade nicht/
+const ZEITUEBERSCHREITUNG = new RegExp(roh(TIMEOUT_TITLE))
+const MELDUNG = new RegExp(`Das Speichern hat gerade nicht geklappt|${roh(TIMEOUT_TITLE)}`)
+
+/**
+ * Was in einer Fristmeldung **nicht** stehen darf (EC-13) — hier am ausgelieferten Dokument
+ * geprüft, nicht an der Konstante: Eine Stelle, die ihren eigenen Satz mitbringt, fiele sonst
+ * durch jedes Raster.
+ */
+const BEHAUPTUNGEN = /erreich|Datenbank|Verbindung|Netzwerk|nichts gespeichert/i
 
 function docker(befehl: 'pause' | 'unpause', container: string): void {
   execFileSync('docker', [befehl, container], { encoding: 'utf8' })
@@ -71,7 +88,7 @@ test('@outage Keine Anfrage wartet länger als 5 Sekunden, wenn der Datenzugriff
    * **Erst ausfüllen, dann ausfallen lassen** — und zwar in dieser Reihenfolge, weil sie die
    * wirkliche ist: Die Person hat die Seite offen, tippt eine Ausgabe, und *dann* antwortet die
    * Gegenstelle nicht mehr. Andersherum ginge es gar nicht: Steht der Datenzugriff schon beim
-   * Laden, zeigt die Seite den Nicht-erreichbar-Zustand — dann gibt es keine Erfassungszeile,
+   * Laden, zeigt die Seite den Zeitüberschreitungs-Zustand — dann gibt es keine Erfassungszeile,
    * die man ausfüllen könnte.
    */
 
@@ -93,10 +110,13 @@ test('@outage Keine Anfrage wartet länger als 5 Sekunden, wenn der Datenzugriff
 
     const t2 = Date.now()
     await page.goto('/?monat=2026-08')
-    await expect(page.getByText(/Wir erreichen deine Daten gerade nicht/)).toBeVisible({
+    await expect(page.getByText(ZEITUEBERSCHREITUNG)).toBeVisible({
       timeout: GRENZE_MS + 3000,
     })
     lesenOhneDaten = Date.now() - t2
+
+    // EC-13: Die Meldung sagt, dass es zu lange gedauert hat — und behauptet nicht, woran es lag.
+    await expect(page.locator('body')).not.toContainText(BEHAUPTUNGEN)
   } finally {
     // **Immer freigeben** — auch wenn eine Zusicherung gescheitert ist. Ein Test, der den Stack
     // der Nutzerin angehalten zurücklässt, ist teurer als der Fehler, den er findet.
@@ -119,6 +139,9 @@ test('@outage Keine Anfrage wartet länger als 5 Sekunden, wenn der Datenzugriff
     await page.getByRole('button', { name: 'Erfassen' }).click()
     await expect(page.getByText(MELDUNG)).toBeVisible({ timeout: GRENZE_MS + 3000 })
     schreibenOhneAlles = Date.now() - t3
+
+    // EC-13 auf dem Schreibweg: keine Ursache, und keine Aussage darüber, ob gespeichert wurde.
+    await expect(page.locator('body')).not.toContainText(BEHAUPTUNGEN)
   } finally {
     docker('unpause', DB)
   }
@@ -136,5 +159,5 @@ test('@outage Keine Anfrage wartet länger als 5 Sekunden, wenn der Datenzugriff
 
   // Gegenprobe: Nach dem Freigeben trägt die Seite wieder Daten.
   await page.goto('/?monat=2026-08')
-  await expect(page.getByText(/Wir erreichen deine Daten gerade nicht/)).toBeHidden()
+  await expect(page.getByText(ZEITUEBERSCHREITUNG)).toBeHidden()
 })

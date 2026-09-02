@@ -4,6 +4,7 @@ import { refresh } from 'next/cache'
 
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { TIMEOUT_MESSAGE } from '@/lib/supabase/deadline'
 import { currencyLabel, DEFAULT_CURRENCY, isForeign } from '@/lib/expenses/currencies'
 import { formatAmount, formatDay } from '@/lib/expenses/format'
 import { monthOf } from '@/lib/expenses/month'
@@ -45,8 +46,7 @@ const SAVE_FAILED =
  * Fehler bei sich und ändert Werte, die richtig waren. Die Eingaben bleiben dabei stehen, weil
  * die Action nichts leert, was sie nicht gespeichert hat.
  */
-const UNREACHABLE_MESSAGE =
-  'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.'
+const UNREACHABLE_MESSAGE = TIMEOUT_MESSAGE
 const DELETE_FAILED =
   'Das Löschen hat gerade nicht geklappt. Bitte versuch es in einem Moment noch einmal.'
 

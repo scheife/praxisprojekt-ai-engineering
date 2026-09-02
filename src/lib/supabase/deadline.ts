@@ -80,3 +80,38 @@ export function isUnreachable(error: unknown): boolean {
 
   return typeof message === 'string' && message.includes(UNREACHABLE)
 }
+
+/**
+ * Was die Person liest, wenn eine Frist abgelaufen ist (EC-13, design.md TD-33/TD-34).
+ *
+ * **Warum der Satz hier steht und nicht an den vier Stellen, die ihn zeigen:** Er stand bis zum
+ * 02.09.2026 vierfach im Code, und die Übereinstimmung war reine Disziplin. Ändert jemand später
+ * drei davon, widersprechen sich die Wege — genau das verbietet EC-13. Dieses Modul ist der Ort,
+ * an dem ohnehin steht, **was ein Fristablauf bedeutet** (`isUnreachable`); es zieht bewusst kein
+ * `next/headers` mit und wird von Rahmen und Server Actions gleichermaßen benutzt. Dasselbe
+ * Argument, mit dem `DEADLINE_MS` oben an einer Stelle liegt statt an zweien.
+ *
+ * **Was der Text bewusst NICHT sagt** — das ist die eigentliche Zusicherung:
+ *
+ * - **Keine Ursache.** „Wir erreichen deine Daten gerade nicht" stand hier bis zum 02.09.2026 und
+ *   behauptete etwas über die Gegenstelle, das aus einer abgelaufenen Frist überhaupt nicht folgt.
+ *   `/qa PROJ-3` hat gemessen, dass die Frist auch bei kerngesunder Datenbank reißt, sobald die
+ *   Maschine ausgelastet ist. Die App weiß in diesem Moment genau eines: Sie hat gewartet und
+ *   aufgegeben.
+ * - **Nichts über den Ausgang.** Auf dem Schreibweg wäre „es wurde nichts gespeichert" derselbe
+ *   Fehler: Die Frist kann zuschlagen, **nachdem** die Datenbank die Zeile angenommen hat, dann
+ *   geht nur die Antwort verloren. Gefährlich ist das nicht — die Vorgangskennung aus EC-1
+ *   verhindert beim zweiten Versuch ein Duplikat. Falsch wäre allein, das Gegenteil zu behaupten.
+ * - **Keine Zahl.** Der Rest der App spricht nirgends über interne Grenzen.
+ *
+ * „Das liegt nicht an dir" bleibt: Das ist keine Aussage über die Gegenstelle, sondern über die
+ * Person — und sie stimmt, ein Fristablauf ist nie ihr Fehler.
+ */
+export const TIMEOUT_TITLE = 'Das hat zu lange gedauert.'
+
+/** Die zweite Zeile — zugleich der Hinweis, wo die Wahrheit dann steht: beim nächsten Laden. */
+export const TIMEOUT_HINT =
+  'Das liegt nicht an dir — versuch es in einem Moment noch einmal.'
+
+/** Für die Wege, an denen nur eine Zeile Platz hat: Server Actions und der HTTP-503-Rumpf. */
+export const TIMEOUT_MESSAGE = `${TIMEOUT_TITLE} ${TIMEOUT_HINT}`

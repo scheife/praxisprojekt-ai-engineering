@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
 import { AppHeader } from '@/components/shell/app-header'
-import { UnavailableNotice } from '@/components/shell/unavailable-notice'
+import { TimeoutNotice } from '@/components/shell/timeout-notice'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -35,7 +35,7 @@ export default async function KontoPage() {
       <>
         <AppHeader />
         <main className="mx-auto flex w-full max-w-[560px] flex-col gap-6 px-5 py-10">
-          <UnavailableNotice />
+          <TimeoutNotice />
         </main>
       </>
     )

@@ -1,5 +1,5 @@
 import { AppHeader } from '@/components/shell/app-header'
-import { UnavailableNotice } from '@/components/shell/unavailable-notice'
+import { TimeoutNotice } from '@/components/shell/timeout-notice'
 import { MonthPanel } from '@/components/expenses/month-panel'
 import { listMonth, oldestMonth } from '@/lib/expenses/queries'
 import { isUnreachable } from '@/lib/supabase/deadline'
@@ -41,7 +41,7 @@ export async function MonthView({ userId, month }: { userId: string; month: stri
             Abfrage, die eben gescheitert ist. */}
         <AppHeader />
         <main className="mx-auto w-full max-w-[1180px] px-5 py-8">
-          <UnavailableNotice />
+          <TimeoutNotice />
         </main>
       </>
     )

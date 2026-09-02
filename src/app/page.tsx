@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 
 import { requireUser } from '@/lib/auth'
 import { AppHeader } from '@/components/shell/app-header'
-import { UnavailableNotice } from '@/components/shell/unavailable-notice'
+import { TimeoutNotice } from '@/components/shell/timeout-notice'
 import { resolveMonth } from '@/lib/expenses/month'
 import { MonthView } from '@/components/expenses/month-view'
 import { MonthViewSkeleton } from '@/components/expenses/month-view-skeleton'
@@ -41,7 +41,7 @@ export default async function Home({
       <>
         <AppHeader />
         <main className="mx-auto w-full max-w-[1180px] px-5 py-8">
-          <UnavailableNotice />
+          <TimeoutNotice />
         </main>
       </>
     )

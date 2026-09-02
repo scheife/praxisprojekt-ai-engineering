@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ReactElement } from 'react'
 
 import { MonthView } from '@/components/expenses/month-view'
-import { UnavailableNotice } from '@/components/shell/unavailable-notice'
+import { TimeoutNotice } from '@/components/shell/timeout-notice'
 import { MonthPanel } from '@/components/expenses/month-panel'
 
 const listMonth = vi.fn()
@@ -44,7 +44,7 @@ describe('Der Lesepfad, wenn der Datenzugriff nicht antwortet (EC-4, BUG-4)', ()
 
     const baum = await MonthView({ userId: 'uid-1', month: '2026-08' })
 
-    expect(enthaelt(baum, UnavailableNotice)).toBe(true)
+    expect(enthaelt(baum, TimeoutNotice)).toBe(true)
     expect(enthaelt(baum, MonthPanel)).toBe(false)
   })
 
@@ -52,7 +52,7 @@ describe('Der Lesepfad, wenn der Datenzugriff nicht antwortet (EC-4, BUG-4)', ()
     listMonth.mockRejectedValue(NICHT_ERREICHBAR)
     oldestMonth.mockResolvedValue('2026-01')
 
-    expect(enthaelt(await MonthView({ userId: 'uid-1', month: '2026-08' }), UnavailableNotice)).toBe(true)
+    expect(enthaelt(await MonthView({ userId: 'uid-1', month: '2026-08' }), TimeoutNotice)).toBe(true)
   })
 
   it('reicht jeden ANDEREN Fehler weiter, statt ihn als Nichterreichen auszugeben', async () => {
@@ -73,7 +73,7 @@ describe('Der Lesepfad, wenn der Datenzugriff nicht antwortet (EC-4, BUG-4)', ()
     const baum = await MonthView({ userId: 'uid-1', month: '2026-08' })
 
     expect(enthaelt(baum, MonthPanel)).toBe(true)
-    expect(enthaelt(baum, UnavailableNotice)).toBe(false)
+    expect(enthaelt(baum, TimeoutNotice)).toBe(false)
   })
 })
 

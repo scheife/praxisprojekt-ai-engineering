@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TIMEOUT_MESSAGE } from '@/lib/supabase/deadline'
 
 /**
  * Erfassen, Ändern, Löschen — die Verzweigungen, nicht die Datenbank.
@@ -499,8 +500,10 @@ describe('Ändern mit Währung (PROJ-3, AC-12 bis AC-16)', () => {
 
 describe('Wenn die Anmeldung nicht feststellbar ist (EC-4, EC-12)', () => {
   const NICHT_ERREICHBAR = { state: 'unavailable' as const }
-  const MELDUNG =
-    'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.'
+  // **Aus der Quelle, nicht abgeschrieben** (EC-13, TD-34): Die Zusicherung prüft, **dass** die
+  // Fristmeldung gemeldet wird — nicht mehr, **womit**. Ein umformulierter Satz darf sie nicht
+  // rot machen; was sie nicht sagen darf, hält `deadline.test.ts` fest.
+  const MELDUNG = TIMEOUT_MESSAGE
 
   it('erfasst nichts und sagt, dass es nicht an der Eingabe liegt', async () => {
     requireUser.mockResolvedValue(NICHT_ERREICHBAR)

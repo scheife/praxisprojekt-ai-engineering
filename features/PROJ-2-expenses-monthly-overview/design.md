@@ -1018,3 +1018,30 @@ umbenannte Komponente mit zwei Importen, und zwei Zusicherungen — dass die Mel
 keine Ursache nennt, und dass sie auf dem Schreibweg nichts über den Ausgang behauptet. Die
 bestehende Ausfall-Zusicherung (`npm run test:outage`) prüft weiterhin die Zeit; sie prüft ab jetzt
 zusätzlich den **Wortlaut**, sonst fällt eine zurückfallende Meldung niemandem auf.
+
+---
+
+## Notizen aus dem Bau der Ebenen 12–14 (`/build`, 02.09.2026)
+
+**Der Entwurf hat gehalten** — TD-33 und TD-34 sind unverändert umgesetzt. Drei Dinge, die erst beim
+Bauen sichtbar wurden:
+
+**1. Die Ausfall-Zusicherung hätte den Umbau ohne T36 stillschweigend überlebt.** `outage.spec.ts`
+trug den alten Wortlaut **dreimal** als eigene Kopie — in `MELDUNG` und in zwei Sichtbarkeitsprüfungen.
+Ohne T36 wäre sie beim ersten Lauf rot geworden, und der naheliegende Reflex wäre gewesen, dort den
+neuen Satz einzutragen: fünfte Kopie, Problem verdoppelt. Sie zieht ihn jetzt aus derselben Quelle.
+Das ist der Grund, warum T36 im Plan neben T35 steht und nicht als dessen Wiederholung.
+
+**2. Der Rot-Nachweis für T36 fällt an einer anderen Stelle als erwartet.** Bringt eine der vier
+Stellen wieder ihren eigenen Satz mit, scheitert der Test schon an der **Sichtbarkeit** der
+erwarteten Meldung — nicht erst an der Verbotsliste `BEHAUPTUNGEN`. Beides ist richtig: Die
+Sichtbarkeitsprüfung fängt das Auseinanderlaufen, die Verbotsliste fängt einen Rückfall, der an
+allen vier Stellen gleichzeitig geschieht. Zwei verschiedene Fehler, zwei verschiedene Netze.
+
+**3. `it.each` hat die Testzahl von 255 auf 269 gehoben, nicht auf 258.** T35 prüft sieben
+ursachenbehauptende und vier ausgangsbehauptende Begriffe einzeln statt in einer Schleife — so
+benennt der Fehlschlag das Wort, das zurückgekommen ist, statt nur „irgendetwas stimmt nicht".
+
+**Was bewusst nicht gebaut wurde:** kein Anfassen der Zahl `DEADLINE_MS`, kein zweiter Mechanismus,
+keine Änderung an PROJ-1s Meldungen. Die sagen schon heute nur, dass die *Handlung* nicht ging —
+sie erfüllen EC-13 bereits und wurden geprüft, nicht angefasst.

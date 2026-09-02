@@ -1,6 +1,6 @@
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { isUnreachable } from '@/lib/supabase/deadline'
+import { TIMEOUT_MESSAGE, isUnreachable } from '@/lib/supabase/deadline'
 import { buildCsv, csvFilename } from '@/lib/expenses/csv'
 import { listAll } from '@/lib/expenses/queries'
 import { todayInVienna } from '@/lib/expenses/month'
@@ -20,12 +20,11 @@ import { todayInVienna } from '@/lib/expenses/month'
  *
  * **HTTP 503 mit Klartext statt einer Karte:** Eine Route, die eine Datei liefert, hat keine
  * Oberfläche, in der ein Hinweis stehen könnte. Derselbe Satz wie im
- * Nicht-erreichbar-Zustand — nur eben als Nutzlast.
+ * Zeitüberschreitungs-Zustand — nur eben als Nutzlast, aus derselben Quelle (EC-13).
  */
 function unavailable(): Response {
   return new Response(
-    'Wir erreichen deine Daten gerade nicht. ' +
-      'Das liegt nicht an dir — versuch es in einem Moment noch einmal.\n',
+    `${TIMEOUT_MESSAGE}\n`,
     {
       status: 503,
       headers: {

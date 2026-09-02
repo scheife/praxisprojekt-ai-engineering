@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { TIMEOUT_MESSAGE } from '@/lib/supabase/deadline'
 
 /** Abmelden und Konto löschen. */
 
@@ -36,10 +37,7 @@ export async function deleteAccount(
   // gesagt, warum. Der Aufruf ist ohnehin unwiderruflich; ihn „auf Verdacht" zu wagen, wäre
   // die schlechteste aller Möglichkeiten.
   if (session.state === 'unavailable') {
-    return {
-      formError:
-        'Wir erreichen deine Daten gerade nicht. Das liegt nicht an dir — versuch es in einem Moment noch einmal.',
-    }
+    return { formError: TIMEOUT_MESSAGE }
   }
 
   const supabase = await createClient()
