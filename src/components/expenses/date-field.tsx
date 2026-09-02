@@ -136,13 +136,24 @@ export function DateField({
               }}
               /*
                 Die Grenzen wirken zweifach (TD-37): `startMonth`/`endMonth` begrenzen das
-                Blättern — sonst ist man mit zwei Klicks im Jahr 1850 —, `hidden` blendet die
-                Tage außerhalb des Bereichs aus. Ein Tag, den man anklicken kann und der danach
-                abgelehnt wird, ist eine Falle (EC-14).
+                Blättern — sonst ist man mit zwei Klicks im Jahr 1850 —, und `disabled` nimmt den
+                Tagen außerhalb des Bereichs die Auswählbarkeit. Ein Tag, den man anklicken kann
+                und der danach abgelehnt wird, ist eine Falle (EC-14).
+
+                **`disabled` und nicht `hidden`** (geändert am 02.09.2026, BUG-12): `hidden`
+                entfernt die Tage aus dem Blatt. Im **laufenden** Monat sind das fast alle — am
+                2. September blieben ganze drei Zahlen stehen und darunter eine leere Fläche.
+                Man sah den Monat nicht mehr: nicht, auf welchen Wochentag der 15. fällt, nicht
+                einmal, wie lang er ist. Genau dafür öffnet man einen Kalender.
+
+                EC-14 verlangt das auch gar nicht — es sagt „wenn ein Tag außerhalb des
+                zulässigen Bereichs **angezeigt** wird …, dann lässt er sich gar nicht erst
+                auswählen". Der Edge Case setzt voraus, dass solche Tage zu sehen sind, und
+                fordert nur, dass sie nicht wählbar sind. Das ist `disabled`.
               */
               startMonth={vonTag(EARLIEST_DAY)}
               endMonth={vonTag(heute)}
-              hidden={{ before: vonTag(EARLIEST_DAY)!, after: vonTag(heute)! }}
+              disabled={{ before: vonTag(EARLIEST_DAY)!, after: vonTag(heute)! }}
               autoFocus
             />
           </PopoverContent>

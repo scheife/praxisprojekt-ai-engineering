@@ -1088,8 +1088,21 @@ Datumsfeld (ein Baustein, zweimal eingesetzt)
 | Ebene | Was sie tut | Warum |
 |---|---|---|
 | Blätterbereich | Der Kalender lässt sich nur zwischen Januar 2000 und dem laufenden Monat blättern | Sonst landet man mit zwei Klicks im Jahr 1850 |
-| Sichtbare Tage | Tage vor dem 01.01.2000 und nach heute werden **nicht angezeigt** | Ein Tag, den man anklicken kann und der danach abgelehnt wird, ist eine Falle |
+| Wählbare Tage | Tage vor dem 01.01.2000 und nach heute sind **gesperrt** — sichtbar, aber nicht anklickbar | Ein Tag, den man anklicken kann und der danach abgelehnt wird, ist eine Falle |
 | Server | AC-7 und AC-30 prüfen unverändert weiter | **Der Kalender ist eine Bequemlichkeit, nie die Kontrolle.** Wer das Formular direkt anspricht, umgeht ihn |
+
+> **Korrigiert am 02.09.2026 (BUG-12).** Diese Zeile lautete bis dahin „werden **nicht
+> angezeigt**", und so war es auch gebaut (`hidden`). Im **laufenden** Monat liegt fast jeder Tag
+> nach heute — am 2. September blieben im Blatt ganze drei Zahlen stehen, darunter eine leere
+> Fläche. Der Kalender beantwortete damit genau die Frage nicht mehr, für die man ihn öffnet:
+> auf welchen Wochentag ein Datum fällt und wie lang der Monat ist.
+>
+> **EC-14 verlangt das Verstecken auch gar nicht.** Es sagt „wenn ein Tag außerhalb des
+> zulässigen Bereichs **angezeigt** wird …, dann lässt er sich gar nicht erst auswählen" — der
+> Edge Case setzt voraus, dass solche Tage zu sehen sind, und fordert nur, dass sie nicht wählbar
+> sind. Der Entwurf war also strenger als der Vertrag, und die zusätzliche Strenge kostete genau
+> das, was das Feature leisten soll. Umgestellt auf `disabled`; die Falle bleibt zu, weil ein
+> gesperrter Tag beim Klick nichts auslöst (im Browser nachgemessen, nicht angenommen).
 
 **Der Wochentag** (AC-32) wird aus dem Datum **berechnet**, sobald es angezeigt wird — zweibuchstabig
 (`Mo` bis `So`), über dieselbe Stelle wie jede andere Datumsausgabe des Projekts (`format.ts`, alles

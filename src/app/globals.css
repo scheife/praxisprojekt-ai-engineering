@@ -48,6 +48,18 @@
   --radius-md: 9px;
   --radius-sm: 6px;
 
+  /* docs/design-system.md §6.1, Elevation: „Keine Schatten im Flächenlayout. Hierarchie
+     entsteht über Alpha-Rahmen und Flächenhelligkeit. Elevation nur für echt Schwebendes."
+     Genannt sind dort zwei Werte, und beide stehen hier als Token, damit nicht jeder Baustein
+     seinen eigenen erfindet.
+
+     Warum nicht Tailwinds `shadow-md`: Das ist `rgba(0,0,0,.1)` — ein zu 90 % durchsichtiges
+     Schwarz. Auf einer hellen Oberfläche trägt das; auf diesem fast schwarzen Grund
+     (`--background` ist HSL 60 6.7% 2.9%) ist es schlicht unsichtbar. Der Kalender schwebte
+     dadurch ohne jede Erhebung über der Liste (BUG-13, 02.09.2026). */
+  --shadow-float: 0 14px 40px rgba(0, 0, 0, 0.55);
+  --shadow-dialog: 0 30px 80px rgba(0, 0, 0, 0.55);
+
   /* docs/design-system.md §4: Open Sans für Fließtext, Tabellen und Formulare,
      Space Grotesk für Headings, Wortmarke, Buttons und Labels. */
   --font-sans: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;

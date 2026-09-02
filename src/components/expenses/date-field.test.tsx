@@ -139,18 +139,52 @@ describe('Zwei Wege zum selben Wert (AC-31)', () => {
 })
 
 describe('Der Kalender bietet nichts Unzulässiges an (EC-14)', () => {
-  it('zeigt keinen Tag nach heute', async () => {
+  /**
+   * **Geändert am 02.09.2026 (BUG-12).** Diese Zusicherung hieß einmal „zeigt keinen Tag nach
+   * heute" und prüfte, dass solche Tage **gar nicht im Dokument** stehen. Das war strenger als
+   * der Vertrag und im Ergebnis falsch: Im laufenden Monat verschwand damit fast das ganze
+   * Blatt — am 2. September blieben drei Zahlen übrig. Man sah den Monat nicht mehr.
+   *
+   * EC-14 sagt: „wenn ein Tag außerhalb des zulässigen Bereichs **angezeigt** wird …, dann lässt
+   * er sich **gar nicht erst auswählen**." Der Edge Case setzt voraus, dass solche Tage zu sehen
+   * sind. Geprüft wird deshalb, was er wirklich verlangt — und zwar am Verhalten: Ein Klick auf
+   * einen gesperrten Tag darf **nichts** auslösen. Das ist die Zusicherung, die den Vertrag hält;
+   * `disabled` am Knopf ist nur ihr Mechanismus.
+   */
+  it('sperrt jeden Tag nach heute, statt ihn zu verstecken', async () => {
+    const { onChange } = feld('2026-08-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    // Der heutige Tag heißt „Heute, Donnerstag, 20. August 2026" — deshalb ein Muster und
+    // kein exakter Name: `react-day-picker` stellt „Heute" voran und hängt „, ausgewählt" an.
+    await screen.findByRole('button', { name: /20\. August 2026/ })
+
+    // Heute ist der 20.08.2026. Der Rest des Monats bleibt sichtbar — der Kalender ist sonst
+    // im laufenden Monat kein Kalender mehr —, ist aber gesperrt.
+    for (const tag of ['Freitag, 21. August 2026', 'Montag, 31. August 2026']) {
+      const knopf = screen.getByRole('button', { name: tag })
+      expect(knopf).toBeInTheDocument()
+      expect(knopf).toBeDisabled()
+    }
+
+    // Und der Vertrag selbst: Klicken ändert nichts (AC-7 bleibt trotzdem serverseitig).
+    fireEvent.click(screen.getByRole('button', { name: 'Freitag, 21. August 2026' }))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('lässt den ganzen Monat stehen, auch wenn fast alles gesperrt ist', async () => {
+    // Der Fall aus BUG-12: „heute" ist der 20., der August hat 31 Tage. Ein Kalender, der nur
+    // die ersten zwanzig zeigt, beantwortet die Frage nicht mehr, für die man ihn öffnet —
+    // nämlich auf welchen Wochentag ein Datum fällt.
     feld('2026-08-15')
     fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
     await screen.findByRole('button', { name: /20\. August 2026/ })
 
-    // Heute ist der 20.08.2026 — alles danach darf im Kalender gar nicht erst stehen (AC-7).
-    expect(
-      screen.queryByRole('button', { name: 'Freitag, 21. August 2026' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Montag, 31. August 2026' }),
-    ).not.toBeInTheDocument()
+    const tage = screen
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label') ?? '')
+      // „Heute, …" und „…, ausgewählt" gehören dazu, deshalb kein Anker am Zeilenende.
+      .filter((n) => /\d+\. August 2026/.test(n))
+    expect(tage).toHaveLength(31)
   })
 
   it('lässt den heutigen Tag zu — die Grenze ist einschließlich', async () => {

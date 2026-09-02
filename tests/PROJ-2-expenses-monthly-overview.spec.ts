@@ -382,8 +382,36 @@ test('Journey 6: Kalender, Rückweg und lesbare Notiz (AC-31 bis AC-34)', async 
   await expect(datum).toHaveValue('2026-08-17')
   await expect(page.getByText('Mo', { exact: true })).toBeVisible(AKTION)
 
-  // EC-14: Tage nach heute stehen gar nicht erst im Kalender.
+  // EC-14: Tage nach heute sind zu SEHEN, aber nicht zu wählen.
+  //
+  // Bis zum 02.09.2026 wurden sie versteckt, und diese Zusicherung prüfte `toHaveCount(0)`.
+  // Im laufenden Monat verschwand damit fast das ganze Blatt — am 2. September blieben drei
+  // Zahlen übrig, und der Kalender beantwortete die Frage nicht mehr, für die man ihn öffnet
+  // (BUG-12). EC-14 verlangt das auch nicht: „wenn ein Tag außerhalb des zulässigen Bereichs
+  // **angezeigt** wird …, dann lässt er sich gar nicht erst auswählen."
+  // Erst zurück auf heute: Der Kalender schlägt den Monat des Feldwerts auf, und genau im
+  // LAUFENDEN Monat ist der Fehler aufgetreten — dort liegt fast alles nach heute.
+  await datum.fill(iso(heute))
   await page.getByRole('button', { name: 'Kalender öffnen' }).click()
+  await expect(page.getByRole('grid')).toBeVisible(AKTION)
+
+  // Der laufende Monat steht vollständig da — der Fall, in dem der Fehler sichtbar wurde.
+  const heutigerMonat = new Intl.DateTimeFormat('de-AT', { month: 'long', year: 'numeric' })
+    .format(heute)
+  const tageImBlatt = await page
+    .getByRole('grid')
+    .locator('button[aria-label]')
+    .evaluateAll(
+      (els, monat) =>
+        els
+          .map((el) => el.getAttribute('aria-label') ?? '')
+          .filter((n) => n.includes(monat)).length,
+      heutigerMonat,
+    )
+  const tageImMonat = new Date(heute.getFullYear(), heute.getMonth() + 1, 0).getDate()
+  expect(tageImBlatt).toBe(tageImMonat)
+
+  // Und morgen ist da, aber gesperrt.
   const morgen = new Date(heute.getTime() + 24 * 3600 * 1000)
   const morgenLabel = new Intl.DateTimeFormat('de-AT', {
     weekday: 'long',
@@ -391,7 +419,14 @@ test('Journey 6: Kalender, Rückweg und lesbare Notiz (AC-31 bis AC-34)', async 
     month: 'long',
     year: 'numeric',
   }).format(morgen)
-  await expect(page.getByRole('button', { name: morgenLabel })).toHaveCount(0)
+  const morgenKnopf = page.getByRole('button', { name: morgenLabel })
+  await expect(morgenKnopf).toHaveCount(1)
+  await expect(morgenKnopf).toBeDisabled()
+
+  // Der Vertrag selbst: Ein Klick darauf ändert das Feld nicht.
+  const vorDemKlick = await datum.inputValue()
+  await morgenKnopf.click({ force: true }).catch(() => {})
+  await expect(datum).toHaveValue(vorDemKlick)
   await page.keyboard.press('Escape')
 
   // --- AC-34: die Notiz ist nicht mehr die blasseste Spalte der Zeile ----------------------

@@ -1714,3 +1714,110 @@ eine **Erwartung** gehalten hätte statt gegen eine Fensterbreite.
 Daraus folgt nichts über „mehr testen". Es folgt: **Eine gemessene Zahl ohne Erwartung ist keine
 Prüfung.** Journey 6 stellt diese Erwartung jetzt (`> 200 px`), und der Quelltext-Test fängt die
 Ursache, bevor sie überhaupt gerendert wird.
+
+---
+
+## Sechster Durchlauf — 02.09.2026 (zweite Rückmeldung zum Kalender)
+
+**Anlass:** Nach der Behebung von BUG-11 kam die Rückmeldung „die Kalender-Popup-Optik passt nicht,
+man sieht die Monatsansicht nicht richtig". Sie war berechtigt: BUG-11 hatte die **Größe** in
+Ordnung gebracht, nicht den **Inhalt**.
+
+**Testsuite:** `npm test` → **310 Tests in 23 Dateien, alle grün** (vorher 309) · **E2E:**
+**32 von 32 grün** in Chromium und Mobile Safari · **Ausfall-Zusicherung** grün · Lint,
+TypeScript und Produktions-Build ohne Befund
+
+### BUG-12: Im laufenden Monat war das Kalenderblatt leer — **BEHOBEN**
+
+- **Severity:** **Medium** · **Betrifft:** AC-31, EC-14
+- **Was war:** Am 2. September zeigte der geöffnete Kalender im September-Blatt **drei Zahlen** —
+  `31 1 2` — und darunter eine leere Fläche über fünf Wochenzeilen. Gemessen: **2** anklickbare
+  Tage, Raster nur 173 px breit, weil leere Spalten zusammenfallen. Man sah den Monat nicht: nicht,
+  auf welchen Wochentag der 15. fällt, nicht einmal, wie lang er ist. Genau dafür öffnet man einen
+  Kalender
+- **Ursache:** `hidden={{ before, after }}`. In `react-day-picker` heißt `hidden` „wird **nicht
+  dargestellt**" — die Tage verschwinden aus dem Blatt. Im laufenden Monat liegt fast jeder Tag
+  nach heute, also verschwand fast alles · *Beleg: Dokumentation von `react-day-picker` v10 —
+  `hidden` „specify days that should not be displayed", `disabled` „applies the disabled modifier
+  …, preventing them from being selected"*
+- **Warum das der Entwurf so wollte — und warum er zu streng war:** TD-37 schrieb „Tage … werden
+  **nicht angezeigt**" mit der Begründung, ein anklickbarer Tag, der danach abgelehnt wird, sei
+  eine Falle. Die Begründung stimmt; das Mittel war zu grob. **EC-14 verlangt das Verstecken gar
+  nicht** — der Wortlaut ist „wenn ein Tag außerhalb des zulässigen Bereichs **angezeigt** wird …,
+  dann lässt er sich gar nicht erst auswählen". Der Edge Case **setzt voraus**, dass solche Tage zu
+  sehen sind, und fordert nur, dass sie unwählbar sind. Der Entwurf war strenger als der Vertrag,
+  und die zusätzliche Strenge kostete genau das, was das Feature leisten soll
+- **Der Fix:** `hidden` → `disabled`. Kein `/refine` nötig: Die Spec deckt das ab, `design.md`
+  (TD-37) ist berichtigt und trägt die Geschichte
+- **Nachweis an der laufenden App:** im September-Blatt jetzt **31 Zellen mit Zahl** statt 3,
+  davon **28 gesperrt** und **3 wählbar** (31.08., 01.09., 02.09.); Raster wieder **224 px** breit.
+  Der Klick auf den gesperrten 3. September lässt den Feldwert **unverändert** — EC-14 hält
+- **Und das ist der Punkt:** Die Falle, vor der TD-37 warnte, bleibt zu. Ein gesperrter Tag löst
+  beim Klick nichts aus. Nur das Blatt bleibt lesbar
+
+### BUG-13: Das Popover schwebte ohne Erhebung — **BEHOBEN**
+
+- **Severity:** Low · **Betrifft:** den App-Rahmen (PROJ-2), `docs/design-system.md` §6.1
+- **Was war:** Der Kalender lag ohne sichtbare Kante über der Ausgabenliste. Gemessen: Fläche
+  `rgb(17,17,16)` gegen Seite `rgb(8,8,7)` — die Helligkeitsstaffelung stimmte —, aber der Schatten
+  war Tailwinds `shadow-md`, also `rgba(0,0,0,0.1)`. **Ein zu 90 % durchsichtiges Schwarz auf
+  einem fast schwarzen Grund ist unsichtbar.** Die Erhebung, die ein schwebendes Feld vom
+  Untergrund abhebt, gab es rechnerisch, aber nicht sichtbar
+- **Das Design System sagt es genau:** §6.1 — „Elevation nur für echt Schwebendes: Dialog
+  `0 30px 80px rgba(0,0,0,.55)`, Toast `0 14px 40px rgba(0,0,0,.55)`." Beide Werte standen
+  nirgends im Code; jeder schwebende Baustein trug den shadcn-Standard
+- **Der Fix:** die zwei Werte als Token in `globals.css` (`--shadow-float`, `--shadow-dialog`),
+  angewandt auf die schwebenden Flächen — `popover`, `select`, `dropdown-menu`. Der Kalender
+  erbt ihn über das Popover · *Nachweis: gemessener Schatten jetzt `0px 14px 40px rgba(0,0,0,.55)`*
+- **Nicht angefasst, bewusst:** `dialog.tsx` und `sonner.tsx` (Toast) tragen weiterhin
+  Tailwind-Standardschatten und weichen damit ebenfalls von §6.1 ab. Das ist **derselbe Befund an
+  anderen Bausteinen** und gehört nicht in eine Rückmeldung zum Kalender-Popup. Als offener Punkt
+  vermerkt, nicht als behoben verbucht
+
+### Neue Zusicherungen
+
+- **`date-field.test.tsx`** — die Zusicherung „zeigt keinen Tag nach heute" prüfte die **falsche
+  Sache** (Abwesenheit statt Unwählbarkeit) und war der Grund, warum BUG-12 durchkam: Sie war für
+  den kaputten Zustand geschrieben. Ersetzt durch zwei, die den Vertrag prüfen:
+  - „sperrt jeden Tag nach heute, statt ihn zu verstecken" — der Tag ist da, ist `disabled`, und
+    **ein Klick löst `onChange` nicht aus**. Das ist EC-14, am Verhalten geprüft
+  - „lässt den ganzen Monat stehen, auch wenn fast alles gesperrt ist" — 31 Tagesknöpfe im August
+- **Journey 6** — im **laufenden** Monat geöffnet (der Fall, in dem es aufgetreten ist): das Blatt
+  trägt so viele Tage, wie der Monat hat; morgen ist vorhanden **und** gesperrt; ein erzwungener
+  Klick darauf lässt den Feldwert unverändert
+
+**Rot-Nachweis, dreifach geführt:**
+
+| Bruch | Was fiel |
+|---|---|
+| Sperre ganz entfernt | „sperrt jeden Tag nach heute" (Klick löst `onChange` aus) |
+| zurück auf `hidden` (Einheitentest) | beide neuen Zusicherungen |
+| zurück auf `hidden` (Browser) | Journey 6: **`Expected: 30 / Received: 2`** — genau der gemeldete Zustand |
+
+Der letzte ist der eigentliche Beweis: Der Test hätte den gemeldeten Fehler gefangen. Die
+Quelle ist danach nachweislich unverändert.
+
+### Bug-Stand
+
+| Befund | Severity | Stand |
+|---|---|---|
+| BUG-12 leeres Kalenderblatt im laufenden Monat | Medium | **behoben und verifiziert** |
+| BUG-13 Popover ohne sichtbare Erhebung | Low | **behoben und verifiziert** |
+| BUG-11, BUG-8, BUG-9, BUG-2, BUG-10 | — | unverändert behoben |
+
+**0 Critical · 0 High · 0 Medium · 0 Low.**
+
+**Offener Punkt, nicht als Befund verbucht:** `dialog.tsx` und `sonner.tsx` weichen weiterhin von
+`docs/design-system.md` §6.1 ab (Tailwind-Standardschatten statt der dort genannten Werte). Die
+Token dafür liegen jetzt bereit; es ist eine Entscheidung, kein Fehler.
+
+### Was zweimal dieselbe Lehre war
+
+BUG-11 und BUG-12 sind beide daran vorbeigekommen, dass **Struktur geprüft wurde und nicht
+Wirkung**. Beim ersten Mal: sieben `<th>` vorhanden, Raster trotzdem 109 px breit. Beim zweiten
+Mal: „kein Tag nach heute anklickbar" grün — weil überhaupt fast kein Tag mehr da war. Die
+Zusicherung war für den kaputten Zustand formuliert und hat ihn dadurch festgeschrieben.
+
+Beide neuen Zusicherungen prüfen deshalb **Mengen und Verhalten** statt Abwesenheit: wie breit ist
+das Raster, wie viele Tage trägt der Monat, und was passiert beim Klick. Eine Zusicherung auf
+„etwas ist nicht da" ist genau dann grün, wenn zu viel weg ist.
