@@ -221,6 +221,33 @@ anzuhalten — dieselbe Instanz, gegen die die übrigen 28 E2E-Tests laufen. Das
 und stört den lokalen Stack. `/qa` hat den echten Ausfall schon einmal herbeigeführt (`docker pause`)
 und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echte** Ausfall von `/qa`.
 
+### Ebene 12 — Der Satz bekommt eine einzige Stelle (02.09.2026, EC-13)
+
+> **Anlass:** `/qa PROJ-3` (dort BUG-6). Die Frist reißt auch bei gesunder Gegenstelle, sobald die
+> Maschine ausgelastet ist — und die Meldung behauptete dann eine Ursache, die die App nie geprüft
+> hat. Der Fehler liegt nicht in der Frist, sondern im Satz. Details in `design.md` → *Nachtrag: die
+> Ergänzung aus `/refine`*.
+>
+> **Barriere:** Diese Ebene steht allein, weil jede Aufgabe der nächsten von ihr importiert.
+
+- [ ] T30  Die beiden Textbausteine als Konstanten in das Fristen-Modul, neben `DEADLINE_MS` und `isUnreachable` — Überschrift („Das hat zu lange gedauert.") und Hinweiszeile („Das liegt nicht an dir — versuch es in einem Moment noch einmal."), dazu eine einzeilige Fassung für die Wege, wo nur eine Zeile Platz hat. **Warum dort:** In dem Modul steht bereits, *was ein Fristablauf bedeutet*; es zieht bewusst kein `next/headers` mit und wird von Rahmen und Server Actions gleichermaßen benutzt (TD-34)  · files: `src/lib/supabase/deadline.ts`  · → EC-13
+
+### Ebene 13 — Die vier Wege benutzen sie (02.09.2026)
+
+> Alle vier `[P]`: Ihre Dateimengen sind paarweise disjunkt, keine Datei kommt zweimal vor.
+
+- [ ] T31 [P]  Die Rahmen-Komponente heißt **`TimeoutNotice`** statt `UnavailableNotice` und nimmt ihren Text aus T30; die vier Importstellen ziehen mit. **Warum der Rename:** Eine Komponente, die „unavailable" heißt, während ihr Vertrag ihr genau diese Behauptung verbietet, ist eine Falle für die nächste Person, die sie einsetzt (TD-33)  · files: `src/components/shell/timeout-notice.tsx`, `src/app/page.tsx`, `src/app/konto/page.tsx`, `src/components/expenses/month-view.tsx`, `src/components/expenses/month-view.test.tsx`  · → EC-12, EC-13
+- [ ] T32 [P]  Die formularweite Meldung beim Erfassen, Ändern und Löschen kommt aus T30. Die bestehende Zusicherung, die heute den alten Wortlaut festhält, zieht mit — sie prüft weiterhin **dass** gemeldet wird, nicht mehr **womit**  · files: `src/lib/actions/expenses.ts`, `src/lib/actions/expenses.test.ts`  · → EC-13
+- [ ] T33 [P]  Dieselbe Meldung auf dem Kontoweg  · files: `src/lib/actions/account.ts`  · → EC-13
+- [ ] T34 [P]  Der Text im HTTP-503-Rumpf der Export-Route, als eine Zeile  · files: `src/app/konto/export/route.ts`  · → EC-13
+
+### Ebene 14 — Die Zusicherungen (02.09.2026)
+
+> Beide `[P]`: zwei verschiedene Testdateien.
+
+- [ ] T35 [P]  **Die Regel festhalten, nicht den Wortlaut.** Geprüft wird, dass der Text **keinen ursachenbehauptenden Begriff** enthält (erreichen · Datenbank · Server · Verbindung · Netzwerk) und auf dem Schreibweg **keine Aussage über den Ausgang** (gespeichert · angelegt · verloren). So bleibt Umformulieren jederzeit erlaubt und ein Rückfall in die alte Behauptung verboten — eine Zusicherung auf die exakte Zeichenkette würde bei jeder guten Änderung rot und wäre binnen eines Monats abgeschaltet  · files: `src/lib/supabase/deadline.test.ts`  · → EC-13
+- [ ] T36 [P]  Die **Ausfall-Zusicherung** prüft ab jetzt zusätzlich den **Wortlaut**, nicht nur die Zeit: Bei angehaltenem Datenzugriff enthält die Antwort die neue Überschrift und keinen der verbotenen Begriffe aus T35. **Warum dort und nicht nur im Unit-Test:** T35 prüft die Konstante, T36 prüft, dass sie auf dem echten Weg auch ankommt — ohne das zweite fiele es niemandem auf, wenn eine Stelle den Import wieder gegen einen eigenen Satz tauscht  · files: `tests/outage.spec.ts`  · → EC-13
+
 ## Parallelization
 
 - **Ebenen sind Barrieren.** Eine Ebene beginnt erst, wenn die vorige vollständig integriert und gegen
@@ -231,18 +258,24 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 - **Innerhalb einer Ebene importiert keine Aufgabe eine andere.** Deshalb liegt `MonthPanel` in Ebene 5
   und nicht bei den Bausteinen — es steckt Composer, Übersicht und Liste zusammen und wäre in Ebene 4
   eine Parallelaufgabe, die auf drei Geschwister wartet.
-- **Grobkörnig, nicht kleinteilig.** 29 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
-  ursprünglichen Bau, 10 aus der Runde vom 01.09.2026 (Ebenen 6 bis 9).
+- **Grobkörnig, nicht kleinteilig.** 36 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
+  ursprünglichen Bau, 13 aus der Runde vom 01.09.2026 (Ebenen 6 bis 11), 7 aus der Runde vom
+  02.09.2026 (Ebenen 12 bis 14).
 - **Die Ebenen 6 bis 9 folgen derselben Ordnung:** gemeinsames Fundament (L6) → die Stellen, an denen
   gewartet wird (L7) → ihre Aufrufer (L8) → Tests (L9). Disjunktheit geprüft: L6 zwei, L7 drei, L8 drei,
   L9 zwei Sätze, paarweise verschiedene Pfade.
+- **Die Ebenen 12 bis 14 ebenso:** die eine Quelle (L12) → die vier Wege, die sie benutzen (L13) →
+  die Zusicherungen (L14). L12 steht bewusst allein, weil jede Aufgabe aus L13 von ihr importiert —
+  eine `[P]`-Aufgabe, auf die drei Geschwister warten, wäre keine. Disjunktheit geprüft: In L13
+  nennen T31 bis T34 fünf, zwei, eine und eine Datei, ohne eine einzige Überschneidung; in L14
+  schreiben T35 und T36 in zwei verschiedene Testdateien.
 - Während `/build` läuft jede `[P]`-Aufgabe der aktiven Ebene in einem eigenen Subagenten mit eigenem
   Arbeitsbaum; danach integriert der Hauptagent, prüft gegen die AC-IDs der Ebene und setzt die Häkchen
   hier. Subagenten erklären sich nie selbst für fertig — es gibt genau einen Ort, an dem geprüft wird.
 
 ## Abdeckung
 
-Alle **30 Acceptance Criteria** und alle **12 Edge Cases** sind mindestens einer Aufgabe zugeordnet:
+Alle **30 Acceptance Criteria** und alle **13 Edge Cases** sind mindestens einer Aufgabe zugeordnet:
 
 | | Aufgaben |
 |---|---|
@@ -256,3 +289,8 @@ Alle **30 Acceptance Criteria** und alle **12 Edge Cases** sind mindestens einer
 | EC-7 | T6 · EC-8 T7 · EC-9 T7 · EC-10 T8, T10 · EC-11 T9, T14 |
 | **EC-4** (neu gefasst) | T17, T19, T22, T23, T24, T25, T26, **T27**, **T28**, **T29** — ersetzt die alte Zuordnung „T12" |
 | **EC-12** (neu) | T18, T20, T21, T22, T25, T26 |
+| **EC-13** (neu, 02.09.2026) | T30, T31, T32, T33, T34, T35, T36 |
+
+> **EC-12 kommt in T31 ein zweites Mal vor.** Die Zusicherung selbst ändert sich nicht — nur der
+> Zustand, den sie beschreibt, heißt jetzt anders und sagt etwas anderes. Die alte Zuordnung
+> (T18, T20, T21, T22, T25, T26) bleibt gültig.
