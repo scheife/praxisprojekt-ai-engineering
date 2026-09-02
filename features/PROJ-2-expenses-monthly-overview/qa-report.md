@@ -697,138 +697,41 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
 
 ## Gefundene Bugs
 
-### BUG-1: Notizen mit führendem `=`, `+`, `-` oder `@` wurden im CSV als Formel gelesen — **BEHOBEN**
-- **Severity:** Medium
-- **Betrifft:** AC-27, EC-10
-- **Status:** behoben am 2026-08-31, nachgeprüft in diesem Bericht
-- **Was war:** Eine Ausgabe mit der Notiz `-50% Rabatt Parkhaus`, `=Rest aus Juli` oder `+Nachtrag` landete **unbegrenzt** in der Datei (`…;3,50;-50% Rabatt Parkhaus;…`). Excel, LibreOffice und Numbers lesen das als Formel und zeigen `#NAME?` statt der Notiz — AC-27 verspricht eine Datei, die sich „ohne Nacharbeit" öffnen lässt. In der DDE-Form (`=cmd|' /C calc'!A0`) ist es zugleich der bekannte CSV-Injection-Weg; fremde Notizen kann zwar niemand schreiben (RLS), aber `design.md` nennt Steuerberater:innen ausdrücklich als Empfänger — Schreiber und Öffner sind also nicht zwingend dieselbe Person
-- **Der Fix:** `src/lib/expenses/csv.ts` — Felder, die mit `=`, `+`, `-`, `@`, Tabulator oder Wagenrücklauf beginnen, bekommen ein vorangestelltes Hochkomma (die übliche Textmarkierung, die die gängigen Programme beim Anzeigen schlucken) und werden zusätzlich begrenzt. **Begrenzen allein hätte nicht gereicht:** die Tabellenkalkulation entfernt die Anführungszeichen zuerst und sieht die Formel danach. Die Regel steht jetzt auch in `design.md` → *Der Export*
-- **Nachweis:** drei neue Tests in `src/lib/expenses/csv.test.ts`, rot nachgewiesen (ohne die Markierung fällt der Formeltest). Dazu ein echter Abruf von `/konto/export` gegen den Produktions-Build mit genau den Notizen, die den Bug ausgelöst haben — alle fünf jetzt markiert, `Hosting 50% Anteil` unverändert, die Semikolon-Begrenzung aus EC-10 unberührt
-- **Nebenwirkungen geprüft:** Datum, Kategorie und Betrag werden nicht angefasst (Beträge sind laut AC-5 immer größer 0, beginnen also nie mit einem Minus)
+### Previously Fixed
 
-### BUG-2: Kategorien unter 0,5 % Anteil erscheinen als „0 %" mit unsichtbarem Balken
-- **Severity:** Low
-- **Betrifft:** AC-14
-- **Schritte zur Reproduktion:**
-  1. In einem Monat erfassen: 5.000,00 € Hardware, 9,00 € Gebühren, 3,50 € Reise, 2,00 € Sonstiges
-  2. `/` aufrufen
-  3. Erwartet: jede belegte Kategorie zeigt ihren Anteil
-  4. Tatsächlich: drei Kategorien mit echtem Betrag zeigen „0 %", und ihr Anteilsbalken hat `width:0%`, ist also gar nicht sichtbar — die Zeile liest sich wie „hier ist nichts", obwohl 9,00 € dort stehen
-- **Wo:** `src/lib/expenses/summary.ts:41` (`Math.round`) und `src/components/expenses/category-breakdown.tsx:61` (Balkenbreite = Prozentwert)
-- **Vorschlag:** „<1 %" statt „0 %", und dem Balken eine Mindestbreite geben, sobald der Betrag größer 0 ist
-- **Priorität:** Nächste Runde
-- **Stand 01.09.2026 (vierter Durchlauf): unverändert offen, erneut nachgestellt.** Monat Juli
-  mit 5.000,00 € Hardware · 9,00 € Gebühren · 3,50 € Reise · 2,00 € Sonstiges: die drei kleinen
-  Kategorien zeigen 0 % und tragen `width:0%`, sind also unsichtbar. Der Code ist unangetastet
-  (`src/lib/expenses/summary.ts:39`, `src/components/expenses/category-breakdown.tsx:58,63`).
-  **EC-7 bleibt davon unberührt:** Die Euro-Summen ergeben exakt die angezeigte Gesamtsumme
-  (5.000,00 + 9,00 + 3,50 + 2,00 = 5.014,50 €) · *Nachweis: Daten eingespielt, `/?monat=2026-07`
-  mit echter Sitzung abgerufen, Balkenbreiten aus dem HTML gelesen*
-### BUG-3: `/konto` zeigt zwei gleich benannte „Abmelden"-Schaltflächen — **BEHOBEN**
-- **Severity:** ~~Low~~ → **Medium** (hochgestuft am 2026-08-31 durch `/e2e-tests`)
-- **Status:** **behoben und verifiziert am 01.09.2026 (vierter Durchlauf).** Auf `/konto` steht
-  genau **eine** Abmelden-Schaltfläche, im Header. Die Routing-Frage wurde über `/refine PROJ-1`
-  entschieden (Commits `2384585` / `e125ec0`), nicht nebenbei im Code · *Nachweis: `grep -c` auf
-  den ausgelieferten Rumpf von `/konto` mit echter Sitzung → **1**; im Quelltext existiert nur
-  noch `src/components/account/logout-button.tsx`, die Konto-Karte trägt keine zweite mehr*
-- **Betrifft:** Bedienbarkeit und Barrierefreiheit; PROJ-1 AC-14 ist doppelt erfüllt statt gar nicht
-- **Schritte zur Reproduktion:** angemeldet `/konto` aufrufen → einer im Header, einer in der Karte „Konto"
-- **Warum nicht mehr nur kosmetisch:** Der E2E-Lauf ist daran gescheitert —
-  `getByRole('button', { name: 'Abmelden' })` löst zu **zwei** Elementen auf. Was einen Testläufer
-  zum Abbruch bringt, trifft Screenreader genauso: zwei identisch benannte Schaltflächen auf einer
-  Seite, ohne unterscheidenden Kontext. Die PROJ-1-Suite musste auf `getByRole('main')` eingegrenzt
-  werden, um überhaupt weiterzulaufen
-- **Ursache:** So entworfen: `design.md` von PROJ-2 schreibt „Card „Konto" unverändert (PROJ-1)" und ergänzt den Header darüber. Die Karte gehört PROJ-1
-- **Priorität:** Eine **Routing-Frage**, kein einfacher Fix — den Knopf aus der Karte zu nehmen ändert PROJ-1s Vertrag und gehört über `/refine PROJ-1`
+Behoben **und in einem späteren Durchlauf nachgeprüft**. Die vollständigen Reproduktionswege sind
+über die Git-Historie abrufbar; die Zeile bleibt, weil sie zeigt, welche Stellen sich als anfällig
+erwiesen haben.
 
-### BUG-4: Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert
-- **Severity:** ~~Low~~ → **High** (hochgestuft am 2026-09-01 im zweiten Durchlauf)
-- **Status:** **BEHOBEN am 01.09.2026, verifiziert im dritten Durchlauf.** `MonthView` fängt ein
-  Nichterreichen ab und zeigt `UnavailableNotice`; jeder andere Fehler fliegt weiter. Unabhängig
-  nachgeprüft: HTTP 200 nach 2,27 s, null Umleitungen, Meldung und Knopf vorhanden, Rahmen steht
-- **Betrifft:** ~~keine AC~~ → **EC-4**. Der `/refine` vom 01.09.2026 hat EC-4 ausdrücklich auf das
-  **Lesen** ausgeweitet: „… wenn eine geschützte Seite **geladen** … wird, dann gibt die App nach
-  höchstens 2 Sekunden auf und zeigt eine verständliche Meldung." Genau das leistet dieser Pfad nicht
-- **Warum die Behebung vom 01.09.2026 ihn nicht schließt:** Sie hängt an der **Sitzungsprüfung**.
-  Fallen Datenbank und Auth-Server zusammen aus — der Fall, den `/build` gemessen hat —, greift sie
-  und alles ist gut. Bleibt der Auth-Server aber erreichbar und steht **nur der Datenzugriff**, ist
-  die Sitzung feststellbar, `requireUser()` liefert die Person, und erst die Monatsabfrage wirft.
-  Dort fängt sie niemand
-- **Was die Person dann sieht — schlechter als im ersten Durchlauf beschrieben:** nicht Next.js'
-  englische Fehlerseite, sondern **dauerhaft das Ladegerüst**. HTTP 200, und der sichtbare Text der
-  ganzen Seite lautet: „auslage." Keine Meldung, kein Knopf, kein Hinweis, dass etwas nicht stimmt
-- **Schritte zur Reproduktion:**
-  1. Angemeldet sein
-  2. `docker pause supabase_rest_praxisprojekt-ai-engineering` (**nur** PostgREST, nicht die Datenbank)
-  3. `/` aufrufen
-  4. Erwartet (EC-4): binnen 2 Sekunden eine verständliche Meldung
-  5. Tatsächlich: HTTP 200 nach **4,46 s**, nur das Ladegerüst, keine Meldung
-- **Nachweis:** `curl -b cookies.txt -w "%{http_code} %{time_total}"` → `200 4.464443`; `grep` auf
-  „Wir erreichen deine Daten" = **0** Treffer; Seitentext nach Entfernen aller Tags: `auslage.
-  auslage .`; im Server-Log `⨯ Error: {"message":"Error: auslage/unreachable: The operation was
-  aborted due to timeout", …, "code":""}` mit `digest: 3984802547@E394`
-- **Warum das nicht exotisch ist:** Es braucht keinen Ausfall. **Jede** Datenabfrage, die die
-  Zwei-Sekunden-Frist reißt — eine langsame Abfrage unter Last, ein hängender Verbindungspool —
-  landet auf demselben Pfad. Der Ausfall ist nur die zuverlässigste Art, ihn herbeizuführen
-- **Fix-Richtung (für `/build`, nicht hier entschieden):** Der Lesepfad braucht denselben Ausgang wie
-  die Sitzungsprüfung — die Abfragen in `queries.ts` abfangen und `UnavailableNotice` zeigen, oder
-  eine `error.tsx` für `/`, die `isUnreachable` auswertet. Der Baustein dafür existiert bereits
-- **Was der Export richtig macht:** `src/app/konto/export/route.ts` fängt genau diesen Fall ab und
-  antwortete im selben Test korrekt mit **HTTP 503** — dort wurde daran gedacht, auf der Seite nicht
-- **Schritte zur Reproduktion:** Schlägt die Monatsabfrage fehl, wirft `queries.ts` weiter (`src/lib/expenses/queries.ts:40,61,76`), und es gibt weder `error.tsx` noch `global-error.tsx` in `src/app/`
-- **Tatsächlich:** die Person sieht Next.js' eigene, englische Standardseite „This page couldn't load — A server error occurred." in einer sonst durchgehend deutschsprachigen Anwendung (im `/build`-Durchlauf einmal so beobachtet)
-- **Priorität:** Nächste Runde — eine `error.tsx` mit einem deutschen Satz und einem „Neu laden"-Knopf schließt das
+| Bug | Severity | Titel | behoben |
+|---|---|---|---|
+| **BUG-1** | Medium | Notizen mit führendem `=`, `+`, `-` oder `@` wurden im CSV als Formel gelesen | 31.08.2026 |
+| **BUG-2** | Low | Kategorien unter 0,5 % Anteil erschienen als „0 %" mit unsichtbarem Balken | 02.09.2026 |
+| **BUG-3** | Medium | `/konto` zeigte zwei gleich benannte „Abmelden"-Schaltflächen | 01.09.2026 |
+| **BUG-4** | High | Kein Fehlerzustand für die Seite, wenn das Lesen des Monats scheitert | 01.09.2026 |
+| **BUG-5** | High | Nach einer Änderung blieb der Änderungsdialog dauerhaft auf „Moment …" stehen | 31.08.2026 |
+| **BUG-6** | Medium | Die Frist galt je Aufruf, nicht je Anfrage — mehrere Aufrufe addierten sich | 01.09.2026 |
 
-### BUG-6: Die Frist gilt je Aufruf, nicht je Anfrage — mehrere Aufrufe addieren sich — **GESCHLOSSEN**
-- **Severity:** Medium · **Status:** **geschlossen am 01.09.2026 im vierten Durchlauf** ·
-  **Betrifft:** **EC-4** · gefunden im zweiten Durchlauf
+> **Zu BUG-5, weil die Lehre teurer war als der Bug:** `/qa` hatte ihn nicht finden können —
+> AC-20 stand dort als `[!] NICHT GEPRÜFT`, weil das Öffnen und Absenden eines Dialogs einen
+> Browser braucht. Genau diese Lücke war der Anlass für die E2E-Runde, die ihn dann fand.
 
-> **Wie er geschlossen wurde — und wie ausdrücklich nicht.** Nicht durch einen neuen Mechanismus:
-> Der `/refine` vom 01.09.2026 hat **den Vertrag** berichtigt, statt die Anwendung zu einer Zahl zu
-> zwingen, die keine Architektur mit mehreren Aufrufen halten kann. EC-4 nennt seither **zwei**
-> Zahlen — 2 Sekunden je Aufruf (Mechanismus) und 5 Sekunden je Anfrage (Zusage an die Person).
-> Gegen die neue Fassung ist der Befund **erfüllt und gemessen**: der höchste Wert über vier Wege
-> und je drei Läufe ist **3,19 s**, der POST-Weg liegt bei **2,04–2,26 s**. Der im Befund genannte
-> Wert von 4,07 s ließ sich im vierten Durchlauf **nicht mehr reproduzieren** — auch nicht mit der
-> echten Server Action im Browser (2,08 s). Grund: Bei Nichterreichen kehrt die Action zurück, ohne
-> `refresh()` aufzurufen, sodass die zweite Sitzungsprüfung im Ausfall gar nicht stattfindet
-> (`src/lib/actions/expenses.ts:198-201`). Festgehalten wird die Grenze jetzt von **T28**
-> (`tests/outage.spec.ts`) und **T29** (`month-view.test.tsx`), damit sie nicht unbemerkt reißt.
-> Der ursprüngliche Befund steht unverändert darunter.
-- **Was passiert:** EC-4 sagt „gibt die App **nach höchstens 2 Sekunden** auf". Gemessen wurde beim
-  Lesen der Seite 2,1 s — beim **POST auf dieselbe Seite** aber **4,1 s**
+> **BUG-8 bis BUG-13** stehen bewusst nicht hier, sondern in den Durchläufen, die sie gefunden
+> haben: Dort ist der Befund unmittelbar von seiner Behebung gefolgt, und getrennt gelesen ergäbe
+> keines von beidem ein Bild.
 
-> **Korrektur vom 01.09.2026 (im `/build`-Lauf zu BUG-4 nachgemessen).** Dieser Befund nannte
-> ursprünglich zusätzlich „4,5 s beim Lesen mit ausgefallenem Datenzugriff, weil sich die zwei
-> Abfragen der Monatsansicht addieren". **Das war falsch.** `MonthView` führt seine beiden Abfragen
-> über `Promise.all` **parallel** aus, es gibt dort also nur *eine* Frist. Die Instrumentierung zeigt
-> `getUser 58 ms` und `Abfragen gescheitert nach 2019 ms`, gesamt **2,21 s**. Die zuvor gemessenen
-> 4,46 s und 3,28 s waren die **Erstübersetzung** der Route durch den Entwicklungsserver, kein
-> Aufaddieren. Der Befund bleibt bestehen — aber **nur** für den POST-Fall, und der ist durch die
-> Zeitmessung unten sauber belegt.
-- **Ursache, gemessen statt vermutet:** vorübergehend eingebaute Zeitmessung in `proxy.ts` und
-  `auth.ts`, dann je ein Aufruf bei angehaltener Datenbank:
+### Weiterhin offen
 
-  | | Vorprüfung | `getUser()` | gesamt |
-  |---|---|---|---|
-  | `GET /` | 67 ms | **2013 ms** | 2,1 s |
-  | `POST /` | 1 ms | **2013 ms + 2015 ms** | 4,1 s |
-
-  Ein POST auf die Seite führt **zwei** Sitzungsprüfungen hintereinander aus, jede mit eigener
-  Zwei-Sekunden-Frist. Der Lesepfad ist davon **nicht** betroffen (siehe Korrektur oben)
-- **Schritte zur Reproduktion:** `docker pause` auf den Datenbank-Container, dann mit gültiger
-  Sitzung `curl -w "%{time_total}" -X POST http://localhost:3300/` → 4,06 s, 4,09 s, 4,13 s in drei
-  aufeinanderfolgenden Läufen
-- **Warum Medium und nicht High:** Der Vertrag wird um den Faktor zwei verfehlt, aber die Meldung
-  kommt, es wird nichts geschrieben, nichts geht verloren, und gegenüber den 50,4 s des ersten
-  Durchlaufs ist es eine Verbesserung um mehr als das Zehnfache. Es tritt nur ein, wenn die
-  Gegenstelle ohnehin steht
-- **Warum nicht Low:** Die Zahl „zwei Sekunden" ist nicht Beiwerk, sie war der **Zweck** des
-  `/refine`. Ein Vertrag, der um das Doppelte verfehlt wird, ist kein erfüllter Vertrag
-- **Fix-Richtung (für `/build`, nicht hier entschieden):** entweder die Frist als **Budget je
-  Anfrage** führen (ein gemeinsames Abbruchsignal, das mit der ersten Anfrage zu laufen beginnt),
-  oder EC-4 über `/refine` auf „je Aufruf" präzisieren. Das ist eine Vertragsfrage, keine reine
-  Codefrage — deshalb steht sie hier und wird nicht nebenbei entschieden
+> **Stand 02.09.2026, festgestellt von `/cleanup`.** BUG-7 wurde im vierten Durchlauf (01.09.)
+> aufgenommen und **nie geschlossen** — die Zusammenfassungen der Durchläufe danach führten
+> trotzdem „0 Low". Das ist oben an jeder Stelle berichtigt.
+>
+> **Und der Befund selbst ist fraglich geworden.** Er stützt sich darauf, dass der POST-Weg im
+> Ausfall nur **2,08 s** braucht, die 4,07 s im Entwurf also zu pessimistisch seien. Der Durchlauf
+> vom 02.09. hat denselben Weg jedoch mit **4,13 s** und **4,04 s** gemessen — was die Zahl im
+> Entwurf **bestätigt**. Möglicherweise ist nicht der Entwurf falsch, sondern die eine Messung des
+> vierten Durchlaufs war es. Er bleibt deshalb in voller Länge stehen, statt still verbucht zu
+> werden: Ein Befund, dessen Grundlage widerlegt sein könnte, gehört geprüft und nicht abgehakt.
 
 ### BUG-7: `design.md` rechnet den POST-Weg mit einer Wartestation zu viel
 - **Severity:** **Low** · **Status:** offen · **Betrifft:** `design.md` → *Das Zeitbudget einer
@@ -852,25 +755,6 @@ Sicherheitsregeln. Entstünde später doch ein gehostetes Projekt, gehört diese
   vierten Durchlaufs bringen und dabei festhalten, **warum** der POST-Weg im Ausfall nur eine
   Prüfung macht. TD-32 selbst bleibt richtig: Im **Normalbetrieb** prüft ein POST die Sitzung
   weiterhin zweimal (dort rund 50 ms, wie TD-32 schreibt)
-
-### BUG-5: Nach einer Änderung blieb der Dialog dauerhaft auf „Moment …" stehen — **BEHOBEN**
-- **Severity:** **High**
-- **Status:** behoben am 2026-08-31, nachgeprüft — Journey 3 läuft auf beiden Engines grün
-- **Betrifft:** AC-20, AC-21 — gefunden von `/e2e-tests`, Journey 3, auf **Chromium und Mobile Safari**
-- **Schritte zur Reproduktion:**
-  1. Eine Ausgabe erfassen
-  2. „Ändern" wählen, den Betrag ändern, „Speichern" — die Änderung wird korrekt gespeichert, der Dialog schließt
-  3. Bei **derselben** Ausgabe erneut „Ändern" wählen
-  4. Erwartet: der Dialog öffnet mit dem gespeicherten Stand und lässt sich wieder speichern (AC-20)
-  5. Tatsächlich: der Dialog öffnet zwar, aber **„Speichern" heißt „Moment …" und ist gesperrt**, „Abbrechen" ebenso. Die Ausgabe lässt sich bis zum Neuladen der Seite nicht mehr ändern
-- **Nachweis:** Schnappschuss aus dem Testlauf — `button "Abbrechen" [disabled]`, `button "Moment …" [disabled]`, während das Datumsfeld den neuen Wert bereits trägt
-- **Ursache:** `src/components/expenses/edit-expense-dialog.tsx` — der Erfolgspfad von `submit()` verlässt die Funktion mit `return`, **ohne `setPending(false)`**. Bleibt die Ausgabe im selben Monat, bleibt die Zeile stehen, die Komponente wird nicht ausgehängt, und `isPending` bleibt für immer `true`. Verschiebt die Änderung die Ausgabe dagegen in einen anderen Monat, verschwindet die Zeile — dann fällt es nicht auf. Der Fehler trifft also genau den häufigen Fall
-- **Warum `/qa` das nicht gefunden hat:** AC-20 stand dort als `[!] NICHT GEPRÜFT` — das Öffnen und Absenden eines Dialogs braucht einen Browser. Genau diese Lücke war der Grund für diese E2E-Runde
-- **Der Fix:** `setPending(false)` steht in beiden Dialogen jetzt in einem `finally`, nicht am Ende des Fehlerpfads — so kann kein künftiger Pfad das Zurücksetzen wieder vergessen, auch keiner, der eine Ausnahme wirft
-- **Der Lösch-Dialog trug dieselbe Falle**, nur verdeckt: dort verschwindet die Zeile immer, die Komponente wird also stets ausgehängt. Mitgefixt, weil verdeckt nicht abwesend heißt
-- **Nachweis:** `npm run test:e2e` → 18 von 18 grün; vorher fiel Journey 3 auf **beiden** Engines an genau diesem Schritt
-
----
 
 ## Zusammenfassung — vierter Durchlauf (01.09.2026)
 
@@ -1144,7 +1028,7 @@ die Quellen sind danach nachweislich unverändert (`git diff` leer).
 
 ### Bugs
 
-**Keine neuen Befunde.** Kein Critical, kein High, kein Medium, kein Low.
+**Keine neuen Befunde.** Kein Critical, kein High, kein Medium, kein Low. · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".*
 
 **Zum Stand von BUG-6** aus dem QA-Bericht von PROJ-3 (dort, nicht hier nummeriert): Der Befund
 hatte zwei Hälften. Die **falsche Behauptung** ist behoben und in diesem Lauf an vier Ausfallwegen
@@ -1156,7 +1040,7 @@ offene Frage in `spec.md`, nicht als Bug.
 
 - **Acceptance Criteria:** 30 von 30 unverändert erfüllt — in diesem Lauf erneut belegt: AC-1, AC-5, AC-6, AC-8, AC-13, AC-14, AC-15, AC-24, AC-25, AC-29, AC-30 an der laufenden App, die übrigen über die grüne E2E-Suite
 - **Edge Cases:** **13 von 13 erfüllt** — EC-13 neu und an vier Ausfallwegen belegt, EC-4 und EC-12 unbeschädigt, EC-1 im neuen Zusammenhang bestätigt
-- **Bugs:** 0 Critical · 0 High · 0 Medium · 0 Low
+- **Bugs:** 0 Critical · 0 High · 0 Medium · **1 Low** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".*
 - **Security:** 7 Prüfungen verifiziert, 2 NOT VERIFIED, keine negativ
 - **Tests:** 278 Unit-/Integrationstests grün (9 neue, alle rot nachgewiesen) · 28/28 E2E · Ausfall-Zusicherung grün · Lint, Build und TypeScript sauber
 - **Production Ready:** **JA**
@@ -1530,7 +1414,7 @@ die Datei steht bei **16 von 16 grün**.
   bei der Zugänglichkeit (BUG-8). 19 der übrigen 30 wurden als Stichprobe erneut belegt
 - **Edge Cases:** **15 von 15 erfüllt** — EC-14 und EC-15 neu und beide an der laufenden Anwendung
   belegt, EC-4/EC-11/EC-12/EC-13 unbeschädigt
-- **Bugs:** **0 Critical · 0 High · 0 Medium · 4 Low** (BUG-8, BUG-9, BUG-10 neu; BUG-2 unverändert)
+- **Bugs:** **0 Critical · 0 High · 0 Medium · 5 Low** (BUG-8, BUG-9, BUG-10 neu; BUG-2 und BUG-7 unverändert) · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".*
 - **Security:** **11 Prüfungen verifiziert, 3 NOT VERIFIED** (Drosselung, Brute Force, CSRF) —
   keine davon negativ
 - **Tests:** **297** Einheiten-/Integrationstests grün (5 neue, alle rot nachgewiesen) ·
@@ -1700,7 +1584,7 @@ gestellten Bruch.
 | BUG-2 „0 %" bei kleinen Anteilen | Low | **behoben und verifiziert** (offen seit 31.08.) |
 | BUG-10 `date-fns` direkt statt transitiv | Low | **behoben und verifiziert** |
 
-**0 Critical · 0 High · 0 Medium · 0 Low — kein offener Befund.**
+**0 Critical · 0 High · 0 Medium · 1 Low.** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".*
 
 ### Was dieser Durchlauf über das Prüfen gezeigt hat
 
@@ -1805,7 +1689,7 @@ Quelle ist danach nachweislich unverändert.
 | BUG-13 Popover ohne sichtbare Erhebung | Low | **behoben und verifiziert** |
 | BUG-11, BUG-8, BUG-9, BUG-2, BUG-10 | — | unverändert behoben |
 
-**0 Critical · 0 High · 0 Medium · 0 Low.**
+**0 Critical · 0 High · 0 Medium · 1 Low.** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".*
 
 **Offener Punkt, nicht als Befund verbucht:** `dialog.tsx` und `sonner.tsx` weichen weiterhin von
 `docs/design-system.md` §6.1 ab (Tailwind-Standardschatten statt der dort genannten Werte). Die
@@ -1900,7 +1784,7 @@ sie als benannte Entscheidung, nicht als stiller Rest.
 
 ### Bug-Stand
 
-**0 Critical · 0 High · 0 Medium · 0 Low.** Alle Befunde BUG-2 und BUG-8 bis BUG-13 behoben und
+**0 Critical · 0 High · 0 Medium · 1 Low.** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".* Alle Befunde BUG-2 und BUG-8 bis BUG-13 behoben und
 verifiziert.
 
 ---
@@ -1974,5 +1858,5 @@ Die Quellen sind danach nachweislich unverändert.
 
 ### Bug-Stand
 
-**0 Critical · 0 High · 0 Medium · 0 Low.** BUG-2 und BUG-8 bis BUG-13 sind behoben und
+**0 Critical · 0 High · 0 Medium · 1 Low.** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".* BUG-2 und BUG-8 bis BUG-13 sind behoben und
 verifiziert; der im siebten Durchlauf benannte offene Punkt zu den Flächenfarben ist geschlossen.

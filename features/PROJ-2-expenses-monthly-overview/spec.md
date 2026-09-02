@@ -287,14 +287,6 @@
   `auslage.` erfassten Belegdaten durch? Dann kehrt sie AC-26 und AC-15 aus PROJ-1 um. Die Frage stand
   schon in PROJ-1, betraf dort aber eine leere Tabelle. Kontext in `docs/privacy.md`, Antwort von
   Jurist:innen.
-- [x] **Wem gehört der Export-Abschnitt auf `/konto`?** ~~`docs/app-shell.md` weist `/konto` PROJ-1 zu,
-  der Export (AC-27) betrifft aber Ausgabendaten.~~ **Beantwortet von `/architecture PROJ-2`, wie
-  vorgeschlagen:** Der Abschnitt „Deine Daten mitnehmen" und die Route `/konto/export` gehören PROJ-2,
-  der Bereich `/konto` und sein Zugriffsschutz bleiben bei PROJ-1. Festgehalten in `docs/app-shell.md`.
-
-- [x] **Zwei Feldgrenzen, die der Entwurf ergänzt** (`design.md`, TD-18): höchstens 9.999.999,99 € je
-  Ausgabe und kein Datum vor dem 01.01.2000. → Beide bleiben, mit den Werten aus dem Entwurf, und
-  stehen seit `/refine PROJ-2` als **AC-29** und **AC-30** im Vertrag (2026-08-31).
 - [ ] **Keine Seitenblätterung im MVP** (EC-9). Ab welcher Monatsgröße das spürbar wird, lässt sich
   erst mit echten Daten beantworten. Bei einer Handvoll Belege pro Monat — dem Zielbild des PRD —
   stellt sich die Frage nicht.
