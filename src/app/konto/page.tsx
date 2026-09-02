@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { ChevronLeft } from 'lucide-react'
 
 import { requireUser } from '@/lib/auth'
 import { DeleteAccountDialog } from '@/components/account/delete-account-dialog'
@@ -45,6 +46,23 @@ export default async function KontoPage() {
     <>
       <AppHeader />
       <main className="mx-auto flex w-full max-w-[560px] flex-col gap-6 px-5 py-10">
+        {/*
+          Der Rückweg (AC-33). Es gab ihn schon — die Wortmarke im Kopf ist ein Link mit
+          `aria-label="Zur Übersicht"` —, nur hat ihn niemand als Rückweg gelesen. Ein Rückweg,
+          den niemand als solchen erkennt, gibt es praktisch nicht.
+
+          **Ein Link, kein `history.back()`** (design.md, TD-40): Wer `/konto` direkt aufruft oder
+          aus einem Lesezeichen kommt, hat keine Historie in der App — ein Historien-Zurück führte
+          dann aus der Anwendung heraus. Ein Link führt immer dorthin, wo er hinzeigt.
+        */}
+        <Link
+          href="/"
+          className="-mb-2 inline-flex w-fit items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+          Zur Übersicht
+        </Link>
+
         <Card>
           <CardHeader>
             <CardTitle className="font-grotesk text-xl">Konto</CardTitle>

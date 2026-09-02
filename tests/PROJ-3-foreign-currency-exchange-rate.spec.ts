@@ -349,3 +349,51 @@ test('Der Änderungsdialog behält die Auswahl, wenn das Speichern scheitert (AC
   expect(zelle.waehrung).toBe('USD')
   expect(zelle.kursdatum).toBe('17.08.2026')
 })
+
+/**
+ * **Die Zusicherung gegen den stillen Kursfehler (PROJ-2, EC-15).**
+ *
+ * Seit dem 02.09.2026 lässt sich das Datum auch über einen Kalender setzen (PROJ-2, AC-31). Der
+ * Kalender gehört PROJ-2 — die Folge trägt PROJ-3: Ändert sich das Datum, muss der Kurs neu
+ * geholt werden (AC-12). Nähme die Kalenderwahl einen anderen Weg als die Tastatur, bliebe der
+ * Kurs des **alten** Datums stehen. Die Zeile sähe völlig plausibel aus und wäre falsch — kein
+ * Fehler, keine Meldung, nur eine falsche Zahl in der Monatssumme.
+ *
+ * Der Entwurf verhindert das strukturell (ein Datums-Baustein für beide Stellen, TD-38). Diese
+ * Zusicherung misst, dass es auch wirklich so ankommt.
+ */
+test('Ein über den Kalender geändertes Datum holt den Kurs neu (PROJ-2 EC-15, AC-12)', async ({
+  page,
+}) => {
+  await registriere(page, 'p3ec15')
+  await page.goto(`/?monat=${KURSMONAT}`)
+
+  // Montag, 17.08.2026 — ein abgeschlossener Tag mit festem EZB-Kurs.
+  await erfasse(page, {
+    betrag: '1250,00',
+    waehrung: 'USD',
+    kategorie: 'Software & Abos',
+    datum: KURSTAG,
+    notiz: 'Kalenderprobe',
+  })
+  await expect(page.getByLabel('Betrag')).toHaveValue('', AKTION)
+  const vorher = await leseBetragszelle(page)
+  expect(vorher.kursdatum).toBe('17.08.2026')
+
+  // Jetzt das Datum **über den Kalender** auf den 14.08.2026 ziehen — Freitag, anderer Kurs.
+  await page.getByRole('button', { name: 'Ändern' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'Kalender öffnen' }).click()
+  await page.getByRole('button', { name: 'Freitag, 14. August 2026' }).click()
+  await expect(dialog.getByLabel('Datum')).toHaveValue('2026-08-14')
+  await page.getByRole('button', { name: 'Speichern' }).click()
+
+  // **Der Kern:** Das Kursdatum ist mitgewandert. Bliebe hier 17.08.2026 stehen, trüge die
+  // Ausgabe den Kurs eines Tages, an dem sie gar nicht mehr liegt.
+  await expect(page.locator('tbody tr td').nth(3)).toContainText('14.08.2026', AKTION)
+  const nachher = await leseBetragszelle(page)
+  expect(nachher.kursdatum).toBe('14.08.2026')
+  expect(nachher.original).toBe(1250)
+  // Und die Umrechnung rechnet weiterhin auf — mit dem NEUEN Kurs.
+  expect(nachher.euro).toBeCloseTo(nachher.original! / nachher.kurs!, 1)
+})

@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  formatAmount,
-  formatAmountPlain,
-  formatDay,
-  formatForeignAmount,
-  formatMonthLabel,
-  formatRate,
-  formatRatePlain,
-  formatTimestamp,
-} from './format'
+import { formatAmount, formatAmountPlain, formatDay, formatForeignAmount, formatMonthLabel, formatRate, formatRatePlain, formatTimestamp, formatWeekday } from './format'
 
 describe('Beträge (AC-6, docs/design-system.md §5)', () => {
   it('schreibt deutschsprachig mit zwei Nachkommastellen und dem Zeichen dahinter', () => {
@@ -74,5 +65,26 @@ describe('Fremdwährung und Kurs (PROJ-3, AC-7, AC-8)', () => {
   it('schreibt den Kurs für den Export ohne Tausenderpunkt (AC-19)', () => {
     // So liest ihn eine Tabellenkalkulation mit deutschsprachigen Einstellungen als Zahl.
     expect(formatRatePlain(1.1593)).toBe('1,1593')
+  })
+})
+
+describe('Der Wochentag (AC-32)', () => {
+  it('nennt den Wochentag zweibuchstabig', () => {
+    expect(formatWeekday('2026-08-17')).toBe('Mo')
+    expect(formatWeekday('2026-08-15')).toBe('Sa')
+    expect(formatWeekday('2026-08-16')).toBe('So')
+  })
+
+  it('trifft das Wochenende, an dem PROJ-3 den Kurs des Vortags nimmt', () => {
+    // Genau der Fall aus PROJ-3, AC-4: Die Ausgabe vom Samstag trägt den Freitagskurs. Der
+    // Wochentag am Feld ist die Erklärung dafür, bevor jemand nachfragt.
+    expect(formatWeekday('2026-08-15')).toBe('Sa')
+    expect(formatWeekday('2026-08-14')).toBe('Fr')
+  })
+
+  it('lässt keine Zeitzone den Tag verschieben', () => {
+    // Über eine Ortszeit gerechnet läge der 01.01.2000 östlich von Greenwich schon im Vorjahr.
+    expect(formatWeekday('2000-01-01')).toBe('Sa')
+    expect(formatWeekday('1999-12-31')).toBe('Fr')
   })
 })

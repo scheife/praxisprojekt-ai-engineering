@@ -55,7 +55,12 @@ export function ExpenseList({
             <TableRow key={expense.id}>
               <TableCell className="tabular-nums">{formatDay(expense.spent_on)}</TableCell>
               <TableCell>{categoryLabel(expense.category)}</TableCell>
-              <TableCell className="max-w-0 truncate text-muted-foreground">
+              {/* Die Notiz steht wie Datum und Kategorie, nicht gedämpft (AC-34). Sie war als
+                  Meta-Text eingestuft — formal über der Kontrastgrenze, aber die Rangfolge war
+                  verkehrt: Sie ist der einzige Text der Zeile, den die Person selbst geschrieben
+                  hat. Die Fremdwährungs-Beizeile unten bleibt gedämpft; sie ist wirklich
+                  Nebeninformation, und der Unterschied wird dadurch erst sichtbar. */}
+              <TableCell className="max-w-0 truncate">
                 {expense.note ?? ''}
               </TableCell>
               <TableCell className="text-right tabular-nums">

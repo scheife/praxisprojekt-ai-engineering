@@ -255,7 +255,7 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 >
 > **Barriere:** Ebene 16 importiert daraus.
 
-- [ ] T37  Den shadcn-Kalender installieren (`npx shadcn@latest add calendar --yes`). **Nachsehen, was mitkommt:** react-day-picker v9 bringt seine Lokalisierung selbst mit (`react-day-picker/locale`) — importiert die erzeugte `calendar.tsx` trotzdem aus `date-fns`, wird das durch `Intl` ersetzt, statt eine zweite Datumsbibliothek für zwei Beschriftungen mitzuschleppen (TD-36)  · files: `src/components/ui/calendar.tsx`, `package.json`, `package-lock.json`  · → AC-31
+- [x] T37  Den shadcn-Kalender installieren (`npx shadcn@latest add calendar --yes`). **Nachsehen, was mitkommt:** react-day-picker v9 bringt seine Lokalisierung selbst mit (`react-day-picker/locale`) — importiert die erzeugte `calendar.tsx` trotzdem aus `date-fns`, wird das durch `Intl` ersetzt, statt eine zweite Datumsbibliothek für zwei Beschriftungen mitzuschleppen (TD-36)  · files: `src/components/ui/calendar.tsx`, `package.json`, `package-lock.json`  · → AC-31
 
 ### Ebene 16 — Der eine Datums-Baustein (02.09.2026)
 
@@ -263,24 +263,24 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 > setzen **denselben** Baustein ein. Zwei getrennt verdrahtete Kalender driften auseinander, und der
 > Fehler wäre eine Ausgabe mit dem Kurs des alten Datums — richtig aussehend, still falsch.
 
-- [ ] T38  `DateField`: das Feld bleibt `type="date"` und damit tippbar, **das native Kalendersymbol wird ausgeblendet** (TD-35), daneben der Wochentag und eine Schaltfläche, die den Kalender im Popover öffnet. Die Grenzen wirken **zweifach** (TD-37): blätterbar nur von Januar 2000 bis zum laufenden Monat, und Tage vor dem 01.01.2000 oder nach heute werden **gar nicht erst angezeigt**. Der Wochentag wird über `Intl` **berechnet** und nirgends gespeichert (TD-39) — die Formatierung gehört zu den übrigen Datumsausgaben in `format.ts`. **Der Kalender ist eine Bequemlichkeit, nie die Kontrolle:** AC-7 und AC-30 prüfen unverändert auf dem Server  · files: `src/components/expenses/date-field.tsx`, `src/lib/expenses/format.ts`  · → AC-31, AC-32, EC-14
+- [x] T38  `DateField`: das Feld bleibt `type="date"` und damit tippbar, **das native Kalendersymbol wird ausgeblendet** (TD-35), daneben der Wochentag und eine Schaltfläche, die den Kalender im Popover öffnet. Die Grenzen wirken **zweifach** (TD-37): blätterbar nur von Januar 2000 bis zum laufenden Monat, und Tage vor dem 01.01.2000 oder nach heute werden **gar nicht erst angezeigt**. Der Wochentag wird über `Intl` **berechnet** und nirgends gespeichert (TD-39) — die Formatierung gehört zu den übrigen Datumsausgaben in `format.ts`. **Der Kalender ist eine Bequemlichkeit, nie die Kontrolle:** AC-7 und AC-30 prüfen unverändert auf dem Server  · files: `src/components/expenses/date-field.tsx`, `src/lib/expenses/format.ts`  · → AC-31, AC-32, EC-14
 
 ### Ebene 17 — Die vier Einsatzstellen (02.09.2026)
 
 > Alle vier `[P]`: paarweise disjunkte Dateien, keine kommt zweimal vor.
 
-- [ ] T39 [P]  Die Erfassungszeile setzt `DateField` ein, statt das Datumsfeld selbst zu bauen. Verhalten unverändert: Vorbelegung nach angezeigtem Monat (AC-2), das Datum bleibt nach dem Speichern stehen (AC-3)  · files: `src/components/expenses/expense-composer.tsx`  · → AC-31, AC-32
-- [ ] T40 [P]  Der Änderungsdialog ebenso. **Hier hängt PROJ-3 dran:** Ein über den Kalender gesetztes Datum muss denselben Weg nehmen wie ein getipptes, damit der Kursabruf aus PROJ-3 (dort AC-12) auslöst (EC-15)  · files: `src/components/expenses/edit-expense-dialog.tsx`  · → AC-31, AC-32, EC-15
-- [ ] T41 [P]  Über der Konto-Karte ein `‹ Zur Übersicht` als **Link auf `/`** — nicht als „zurück" der Browserhistorie, sonst fliegt aus der Anwendung, wer die Seite direkt aufgerufen hat (TD-40). Die Wortmarke im Kopf bleibt unangetastet  · files: `src/app/konto/page.tsx`  · → AC-33
-- [ ] T42 [P]  Die Notiz verliert ihre Meta-Einfärbung und steht wie Datum und Kategorie. Das Abschneiden langer Notizen bleibt; die Fremdwährungs-Beizeile aus PROJ-3 bleibt **gedämpft** — sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtbar  · files: `src/components/expenses/expense-list.tsx`  · → AC-34
+- [x] T39 [P]  Die Erfassungszeile setzt `DateField` ein, statt das Datumsfeld selbst zu bauen. Verhalten unverändert: Vorbelegung nach angezeigtem Monat (AC-2), das Datum bleibt nach dem Speichern stehen (AC-3)  · files: `src/components/expenses/expense-composer.tsx`  · → AC-31, AC-32
+- [x] T40 [P]  Der Änderungsdialog ebenso. **Hier hängt PROJ-3 dran:** Ein über den Kalender gesetztes Datum muss denselben Weg nehmen wie ein getipptes, damit der Kursabruf aus PROJ-3 (dort AC-12) auslöst (EC-15)  · files: `src/components/expenses/edit-expense-dialog.tsx`  · → AC-31, AC-32, EC-15
+- [x] T41 [P]  Über der Konto-Karte ein `‹ Zur Übersicht` als **Link auf `/`** — nicht als „zurück" der Browserhistorie, sonst fliegt aus der Anwendung, wer die Seite direkt aufgerufen hat (TD-40). Die Wortmarke im Kopf bleibt unangetastet  · files: `src/app/konto/page.tsx`  · → AC-33
+- [x] T42 [P]  Die Notiz verliert ihre Meta-Einfärbung und steht wie Datum und Kategorie. Das Abschneiden langer Notizen bleibt; die Fremdwährungs-Beizeile aus PROJ-3 bleibt **gedämpft** — sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtbar  · files: `src/components/expenses/expense-list.tsx`  · → AC-34
 
 ### Ebene 18 — Zusicherungen (02.09.2026)
 
 > Alle drei `[P]`: vier verschiedene Testdateien.
 
-- [ ] T43 [P]  Einheitentests für den Baustein: der Wochentag stimmt für bekannte Tage (der 15.08.2026 ist ein Samstag), die Grenzen aus EC-14 lassen unzulässige Tage nicht zu, und **beide Wege schreiben denselben Wert** — getippt wie geklickt  · files: `src/components/expenses/date-field.test.tsx`, `src/lib/expenses/format.test.ts`  · → AC-31, AC-32, EC-14
-- [ ] T44 [P]  Im Browser: Kalender öffnen und einen Tag wählen, der Wochentag steht am Feld, der Rückweg von `/konto` führt auf `/`, und die Notiz ist nicht mehr die blasseste Spalte der Zeile  · files: `tests/PROJ-2-expenses-monthly-overview.spec.ts`  · → AC-31, AC-33, AC-34
-- [ ] T45 [P]  **Die Zusicherung gegen den stillen Fehler (EC-15):** eine Fremdwährungsausgabe öffnen, das Datum **über den Kalender** ändern, speichern — und prüfen, dass das **Kursdatum in der Zeile mitgewandert** ist. Bliebe der alte Kurs stehen, sähe die Ausgabe völlig plausibel aus und wäre falsch. Nur ein Browser kann das zeigen  · files: `tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`  · → EC-15
+- [x] T43 [P]  Einheitentests für den Baustein: der Wochentag stimmt für bekannte Tage (der 15.08.2026 ist ein Samstag), die Grenzen aus EC-14 lassen unzulässige Tage nicht zu, und **beide Wege schreiben denselben Wert** — getippt wie geklickt  · files: `src/components/expenses/date-field.test.tsx`, `src/lib/expenses/format.test.ts`  · → AC-31, AC-32, EC-14
+- [x] T44 [P]  Im Browser: Kalender öffnen und einen Tag wählen, der Wochentag steht am Feld, der Rückweg von `/konto` führt auf `/`, und die Notiz ist nicht mehr die blasseste Spalte der Zeile  · files: `tests/PROJ-2-expenses-monthly-overview.spec.ts`  · → AC-31, AC-33, AC-34
+- [x] T45 [P]  **Die Zusicherung gegen den stillen Fehler (EC-15):** eine Fremdwährungsausgabe öffnen, das Datum **über den Kalender** ändern, speichern — und prüfen, dass das **Kursdatum in der Zeile mitgewandert** ist. Bliebe der alte Kurs stehen, sähe die Ausgabe völlig plausibel aus und wäre falsch. Nur ein Browser kann das zeigen  · files: `tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`  · → EC-15
 
 ## Parallelization
 

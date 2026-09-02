@@ -22,6 +22,7 @@ import { formatMonthLabel } from '@/lib/expenses/format'
 import { monthOf } from '@/lib/expenses/month'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/expenses/date-field'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -251,19 +252,15 @@ export function ExpenseComposer({
           <Label htmlFor="spentOn" className={LABEL}>
             Datum
           </Label>
-          {/* Das native Datumsfeld liefert den Kalender des Systems, kennt die
-              deutschsprachige Schreibweise von sich aus und ist am Telefon schneller zu
-              bedienen als alles Nachgebaute (design.md, TD-14). */}
-          <Input
+          {/* Tippen bleibt, der Kalender kommt daneben — beide Wege schreiben denselben Wert
+              durch dasselbe `onChange` (AC-31, AC-32; design.md TD-35, TD-38). */}
+          <DateField
             id="spentOn"
-            name="spentOn"
             form={FORM_ID}
-            type="date"
             value={spentOn}
-            onChange={(event) => setSpentOn(event.target.value)}
-            aria-invalid={Boolean(fieldError?.spentOn)}
-            aria-describedby={fieldError?.spentOn ? 'spentOn-error' : undefined}
-            className="h-9"
+            onChange={setSpentOn}
+            invalid={Boolean(fieldError?.spentOn)}
+            describedBy={fieldError?.spentOn ? 'spentOn-error' : undefined}
           />
         </div>
 

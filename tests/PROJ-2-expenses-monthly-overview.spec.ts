@@ -334,3 +334,70 @@ test('Journey 5: Niemand sieht die Zahlen einer anderen Person (AC-24)', async (
     await kontextB.close()
   }
 })
+
+/**
+ * Journey 6 — der Kalender, der Rückweg und die lesbare Notiz (AC-31 bis AC-34).
+ *
+ * Ergänzt am 02.09.2026 aus der Rückmeldung am laufenden Stand. Drei Dinge, die alle nur im
+ * Browser sichtbar sind: Der Kalender ist reine Client-Interaktion, der Rückweg ist eine Frage
+ * der Erkennbarkeit, und ob die Notiz lesbar ist, entscheidet sich an der ausgelieferten Farbe.
+ */
+test('Journey 6: Kalender, Rückweg und lesbare Notiz (AC-31 bis AC-34)', async ({ page }) => {
+  await registriere(page, 'j6')
+
+  const datum = page.getByLabel('Datum')
+  const heute = new Date()
+
+  // --- AC-31: der Kalender ist ein ZWEITER Weg, nicht der einzige --------------------------
+  // Erst tippen — das Feld muss tippbar bleiben, sonst kostet jeder Beleg zwei Klicks mehr.
+  await datum.fill('2026-08-15')
+  await expect(datum).toHaveValue('2026-08-15')
+
+  // AC-32: der Wochentag steht am Feld, ohne dass man den Kalender öffnet. Der 15.08.2026 ist
+  // ein Samstag — genau der Fall, an dem PROJ-3 den Kurs des Vortags nimmt (dort AC-4).
+  await expect(page.getByText('Sa', { exact: true })).toBeVisible(AKTION)
+
+  // Und jetzt derselbe Wert über den Kalender.
+  await page.getByRole('button', { name: 'Kalender öffnen' }).click()
+  await page.getByRole('button', { name: 'Montag, 17. August 2026' }).click()
+  await expect(datum).toHaveValue('2026-08-17')
+  await expect(page.getByText('Mo', { exact: true })).toBeVisible(AKTION)
+
+  // EC-14: Tage nach heute stehen gar nicht erst im Kalender.
+  await page.getByRole('button', { name: 'Kalender öffnen' }).click()
+  const morgen = new Date(heute.getTime() + 24 * 3600 * 1000)
+  const morgenLabel = new Intl.DateTimeFormat('de-AT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(morgen)
+  await expect(page.getByRole('button', { name: morgenLabel })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // --- AC-34: die Notiz ist nicht mehr die blasseste Spalte der Zeile ----------------------
+  await erfasse(page, {
+    betrag: '24,90',
+    kategorie: 'Büromaterial',
+    datum: iso(heute),
+    notiz: 'Druckerpapier',
+  })
+
+  const zeile = page.getByRole('row').filter({ hasText: 'Druckerpapier' })
+  const farbe = (text: string) =>
+    zeile
+      .getByText(text, { exact: true })
+      .evaluate((el) => getComputedStyle(el).color)
+
+  // Gemessen statt behauptet: Die Notiz trug `--muted-foreground` und war damit blasser als
+  // Kategorie und Datum daneben. Formal war das über der Kontrastgrenze — falsch war die
+  // Einstufung. Geprüft wird deshalb die Gleichheit mit der Kategorie, nicht ein Farbwert.
+  expect(await farbe('Druckerpapier')).toBe(await farbe('Büromaterial'))
+
+  // --- AC-33: der Rückweg von /konto ------------------------------------------------------
+  await page.goto('/konto')
+  const zurueck = page.getByRole('link', { name: 'Zur Übersicht' })
+  await expect(zurueck).toBeVisible(AKTION)
+  await zurueck.click()
+  await expect(page).toHaveURL('/', AKTION)
+})

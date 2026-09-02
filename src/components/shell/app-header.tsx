@@ -25,7 +25,15 @@ export function AppHeader({
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex h-14 w-full max-w-[1180px] items-center gap-4 px-5">
-        <Link href="/" aria-label="Zur Übersicht" className="shrink-0">
+        {/*
+          **Kein `aria-label` mehr** (02.09.2026, AC-33): Es lautete „Zur Übersicht" — als es
+          keinen sichtbaren Rückweg gab, war das ein Behelf. Seit `/konto` einen echten trägt,
+          hießen **zwei** Links auf derselben Seite gleich und waren für Screenreader nicht
+          unterscheidbar. Genau der Fehler, den PROJ-2 als BUG-3 schon einmal hatte, nur mit
+          Links statt Schaltflächen. Ohne das Etikett heißt dieser Link nach seinem eigenen
+          Text: „auslage." — die Wortmarke, was er ist.
+        */}
+        <Link href="/" className="shrink-0">
           <Wordmark className="text-xl" />
         </Link>
 

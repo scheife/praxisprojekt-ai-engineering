@@ -15,6 +15,7 @@ import { formatMonthLabel } from '@/lib/expenses/format'
 import type { Expense } from '@/lib/expenses/queries'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/expenses/date-field'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -237,15 +238,16 @@ export function EditExpenseDialog({ expense, month }: { expense: Expense; month:
               <Label htmlFor={`spentOn-${expense.id}`} className={LABEL}>
                 Datum
               </Label>
-              <Input
+              {/* **Derselbe** Baustein wie in der Erfassungszeile — nicht ein zweiter daneben.
+                  Daran hängt EC-15: Ein über den Kalender gesetztes Datum muss denselben Weg
+                  nehmen wie ein getipptes, sonst bliebe bei einer Fremdwährungsausgabe der Kurs
+                  des alten Datums stehen (PROJ-3, AC-12). Der Fehler wäre unsichtbar. */}
+              <DateField
                 id={`spentOn-${expense.id}`}
-                name="spentOn"
                 form={formId}
-                type="date"
                 value={spentOn}
-                onChange={(event) => setSpentOn(event.target.value)}
-                aria-invalid={Boolean(fieldError?.spentOn)}
-                className="h-9"
+                onChange={setSpentOn}
+                invalid={Boolean(fieldError?.spentOn)}
               />
               {fieldError?.spentOn && (
                 <p className="text-[13px] text-destructive">{fieldError.spentOn}</p>

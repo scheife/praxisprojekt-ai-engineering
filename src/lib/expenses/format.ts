@@ -20,6 +20,11 @@ const DECIMAL = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 })
 
+const WEEKDAY = new Intl.DateTimeFormat('de-AT', {
+  weekday: 'short',
+  timeZone: 'UTC',
+})
+
 const MONTH_LABEL = new Intl.DateTimeFormat('de-AT', {
   timeZone: 'UTC',
   month: 'long',
@@ -52,6 +57,24 @@ export function formatAmountPlain(cents: number): string {
 export function formatDay(day: string): string {
   const [year, month, date] = day.split('-')
   return `${date}.${month}.${year}`
+}
+
+/**
+ * `2026-08-15` → `Sa` (AC-32).
+ *
+ * **Warum überhaupt:** Bei einer Fremdwährungsausgabe entscheidet der Wochentag über den Kurs — an
+ * einem Samstag gilt der Kurs des letzten Werktags (PROJ-3, AC-4). Wer beim Erfassen sieht, dass
+ * der 15. ein Samstag ist, versteht das Kursdatum in der Liste, ohne zu fragen.
+ *
+ * **Berechnet, nie gespeichert** (design.md, TD-39): Der Wochentag ist aus dem Datum eindeutig
+ * ableitbar. Ihn mitzuführen hieße, eine zweite Wahrheit über dasselbe Datum zu halten, die beim
+ * ersten Ändern auseinanderfällt.
+ *
+ * Gerechnet wird in UTC, wie bei `formatMonthLabel` — der Tag steht im Text schon fest, es soll
+ * keine Zeitzone mehr hineinregieren und ihn um einen verschieben.
+ */
+export function formatWeekday(day: string): string {
+  return WEEKDAY.format(new Date(`${day}T00:00:00Z`))
 }
 
 /** `2026-08` → `August 2026`. */

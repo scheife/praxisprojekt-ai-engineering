@@ -1128,3 +1128,48 @@ sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtba
 ### Settings the user makes
 
 **Keine.** Diese Ergänzung berührt weder Auth noch eine Anbieter-Einstellung.
+
+---
+
+## Notizen aus dem Bau der Ebenen 15–18 (`/build`, 02.09.2026)
+
+**Drei Abweichungen vom Entwurf — benannt, nicht stillschweigend übernommen.**
+
+**1. Es ist `react-day-picker` v10, nicht v9 — und `date-fns` kommt doch mit.** TD-36 stützte sich
+auf die Dokumentation von v9, wo die Lokalisierung ohne `date-fns` auskommt. Installiert wird
+**v10.0.1**, und dort steht `date-fns` in den *eigenen* Abhängigkeiten der Bibliothek. Es kommt
+also mit, egal was wir tun. **Die Anweisung aus T37 greift trotzdem nicht:** Die erzeugte
+`calendar.tsx` importiert `date-fns` **nicht**, unser Code auch nicht — geprüft mit `grep` über
+`src/`. Es bleibt eine Transitivabhängigkeit, kein zweiter Datumsapparat in unserem Code. Die
+Aussage in TD-36 „es braucht kein `date-fns` daneben" gilt für **unseren** Code weiter, für den
+Abhängigkeitsbaum nicht mehr. Alle im Entwurf geplanten Eigenschaften (`startMonth`, `endMonth`,
+`hidden`, `locale`, `weekStartsOn`) existieren in v10 unverändert; das `de`-Locale ebenso.
+
+**2. `app-header.tsx` wurde geändert, obwohl T41 nur `konto/page.tsx` nannte.** Die Umsetzung von
+AC-33 hat einen Fehler erzeugt, den erst der Browsertest zeigte: Die Wortmarke trug
+`aria-label="Zur Übersicht"` — ein Behelf aus der Zeit, als es keinen sichtbaren Rückweg gab. Seit
+`/konto` einen echten hat, **hießen zwei Links auf derselben Seite gleich** und waren für
+Screenreader nicht unterscheidbar. Das ist derselbe Fehler, den PROJ-2 als BUG-3 schon einmal
+hatte, nur mit Links statt Schaltflächen. Das Etikett ist entfernt; ohne es heißt der Link nach
+seinem eigenen Text „auslage." — die Wortmarke, was er ist. **Der Rahmen gehört PROJ-2**, die
+Änderung liegt also im richtigen Feature; sie stand nur nicht im Plan, weil den Fehler niemand
+vorhergesehen hat.
+
+**3. `@testing-library/user-event` ist nicht installiert.** Statt eine Testabhängigkeit
+nachzuziehen, arbeiten die Zusicherungen mit `fireEvent` aus `@testing-library/react`, das schon da
+ist. Für Klicken und Ändern reicht es; eine Bibliothek für zwei Handgriffe wäre Ballast.
+
+**Was der Bau sonst gezeigt hat.**
+
+**Die Tagesknöpfe des Kalenders tragen kein `type`** — weder `react-day-picker` noch der
+shadcn-Button setzen es, und ein Knopf ohne `type` **schickt das Formular ab**. Entschärft ist das
+dadurch, dass der Popover-Inhalt in einen Portal am `body` gerendert wird und damit gar nicht im
+Formular liegt (geprüft: `popover.tsx` benutzt `PopoverPrimitive.Portal`). Unser **eigener**
+Auslöser liegt sehr wohl im Formular und trägt `type="button"` ausdrücklich, mit einer Notiz im
+Quelltext. Das ist die Lehre aus BUG-5, angewandt bevor es weh tut.
+
+**Der Kalender rendert Tage nach heute gar nicht** — nachgemessen, nicht angenommen: Bei einem
+gestellten „heute" am 20.08.2026 endet das Augustblatt beim 20. Randtage des Vormonats (27.–31.
+Juli) bleiben sichtbar und wählbar, und das ist richtig: Sie liegen im zulässigen Bereich. Die erste
+Fassung der Zusicherung hat genau daran falsch angeschlagen, weil `/31\./` den 31. **Juli** traf.
+Die Selektoren nennen jetzt den vollen deutschen Namen („Montag, 31. August 2026").
