@@ -248,6 +248,40 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 - [x] T35 [P]  **Die Regel festhalten, nicht den Wortlaut.** Geprüft wird, dass der Text **keinen ursachenbehauptenden Begriff** enthält (erreichen · Datenbank · Server · Verbindung · Netzwerk) und auf dem Schreibweg **keine Aussage über den Ausgang** (gespeichert · angelegt · verloren). So bleibt Umformulieren jederzeit erlaubt und ein Rückfall in die alte Behauptung verboten — eine Zusicherung auf die exakte Zeichenkette würde bei jeder guten Änderung rot und wäre binnen eines Monats abgeschaltet  · files: `src/lib/supabase/deadline.test.ts`  · → EC-13
 - [x] T36 [P]  Die **Ausfall-Zusicherung** prüft ab jetzt zusätzlich den **Wortlaut**, nicht nur die Zeit: Bei angehaltenem Datenzugriff enthält die Antwort die neue Überschrift und keinen der verbotenen Begriffe aus T35. **Warum dort und nicht nur im Unit-Test:** T35 prüft die Konstante, T36 prüft, dass sie auf dem echten Weg auch ankommt — ohne das zweite fiele es niemandem auf, wenn eine Stelle den Import wieder gegen einen eigenen Satz tauscht  · files: `tests/outage.spec.ts`  · → EC-13
 
+### Ebene 15 — Der Kalender von außen (02.09.2026)
+
+> **Anlass:** Rückmeldung am laufenden Stand — AC-31 bis AC-34, EC-14 und EC-15. Begründung im
+> `design.md` unter *Nachtrag: der Entwurf zu AC-31 bis AC-34*.
+>
+> **Barriere:** Ebene 16 importiert daraus.
+
+- [ ] T37  Den shadcn-Kalender installieren (`npx shadcn@latest add calendar --yes`). **Nachsehen, was mitkommt:** react-day-picker v9 bringt seine Lokalisierung selbst mit (`react-day-picker/locale`) — importiert die erzeugte `calendar.tsx` trotzdem aus `date-fns`, wird das durch `Intl` ersetzt, statt eine zweite Datumsbibliothek für zwei Beschriftungen mitzuschleppen (TD-36)  · files: `src/components/ui/calendar.tsx`, `package.json`, `package-lock.json`  · → AC-31
+
+### Ebene 16 — Der eine Datums-Baustein (02.09.2026)
+
+> **Barriere und zugleich die Garantie hinter EC-15** (TD-38): Erfassungszeile und Änderungsdialog
+> setzen **denselben** Baustein ein. Zwei getrennt verdrahtete Kalender driften auseinander, und der
+> Fehler wäre eine Ausgabe mit dem Kurs des alten Datums — richtig aussehend, still falsch.
+
+- [ ] T38  `DateField`: das Feld bleibt `type="date"` und damit tippbar, **das native Kalendersymbol wird ausgeblendet** (TD-35), daneben der Wochentag und eine Schaltfläche, die den Kalender im Popover öffnet. Die Grenzen wirken **zweifach** (TD-37): blätterbar nur von Januar 2000 bis zum laufenden Monat, und Tage vor dem 01.01.2000 oder nach heute werden **gar nicht erst angezeigt**. Der Wochentag wird über `Intl` **berechnet** und nirgends gespeichert (TD-39) — die Formatierung gehört zu den übrigen Datumsausgaben in `format.ts`. **Der Kalender ist eine Bequemlichkeit, nie die Kontrolle:** AC-7 und AC-30 prüfen unverändert auf dem Server  · files: `src/components/expenses/date-field.tsx`, `src/lib/expenses/format.ts`  · → AC-31, AC-32, EC-14
+
+### Ebene 17 — Die vier Einsatzstellen (02.09.2026)
+
+> Alle vier `[P]`: paarweise disjunkte Dateien, keine kommt zweimal vor.
+
+- [ ] T39 [P]  Die Erfassungszeile setzt `DateField` ein, statt das Datumsfeld selbst zu bauen. Verhalten unverändert: Vorbelegung nach angezeigtem Monat (AC-2), das Datum bleibt nach dem Speichern stehen (AC-3)  · files: `src/components/expenses/expense-composer.tsx`  · → AC-31, AC-32
+- [ ] T40 [P]  Der Änderungsdialog ebenso. **Hier hängt PROJ-3 dran:** Ein über den Kalender gesetztes Datum muss denselben Weg nehmen wie ein getipptes, damit der Kursabruf aus PROJ-3 (dort AC-12) auslöst (EC-15)  · files: `src/components/expenses/edit-expense-dialog.tsx`  · → AC-31, AC-32, EC-15
+- [ ] T41 [P]  Über der Konto-Karte ein `‹ Zur Übersicht` als **Link auf `/`** — nicht als „zurück" der Browserhistorie, sonst fliegt aus der Anwendung, wer die Seite direkt aufgerufen hat (TD-40). Die Wortmarke im Kopf bleibt unangetastet  · files: `src/app/konto/page.tsx`  · → AC-33
+- [ ] T42 [P]  Die Notiz verliert ihre Meta-Einfärbung und steht wie Datum und Kategorie. Das Abschneiden langer Notizen bleibt; die Fremdwährungs-Beizeile aus PROJ-3 bleibt **gedämpft** — sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtbar  · files: `src/components/expenses/expense-list.tsx`  · → AC-34
+
+### Ebene 18 — Zusicherungen (02.09.2026)
+
+> Alle drei `[P]`: vier verschiedene Testdateien.
+
+- [ ] T43 [P]  Einheitentests für den Baustein: der Wochentag stimmt für bekannte Tage (der 15.08.2026 ist ein Samstag), die Grenzen aus EC-14 lassen unzulässige Tage nicht zu, und **beide Wege schreiben denselben Wert** — getippt wie geklickt  · files: `src/components/expenses/date-field.test.tsx`, `src/lib/expenses/format.test.ts`  · → AC-31, AC-32, EC-14
+- [ ] T44 [P]  Im Browser: Kalender öffnen und einen Tag wählen, der Wochentag steht am Feld, der Rückweg von `/konto` führt auf `/`, und die Notiz ist nicht mehr die blasseste Spalte der Zeile  · files: `tests/PROJ-2-expenses-monthly-overview.spec.ts`  · → AC-31, AC-33, AC-34
+- [ ] T45 [P]  **Die Zusicherung gegen den stillen Fehler (EC-15):** eine Fremdwährungsausgabe öffnen, das Datum **über den Kalender** ändern, speichern — und prüfen, dass das **Kursdatum in der Zeile mitgewandert** ist. Bliebe der alte Kurs stehen, sähe die Ausgabe völlig plausibel aus und wäre falsch. Nur ein Browser kann das zeigen  · files: `tests/PROJ-3-foreign-currency-exchange-rate.spec.ts`  · → EC-15
+
 ## Parallelization
 
 - **Ebenen sind Barrieren.** Eine Ebene beginnt erst, wenn die vorige vollständig integriert und gegen
@@ -258,9 +292,13 @@ und ist die Stelle dafür. Die Frist wird hier von Unit-Tests belegt, der **echt
 - **Innerhalb einer Ebene importiert keine Aufgabe eine andere.** Deshalb liegt `MonthPanel` in Ebene 5
   und nicht bei den Bausteinen — es steckt Composer, Übersicht und Liste zusammen und wäre in Ebene 4
   eine Parallelaufgabe, die auf drei Geschwister wartet.
-- **Grobkörnig, nicht kleinteilig.** 36 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
+- **Grobkörnig, nicht kleinteilig.** 45 Aufgaben, jede ein sinnvoller Prüfpunkt — 16 aus dem
   ursprünglichen Bau, 13 aus der Runde vom 01.09.2026 (Ebenen 6 bis 11), 7 aus der Runde vom
-  02.09.2026 (Ebenen 12 bis 14).
+  02.09.2026 (Ebenen 12 bis 14), 9 aus der Runde vom 02.09.2026 (Ebenen 15 bis 18).
+- **Die Ebenen 15 bis 18:** der Kalender von außen (L15) → der eine Datums-Baustein (L16) → die vier
+  Einsatzstellen (L17) → die Zusicherungen (L18). L15 und L16 stehen je allein, weil alles darunter
+  von ihnen importiert. Disjunktheit geprüft: In L17 schreiben T39 bis T42 in vier verschiedene
+  Dateien, in L18 T43 bis T45 in vier weitere — keine Überschneidung.
 - **Die Ebenen 6 bis 9 folgen derselben Ordnung:** gemeinsames Fundament (L6) → die Stellen, an denen
   gewartet wird (L7) → ihre Aufrufer (L8) → Tests (L9). Disjunktheit geprüft: L6 zwei, L7 drei, L8 drei,
   L9 zwei Sätze, paarweise verschiedene Pfade.
@@ -294,3 +332,9 @@ Alle **30 Acceptance Criteria** und alle **13 Edge Cases** sind mindestens einer
 > **EC-12 kommt in T31 ein zweites Mal vor.** Die Zusicherung selbst ändert sich nicht — nur der
 > Zustand, den sie beschreibt, heißt jetzt anders und sagt etwas anderes. Die alte Zuordnung
 > (T18, T20, T21, T22, T25, T26) bleibt gültig.
+| **AC-31** Kalender neben dem tippbaren Feld | T37, T38, T39, T40, T43, T44 |
+| **AC-32** Wochentag am Feld | T38, T39, T40, T43, T44 |
+| **AC-33** Rückweg auf `/konto` | T41, T44 |
+| **AC-34** Notiz so lesbar wie Datum und Kategorie | T42, T44 |
+| **EC-14** Unzulässige Tage nicht wählbar | T38, T43 |
+| **EC-15** Kalender verhält sich wie Tippen | T38 (ein Baustein), T40, T45 |
