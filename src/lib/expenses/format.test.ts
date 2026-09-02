@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatAmount, formatAmountPlain, formatDay, formatForeignAmount, formatMonthLabel, formatRate, formatRatePlain, formatTimestamp, formatWeekday } from './format'
+import { formatAmount, formatAmountPlain, formatDay, formatForeignAmount, formatMonthLabel, formatPercent, formatRate, formatRatePlain, formatTimestamp, formatWeekday, formatWeekdayLong } from './format'
 
 describe('Beträge (AC-6, docs/design-system.md §5)', () => {
   it('schreibt deutschsprachig mit zwei Nachkommastellen und dem Zeichen dahinter', () => {
@@ -86,5 +86,41 @@ describe('Der Wochentag (AC-32)', () => {
     // Über eine Ortszeit gerechnet läge der 01.01.2000 östlich von Greenwich schon im Vorjahr.
     expect(formatWeekday('2000-01-01')).toBe('Sa')
     expect(formatWeekday('1999-12-31')).toBe('Fr')
+  })
+})
+
+describe('Prozentanteile (AC-14, BUG-2)', () => {
+  it('schreibt einen gewöhnlichen Anteil unverändert', () => {
+    expect(formatPercent(17, 121461)).toBe('17 %')
+    expect(formatPercent(100, 500000)).toBe('100 %')
+  })
+
+  it('schreibt „<1 %" statt „0 %", wenn ein echter Betrag dahintersteht', () => {
+    // Der Fall aus dem Befund: 5.000,00 € Hardware neben 9,00 € Gebühren. Der Anteil rundet auf
+    // 0 — „0 %" neben „9,00 €" liest sich wie „hier ist nichts".
+    expect(formatPercent(0, 900)).toBe('<1 %')
+    expect(formatPercent(0, 1)).toBe('<1 %')
+  })
+
+  it('bleibt bei „0 %", wenn wirklich nichts dahintersteht', () => {
+    // Ohne Betrag ist 0 die Wahrheit und nicht bloß eine Rundung.
+    expect(formatPercent(0, 0)).toBe('0 %')
+  })
+})
+
+describe('Der ausgeschriebene Wochentag (AC-32, BUG-8)', () => {
+  it('nennt den Tag, wie ein Screenreader ihn vorlesen soll', () => {
+    expect(formatWeekdayLong('2026-08-15')).toBe('Samstag')
+    expect(formatWeekdayLong('2026-08-17')).toBe('Montag')
+  })
+
+  it('stimmt mit der sichtbaren Kurzform überein — es ist derselbe Tag', () => {
+    for (const tag of ['2026-08-14', '2026-08-15', '2026-08-16', '2000-01-01']) {
+      expect(formatWeekdayLong(tag).startsWith(formatWeekday(tag))).toBe(true)
+    }
+  })
+
+  it('lässt auch hier keine Zeitzone den Tag verschieben', () => {
+    expect(formatWeekdayLong('2000-01-01')).toBe('Samstag')
   })
 })

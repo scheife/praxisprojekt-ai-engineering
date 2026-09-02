@@ -62,9 +62,26 @@ export function MonthPanel({
         )}
       </section>
 
-      <ExpenseComposer month={month} defaultDate={defaultDate} />
+      {/*
+        Die beiden übrigen Abschnitte tragen sichtbar keine Überschrift — die Erfassungszeile
+        erklärt sich durch ihre Feldbeschriftungen, die Liste durch ihre Tabellenköpfe. Für die
+        Gliederung der Seite fehlten sie trotzdem (BUG-9), deshalb stehen sie unsichtbar da.
+        `sr-only` statt weglassen: Wer eine Seite über die Überschriftenliste erschließt, springt
+        sonst von der Monatssumme direkt ans Seitenende.
+      */}
+      <section aria-labelledby="abschnitt-erfassen">
+        <h2 id="abschnitt-erfassen" className="sr-only">
+          Ausgabe erfassen
+        </h2>
+        <ExpenseComposer month={month} defaultDate={defaultDate} />
+      </section>
 
-      <ExpenseList expenses={visible} month={month} />
+      <section aria-labelledby="abschnitt-liste">
+        <h2 id="abschnitt-liste" className="sr-only">
+          Ausgaben dieses Monats
+        </h2>
+        <ExpenseList expenses={visible} month={month} />
+      </section>
     </div>
   )
 }

@@ -1554,3 +1554,163 @@ Untergrenze und die Blättergrenzen aus TD-37 hätten wegfallen können, ohne da
 rot geworden wäre. Beide sind jetzt gedeckt, mit Rot-Nachweis — und der Nachweis hat nebenbei
 gezeigt, dass die Untergrenze von **zwei** Mechanismen zugleich getragen wird: Sie fällt erst,
 wenn man beide entfernt. Genau das ist die Tiefenstaffelung, die TD-37 beschreibt.
+
+---
+
+## Fünfter Durchlauf — 02.09.2026 (Behebung der offenen Befunde, plus ein neuer aus einem Screenshot)
+
+**Getestet:** 2026-09-02 · **App-URL:** `http://localhost:3500` (Produktions-Build, `next start`) ·
+**Testsuite:** `npm test` → **309 Tests in 23 Dateien, alle grün** (vorher 297) · **E2E:**
+**32 von 32 grün** in Chromium und Mobile Safari · **Ausfall-Zusicherung:** grün (2373 / 2397 /
+2396 ms gegen 5000 ms) · **Lint**, **TypeScript** und **Produktions-Build** ohne Befund
+
+**Anlass:** Der vierte Durchlauf hat vier Low-Befunde hinterlassen. Beim Nachsehen am laufenden
+Stand ist ein **fünfter** aufgefallen, den dieser Bericht nicht hatte — auf einem Screenshot, von
+einem Menschen. Er ist der schwerwiegendste von allen.
+
+### BUG-11: Der Kalender war optisch zerlegt — **BEHOBEN**
+
+- **Severity:** **High** · **Betrifft:** AC-31 · **gefunden:** 02.09.2026 auf einem Screenshot,
+  **nicht** von einer der Suiten
+- **Was war:** Das Monatsblatt fiel auf **109 Pixel** zusammen. Die sieben Wochentage klebten als
+  `MoDiMiDoFrSaSo` aneinander, die Monatsüberschrift schob sich über das Eingabefeld, darunter
+  stand ein hoher leerer Kasten. Der Kalender war benutzbar — aber nicht lesbar
+- **Ursache:** Die von `npx shadcn add calendar` erzeugte Vorlage referenziert CSS-Variablen in der
+  Tailwind-**v3**-Kurzform. Dieses Projekt fährt Tailwind **4.3.3**, wo diese Form abgeschafft ist:
+  Erzeugt wurde `height:--cell-size` statt `height:var(--cell-size)` — ein ungültiger Wert, den der
+  Browser wortlos verwirft. Ohne Höhe, Breite und `min-width` fällt das Raster auf Inhaltsbreite
+  · *Nachweis: `.h-\[--cell-size\]{height:--cell-size}` im ausgelieferten CSS des Builds vom
+  01.09.; Beleg für die richtige Schreibweise im Tailwind-Upgrade-Guide, „Variables in arbitrary
+  values"*
+- **Der Fix:** alle Referenzen auf runde Klammern umgestellt — in `calendar.tsx` (10 Stellen) und in
+  den vier weiteren Bausteinen, die dieselbe tote Schreibweise trugen: `popover.tsx`, `select.tsx`,
+  `dropdown-menu.tsx`, `tooltip.tsx`, dazu das ungenutzte `sidebar.tsx` (13 Stellen). Zwei davon
+  waren keine Kosmetik: `select.tsx` verlor `max-h-…available-height`, also die Höhenbegrenzung der
+  Auswahlliste — bei 30 Währungen die Grenze zwischen Liste und über den Bildschirm laufender Liste
+- **Nachweis der Behebung:** ungültige `--cell-size`-Deklarationen im gebauten CSS **0** (vorher 6);
+  im Browser gemessen: Raster **224 × 259 px**, Kalender **248 × 331 px**, jede der sieben
+  Wochentagsspalten **32 px**, Tagesknopf 32 × 32 px. Screenshot des offenen Kalenders geprüft:
+  Monatsblatt mit `Mo Di Mi Do Fr Sa So` als Spalten, Blättern, ausgewählter Tag hervorgehoben
+- **Warum ihn 297 Tests und 32 Journeys nicht gefunden haben — der eigentliche Befund.** Sie prüfen
+  **Struktur**: Gibt es sieben `<th>`? Ist der Tag anklickbar? Schreibt der Klick den richtigen
+  Wert? Alles davon war die ganze Zeit richtig. Eine tote CSS-Regel ändert nichts davon — sie
+  erzeugt keinen Fehler, keine Warnung, keinen roten Build. Der vierte Durchlauf hat die Breite
+  sogar **gemessen** (`Kalender: x=605 w=109`) und daneben „bleibt im Fenster: true" vermerkt: Die
+  Zahl stand da, die Frage, ob 109 Pixel für ein Monatsblatt reichen, wurde nicht gestellt
+
+### Zwei Zusicherungen dagegen, auf verschiedenen Ebenen
+
+Eine allein hätte nicht gereicht — die eine kennt die Ursache, die andere die Wirkung.
+
+- **`src/components/ui/tailwind-v4-syntax.test.ts`** (neu, 2 Zusicherungen) — durchsucht **alle**
+  UI-Bausteine nach der v3-Kurzform und nennt jede Fundstelle mit Datei und Zeile. Sie setzt am
+  Quelltext an, weil diese Dateien von `shadcn add` kommen: **jede Neuerzeugung bringt die alte
+  Form zurück**, auch in Bausteinen, die es heute noch nicht gibt. Die zweite Zusicherung prüft,
+  dass überhaupt Dateien durchsucht werden — sonst wäre die erste grün, sobald jemand den Ordner
+  umbenennt
+- **Journey 6** (ergänzt) — **misst** das gerenderte Raster: breiter als 200 px, sieben Spalten,
+  jede breiter als 20 px. Nur ein Browser sieht, ob eine Regel am Ende wirklich gilt
+
+**Rot-Nachweis beider:** Die v3-Schreibweise in `calendar.tsx` zurückgesetzt → Journey 6 fällt mit
+`Expected: > 200 / Received: 112.109375`. Der Quelltext-Test war beim Schreiben **von selbst rot**
+und nannte die 13 verbliebenen Fundstellen — ein Rot-Nachweis an echten Defekten statt an einem
+gestellten Bruch.
+
+### BUG-8: Der Wochentag fehlte der Hilfstechnik — **BEHOBEN**
+
+- **Severity:** Low · **Betrifft:** AC-32
+- **Der Fix:** Die sichtbare Kurzform „Sa" bleibt `aria-hidden` — richtig, sonst spricht ein
+  Screenreader ein zusammenhangloses Buchstabenpaar hinter dem Datum. Dazu kommt der
+  **ausgeschriebene** Wochentag in die Beschreibung des Feldes (`formatWeekdayLong`, `sr-only`,
+  über `aria-describedby`). Die Hilfstechnik liest jetzt „Datum, 15.08.2026, Samstag"
+- **Nachweis:** an der laufenden App die Feldbeschreibung ausgelesen → `"Samstag"`; die sichtbare
+  Kurzform trägt weiterhin `aria-hidden="true"`
+- **Was dabei fast schiefgegangen wäre:** Der Baustein bekommt von außen bereits eine Beschreibung
+  (die Fehlermeldung am Feld). Die neue darf sie nicht verdrängen — eine eigene Zusicherung prüft,
+  dass beide verknüpft bleiben und dass nie auf ein Element verwiesen wird, das es nicht gibt
+- **4 neue Zusicherungen**, rot nachgewiesen mit drei Brüchen: Beschreibung entfernt (2 fallen) ·
+  `aria-hidden` entfernt (1 fällt) · die Beschreibung des Aufrufers verworfen (1 fällt)
+
+### BUG-9: Keine einzige Überschrift auf den Seiten — **BEHOBEN**
+
+- **Severity:** Low · **Betrifft:** den App-Rahmen, der laut `spec.md` PROJ-2 gehört
+- **Der Fix:** `CardTitle` rendert eine **Überschrift** statt eines `div` und nimmt über `as` die
+  Ebene entgegen, damit jede Seite **genau eine** `h1` bekommt. Auf der Monatsübersicht ist die
+  `h1` der **angezeigte Monat** — es gibt keine treffendere, und sie steht ohnehin sichtbar da.
+  Erfassungszeile und Liste tragen sichtbar keinen Titel und bekommen `sr-only`-Überschriften,
+  damit die Gliederung nicht von der Monatssumme direkt ans Seitenende springt
+- **Nachweis an der laufenden App:**
+  - `/` → `H1 Juli 2026` · `H2 Summe des Monats` · `H2 Ausgabe erfassen` · `H2 Ausgaben dieses Monats`
+  - `/konto` → `H1 Konto` · `H2 Deine Daten mitnehmen` · `H2 Konto löschen`
+  - `/login` → `H1 Anmelden`
+- **Das Aussehen ändert sich nicht** — Tailwinds Preflight nimmt Überschriften ihre
+  Standardgrößen und -abstände, die Gestaltung kommt unverändert aus den Klassen · *Nachweis:
+  Screenshot der Monatsübersicht vor und nach der Änderung verglichen*
+- **Zusicherung in Journey 6**, auf beiden Seiten: genau eine `h1`, mehr als zwei Überschriften.
+  **Rot-Nachweis:** `CardTitle` wieder auf `div` gesetzt → `toHaveLength(1)` fällt auf `/konto`
+
+### BUG-2: Kategorien unter 0,5 % erschienen als „0 %" — **BEHOBEN**
+
+- **Severity:** Low · **Betrifft:** AC-14 · offen seit dem ersten Durchlauf (31.08.2026)
+- **Der Fix:** Zwei getrennte Dinge, absichtlich getrennt gehalten. Die **Anzeige** schreibt
+  `<1 %` statt `0 %`, sobald ein echter Betrag dahintersteht (`formatPercent` in `format.ts`, wo
+  die übrigen Darstellungen leben). Der **Balken** bekommt eine Mindestbreite von 3 px, sobald ein
+  Betrag da ist — gestreckt wird die Darstellung, nicht die Zahl
+- **Die gerundete Zahl selbst bleibt unangetastet**, und das ist der Punkt: EC-7 erlaubt der Summe
+  der Prozentwerte ausdrücklich 99 oder 101. Würde hier aufgerundet, verschöbe sich diese Summe —
+  ein behobener Low-Befund, der einen Edge Case bricht, wäre ein schlechter Tausch
+- **Nachweis am Fall aus dem Befund** (5.000,00 € Hardware · 9,00 € Gebühren · 3,50 € Reise ·
+  2,00 € Sonstiges): die drei kleinen Kategorien stehen jetzt als `<1 %` mit einem **3 px** breiten
+  Balken statt `0 %` mit `width:0%`; Hardware bleibt unverändert bei `100 %` und 726 px
+- **3 neue Zusicherungen**, rot nachgewiesen: ohne die Sonderregel fällt der `<1 %`-Test
+
+### BUG-10: `date-fns` stand als direkte Abhängigkeit — **BEHOBEN**
+
+- **Severity:** Low (Dokumentation) · **Betrifft:** `design.md`, Bau-Notiz 1
+- **Der Fix:** Statt den Satz an die Wirklichkeit anzupassen, wurde die Wirklichkeit an den Satz
+  angepasst — der Eintrag ist aus den `dependencies` entfernt. Unser Code importiert `date-fns`
+  nirgends (0 Treffer in `src/` und `tests/`), und über `react-day-picker` kommt sie ohnehin mit
+- **Nachweis:** `npm ls date-fns` zeigt sie jetzt **nur** noch unter `react-day-picker@10.0.1`;
+  `npm install`, TypeScript, Build und alle 309 Tests danach grün
+- **Warum nicht einfach den Satz berichtigen:** Eine direkte Abhängigkeit bleibt stehen, wenn
+  `react-day-picker` einmal geht, und lädt die nächste Person ein, sie zu benutzen. Genau das
+  wollte TD-36 verhindern. `design.md` trägt jetzt beides: die Berichtigung und die Geschichte
+
+### Regression nach allen fünf Behebungen
+
+- [x] **Alle Suiten grün** — 309 Unit-/Integrationstests (vorher 297; 12 neue), 32 von 32 E2E in
+  Chromium und Mobile Safari, Ausfall-Zusicherung 2373 / 2397 / 2396 ms gegen 5000 ms
+- [x] **Lint, TypeScript, Produktions-Build** ohne Befund
+- [x] **AC-31, AC-32, AC-33, AC-34, EC-14, EC-15** unverändert erfüllt — Journey 6 grün, dazu die
+  Messungen oben
+- [x] **AC-13, AC-14, EC-7** nach der Änderung an der Prozentanzeige nachgerechnet: der große
+  Anteil steht unverändert auf 100 %, die Euro-Summen sind unberührt
+- [x] **PROJ-1 und PROJ-3 unberührt** — alle vier bzw. sechs Journeys grün, auch die Anmeldung
+  (`/login` hat jetzt eine `h1`, das Formular ist unverändert)
+- [x] **Umgebung sauber hinterlassen** — Testkonten gelöscht, 0 verwaiste Ausgaben, alle Container
+  `Up`, der eigene Produktions-Server beendet, alle Hilfsskripte entfernt
+
+### Bug-Stand nach diesem Durchlauf
+
+| Befund | Severity | Stand |
+|---|---|---|
+| BUG-11 Kalender optisch zerlegt | **High** | **behoben und verifiziert** |
+| BUG-8 Wochentag ohne Hilfstechnik | Low | **behoben und verifiziert** |
+| BUG-9 keine Überschriften | Low | **behoben und verifiziert** |
+| BUG-2 „0 %" bei kleinen Anteilen | Low | **behoben und verifiziert** (offen seit 31.08.) |
+| BUG-10 `date-fns` direkt statt transitiv | Low | **behoben und verifiziert** |
+
+**0 Critical · 0 High · 0 Medium · 0 Low — kein offener Befund.**
+
+### Was dieser Durchlauf über das Prüfen gezeigt hat
+
+Der schwerste Fehler dieses Features ist keiner Suite aufgefallen und auch keinem der vier
+QA-Durchläufe — er ist auf einem Screenshot aufgefallen. Und er lag nicht daran, dass zu wenig
+geprüft wurde: Der vierte Durchlauf hat die Breite des Kalenders **gemessen** und die Zahl
+notiert. Notiert wurde sie als Beleg dafür, dass das Popover ins Fenster passt. Dass 109 Pixel für
+ein Monatsblatt viel zu wenig sind, hätte in derselben Zeile gestanden, wenn jemand die Zahl gegen
+eine **Erwartung** gehalten hätte statt gegen eine Fensterbreite.
+
+Daraus folgt nichts über „mehr testen". Es folgt: **Eine gemessene Zahl ohne Erwartung ist keine
+Prüfung.** Journey 6 stellt diese Erwartung jetzt (`> 200 px`), und der Quelltext-Test fängt die
+Ursache, bevor sie überhaupt gerendert wird.

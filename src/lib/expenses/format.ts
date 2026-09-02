@@ -25,6 +25,11 @@ const WEEKDAY = new Intl.DateTimeFormat('de-AT', {
   timeZone: 'UTC',
 })
 
+const WEEKDAY_LONG = new Intl.DateTimeFormat('de-AT', {
+  weekday: 'long',
+  timeZone: 'UTC',
+})
+
 const MONTH_LABEL = new Intl.DateTimeFormat('de-AT', {
   timeZone: 'UTC',
   month: 'long',
@@ -75,6 +80,34 @@ export function formatDay(day: string): string {
  */
 export function formatWeekday(day: string): string {
   return WEEKDAY.format(new Date(`${day}T00:00:00Z`))
+}
+
+/**
+ * `2026-08-15` → `Samstag` — dieselbe Auskunft, ausgeschrieben (AC-32).
+ *
+ * **Wofür die zweite Form:** Am Feld steht die Kurzform, weil dort Platz für zwei Zeichen ist.
+ * Vorgelesen ist „Sa" aber nicht dasselbe wie „Samstag" — Screenreader sprechen es je nach
+ * Stimme als Buchstabenpaar. Die Kurzform bleibt deshalb sichtbar und aus dem Vorlesefluss
+ * genommen, und die ausgeschriebene wandert in die Beschreibung des Feldes (BUG-8).
+ */
+export function formatWeekdayLong(day: string): string {
+  return WEEKDAY_LONG.format(new Date(`${day}T00:00:00Z`))
+}
+
+/**
+ * `17` → `17 %` · ein echter Betrag, der auf 0 gerundet wird → `<1 %` (BUG-2).
+ *
+ * **Warum nicht einfach die gerundete Zahl:** Bei 5.000 € Hardware neben 9,00 € Gebühren rundet
+ * der Anteil der Gebühren auf 0 — und „0 %" neben „9,00 €" liest sich wie ein Fehler oder wie
+ * „hier ist nichts", obwohl dort neun Euro stehen. `<1 %` sagt dasselbe, ohne zu lügen.
+ *
+ * **Die gerundete Zahl selbst bleibt unangetastet.** EC-7 erlaubt der Summe der Prozentwerte
+ * ausdrücklich 99 oder 101 — würde hier aufgerundet, verschöbe sich diese Summe. Geändert wird
+ * nur, wie eine 0 **geschrieben** wird, nicht, was gerechnet wurde.
+ */
+export function formatPercent(percent: number, amountCents: number): string {
+  if (percent === 0 && amountCents > 0) return '<1 %'
+  return `${percent} %`
 }
 
 /** `2026-08` → `August 2026`. */

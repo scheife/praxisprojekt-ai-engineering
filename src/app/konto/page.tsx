@@ -65,7 +65,7 @@ export default async function KontoPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-grotesk text-xl">Konto</CardTitle>
+            <CardTitle as="h1" className="font-grotesk text-xl">Konto</CardTitle>
           </CardHeader>
           {/* Bewusst **ohne** Abmelde-Knopf (AC-19): Der steht seit PROJ-2 im gemeinsamen
               Header, und der ist auf beiden angemeldeten Seiten da. Zwei gleich benannte

@@ -1135,6 +1135,14 @@ sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtba
 
 **Drei Abweichungen vom Entwurf — benannt, nicht stillschweigend übernommen.**
 
+> **Nachtrag `/qa`, 02.09.2026 (BUG-10).** Die Notiz unten stimmte in der Sache, aber nicht im
+> Wortlaut: `npx shadcn add calendar` hatte `date-fns` **direkt** in die `dependencies` von
+> `package.json` eingetragen, nicht bloß als Transitivabhängigkeit hinterlassen. Der Unterschied
+> ist keine Wortklauberei — eine direkte Abhängigkeit bleibt stehen, wenn `react-day-picker`
+> einmal geht, und lädt die nächste Person ein, sie zu benutzen. Genau das wollte TD-36
+> verhindern. Der Eintrag ist entfernt; `npm ls date-fns` zeigt sie seither nur noch **unter**
+> `react-day-picker`. Die Aussage unten gilt damit so, wie sie dasteht.
+
 **1. Es ist `react-day-picker` v10, nicht v9 — und `date-fns` kommt doch mit.** TD-36 stützte sich
 auf die Dokumentation von v9, wo die Lokalisierung ohne `date-fns` auskommt. Installiert wird
 **v10.0.1**, und dort steht `date-fns` in den *eigenen* Abhängigkeiten der Bibliothek. Es kommt
@@ -1158,6 +1166,18 @@ vorhergesehen hat.
 **3. `@testing-library/user-event` ist nicht installiert.** Statt eine Testabhängigkeit
 nachzuziehen, arbeiten die Zusicherungen mit `fireEvent` aus `@testing-library/react`, das schon da
 ist. Für Klicken und Ändern reicht es; eine Bibliothek für zwei Handgriffe wäre Ballast.
+
+**4. Nachgetragen von `/qa` am 02.09.2026 — die Vorlage schreibt Tailwind v3.** Der Bau hat die
+erzeugte `calendar.tsx` unverändert übernommen. Sie referenziert CSS-Variablen in der
+**v3**-Kurzform (Variablenname in eckigen Klammern); dieses Projekt fährt Tailwind **v4.3**, wo
+diese Form abgeschafft ist. v4 erzeugt daraus eine Regel mit einem ungültigen Wert, die der
+Browser wortlos verwirft — kein Fehler, keine Warnung, nur fehlende Gestaltung. Ohne Höhe, Breite
+und `min-width` fiel das Monatsraster von ~250 auf **109 Pixel** zusammen, und die Wochentage
+klebten als „MoDiMiDoFrSaSo" aneinander (BUG-11). Alle Referenzen stehen jetzt in runden Klammern,
+in `calendar.tsx` **und** in den vier weiteren Bausteinen, die dieselbe Kurzform trugen
+(`popover`, `select`, `dropdown-menu`, `tooltip`) sowie im ungenutzten `sidebar`. Festgehalten
+wird das von `src/components/ui/tailwind-v4-syntax.test.ts` — die Prüfung setzt am Quelltext an,
+weil jede Neuerzeugung über `shadcn add` die alte Form zurückbringt.
 
 **Was der Bau sonst gezeigt hat.**
 

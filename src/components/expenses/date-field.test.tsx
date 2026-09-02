@@ -37,6 +37,58 @@ describe('Der Wochentag am Feld (AC-32)', () => {
     expect(screen.queryByText('Sa')).not.toBeInTheDocument()
   })
 
+  /**
+   * Ergänzt von `/qa` am 02.09.2026 (BUG-8). Die sichtbare Kurzform ist `aria-hidden` — richtig,
+   * sonst spricht die Hilfstechnik ein zusammenhangloses „Sa" hinter dem Datum. Falsch war, dass
+   * es dabei blieb: Der Wochentag fehlte dem Vorlesefluss ganz, obwohl AC-32 ihn „ohne den
+   * Kalender zu öffnen" verlangt.
+   */
+  it('nennt den Wochentag auch der Hilfstechnik — ausgeschrieben, über die Feldbeschreibung', () => {
+    const { input } = feld('2026-08-15')
+
+    const ids = input.getAttribute('aria-describedby')?.split(' ') ?? []
+    const beschreibung = ids
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+
+    expect(beschreibung).toContain('Samstag')
+  })
+
+  it('nimmt die sichtbare Kurzform aus dem Vorlesefluss — sonst stünde sie doppelt', () => {
+    feld('2026-08-15')
+    expect(screen.getByText('Sa')).toHaveAttribute('aria-hidden')
+  })
+
+  it('beschreibt gar nichts, solange kein Datum dasteht', () => {
+    const onChange = vi.fn()
+    render(<DateField id="spentOn" value="" onChange={onChange} />)
+    const input = document.getElementById('spentOn')!
+    // Kein Datum, kein Wochentag — und keine Verweisung auf ein Element, das es nicht gibt.
+    const ids = input.getAttribute('aria-describedby')?.split(' ') ?? []
+    for (const id of ids) expect(document.getElementById(id)).not.toBeNull()
+  })
+
+  it('verliert die Beschreibung des Aufrufers nicht — die Fehlermeldung bleibt verknüpft', () => {
+    const onChange = vi.fn()
+    render(
+      <>
+        <DateField id="spentOn" value="2026-08-15" onChange={onChange} describedBy="fehler-1" />
+        <p id="fehler-1">Das Datum darf nicht in der Zukunft liegen.</p>
+      </>,
+    )
+    const input = document.getElementById('spentOn')!
+    const ids = input.getAttribute('aria-describedby')?.split(' ') ?? []
+    expect(ids).toContain('fehler-1')
+
+    const beschreibung = ids
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    expect(beschreibung).toContain('Zukunft')
+    expect(beschreibung).toContain('Samstag')
+  })
+
   it('zeigt nichts an, solange kein Datum dasteht', () => {
     const onChange = vi.fn()
     render(<DateField id="spentOn" value="" onChange={onChange} />)

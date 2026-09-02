@@ -7,9 +7,10 @@ import { formatAmount } from '@/lib/expenses/format'
 export function MonthTotal({ totalCents }: { totalCents: number }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      {/* Überschrift, nicht nur Beschriftung (BUG-9): Sie benennt den Abschnitt darunter. */}
+      <h2 className="font-grotesk text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
         Summe des Monats
-      </span>
+      </h2>
       <span className="font-grotesk text-[32px] font-bold leading-tight tabular-nums tracking-[-0.02em]">
         {formatAmount(totalCents)}
       </span>

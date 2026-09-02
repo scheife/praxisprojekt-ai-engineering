@@ -31,7 +31,7 @@ export default async function LoginPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-grotesk text-xl">Anmelden</CardTitle>
+            <CardTitle as="h1" className="font-grotesk text-xl">Anmelden</CardTitle>
           </CardHeader>
           <CardContent>
             <LoginForm />

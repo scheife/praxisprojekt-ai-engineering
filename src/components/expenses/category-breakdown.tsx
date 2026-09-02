@@ -1,6 +1,6 @@
 'use client'
 
-import { formatAmount } from '@/lib/expenses/format'
+import { formatAmount, formatPercent } from '@/lib/expenses/format'
 import type { CategorySum } from '@/lib/expenses/summary'
 import { cn } from '@/lib/utils'
 
@@ -50,9 +50,16 @@ export function CategoryBreakdown({
                 aria-hidden="true"
                 className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
               >
+                {/*
+                  `min-w-[3px]`, sobald überhaupt ein Betrag da ist (BUG-2): Unter 0,5 % ergibt
+                  die Breite rechnerisch 0 % — der Balken verschwindet, und die Zeile sieht aus
+                  wie eine leere Kategorie. Die Mindestbreite macht ihn sichtbar, **ohne** den
+                  Prozentwert zu verfälschen: Gestreckt wird die Darstellung, nicht die Zahl.
+                */}
                 <span
                   className={cn(
                     'block h-full rounded-full',
+                    entry.amountCents > 0 && 'min-w-[3px]',
                     RANK_COLORS[rank] ?? 'bg-muted-foreground',
                   )}
                   style={{ width: `${entry.percent}%` }}
@@ -60,7 +67,7 @@ export function CategoryBreakdown({
               </span>
 
               <span className="w-14 shrink-0 text-right text-[13px] tabular-nums text-muted-foreground">
-                {entry.percent} %
+                {formatPercent(entry.percent, entry.amountCents)}
               </span>
               <span className="w-28 shrink-0 text-right tabular-nums">
                 {formatAmount(entry.amountCents)}

@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { formatWeekday } from '@/lib/expenses/format'
+import { formatWeekday, formatWeekdayLong } from '@/lib/expenses/format'
 import { EARLIEST_DAY, todayInVienna } from '@/lib/expenses/month'
 
 /**
@@ -51,6 +51,19 @@ export function DateField({
   const [open, setOpen] = useState(false)
   const heute = todayInVienna()
 
+  /**
+   * Der Wochentag muss auch **vorgelesen** werden (AC-32, BUG-8).
+   *
+   * Sichtbar steht die Kurzform „Sa" — sie ist `aria-hidden`, weil ein Screenreader sie sonst
+   * als zusammenhangloses Buchstabenpaar hinter dem Datum ausspricht. Ausgeschrieben gehört sie
+   * dagegen in die **Beschreibung des Feldes**: Dann liest die Hilfstechnik „Datum, 15.08.2026,
+   * Samstag" statt nur des Datums. AC-32 verlangt den Wochentag „ohne den Kalender zu öffnen" —
+   * und der Kalender ist genau der Umweg, der hier sonst übrig bliebe.
+   */
+  const weekdayId = `${id}-weekday`
+  const describedByAll =
+    [describedBy, value ? weekdayId : undefined].filter(Boolean).join(' ') || undefined
+
   return (
     <div className="relative">
       {/*
@@ -67,14 +80,26 @@ export function DateField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={invalid}
-        aria-describedby={describedBy}
+        aria-describedby={describedByAll}
         min={EARLIEST_DAY}
         max={heute}
         className="h-9 pr-20 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden"
       />
 
+      {/*
+        Dieselbe Auskunft für Hilfstechnik, ausgeschrieben und außerhalb des Bildes. `sr-only`
+        statt `hidden`: Ein ausgeblendetes Element wird auch nicht vorgelesen, und dann wäre
+        nichts gewonnen.
+      */}
+      {value && (
+        <span id={weekdayId} className="sr-only">
+          {formatWeekdayLong(value)}
+        </span>
+      )}
+
       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 pr-1">
-        {/* Der Wochentag, berechnet und nie gespeichert (AC-32, TD-39). */}
+        {/* Der Wochentag, berechnet und nie gespeichert (AC-32, TD-39). Sichtbar in der
+            Kurzform, vorgelesen wird die ausgeschriebene oben. */}
         <span
           aria-hidden
           className="text-[13px] tabular-nums text-muted-foreground"

@@ -52,12 +52,18 @@ export function MonthSwitcher({
         </span>
       )}
 
-      <span
+      {/*
+        Der angezeigte Monat **ist** die Überschrift dieser Seite (BUG-9) — es gibt keine
+        zweite, treffendere. Sie steht hier statt in einem unsichtbaren Zusatz, weil sie
+        ohnehin sichtbar ist; eine `h1` daneben wäre eine zweite Wahrheit über dieselbe Sache.
+        `aria-live` bleibt: Beim Monatswechsel ändert sich der Text ohne Seitenwechsel.
+      */}
+      <h1
         aria-live="polite"
         className="min-w-[9.5rem] text-center font-grotesk text-[15px] font-medium tracking-[-0.01em]"
       >
         {formatMonthLabel(month)}
-      </span>
+      </h1>
 
       {canGoForward ? (
         <Link

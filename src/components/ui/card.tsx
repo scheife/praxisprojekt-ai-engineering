@@ -29,11 +29,24 @@ const CardHeader = React.forwardRef<
 ))
 CardHeader.displayName = "CardHeader"
 
+/**
+ * Der Titel einer Karte ist eine **Überschrift**, kein Text in Überschriftengröße (BUG-9).
+ *
+ * Die shadcn-Vorlage rendert hier ein `div`. Sichtbar ist das dasselbe — für alle, die eine
+ * Seite über die Überschriftenliste erschließen, ist es der Unterschied zwischen einer
+ * gegliederten Seite und einem Block Text. `auslage.` hatte auf keiner Seite eine einzige
+ * Überschrift, bis das hier stand.
+ *
+ * `as` gibt die Ebene an, damit jede Seite **genau eine** `h1` bekommt: die Karte, die die
+ * Seite ausmacht (`Anmelden`, `Konto`), trägt `h1`, alle weiteren `h2`. Die Gestaltung kommt
+ * unverändert aus den Klassen — Tailwinds Preflight nimmt Überschriften ohnehin ihre
+ * Standardgrößen und -abstände, das Aussehen ändert sich also nicht.
+ */
 const CardTitle = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement> & { as?: "h1" | "h2" | "h3" }
+>(({ className, as: Comp = "h2", ...props }, ref) => (
+  <Comp
     ref={ref}
     className={cn(
       "text-2xl font-semibold leading-none tracking-tight",

@@ -16,7 +16,7 @@ export default function SignupPage() {
       <div className="auth-enter-delayed w-full max-w-sm">
         <Card>
           <CardHeader>
-            <CardTitle className="font-grotesk text-xl">Konto anlegen</CardTitle>
+            <CardTitle as="h1" className="font-grotesk text-xl">Konto anlegen</CardTitle>
           </CardHeader>
           <CardContent>
             <SignupForm />

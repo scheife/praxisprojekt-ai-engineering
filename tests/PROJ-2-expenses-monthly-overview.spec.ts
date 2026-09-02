@@ -359,6 +359,25 @@ test('Journey 6: Kalender, Rückweg und lesbare Notiz (AC-31 bis AC-34)', async 
 
   // Und jetzt derselbe Wert über den Kalender.
   await page.getByRole('button', { name: 'Kalender öffnen' }).click()
+
+  // Der Kalender muss auch WIRKLICH als Monatsblatt dastehen, nicht nur strukturell stimmen
+  // (BUG-11, 02.09.2026). Er war einmal auf 109 Pixel zusammengefallen — sieben Wochentage in
+  // einer unlesbaren Kette —, weil die shadcn-Vorlage CSS-Variablen in der Tailwind-v3-Kurzform
+  // schreibt und v4 daraus eine ungültige Regel erzeugt, die der Browser wortlos verwirft.
+  // Struktur und Klickbarkeit waren dabei die ganze Zeit in Ordnung; nur das Aussehen nicht.
+  // Deshalb wird hier gemessen statt gezählt: Sieben Spalten zu 32 Pixeln sind mindestens 200.
+  const raster = page.getByRole('grid')
+  await expect(raster).toBeVisible(AKTION)
+  const masse = await raster.boundingBox()
+  expect(masse!.width).toBeGreaterThan(200)
+
+  // Und die Wochentage stehen nebeneinander statt aufeinander — jede Spalte hat Breite.
+  const spaltenbreiten = await raster
+    .locator('th')
+    .evaluateAll((zellen) => zellen.map((z) => z.getBoundingClientRect().width))
+  expect(spaltenbreiten).toHaveLength(7)
+  for (const breite of spaltenbreiten) expect(breite).toBeGreaterThan(20)
+
   await page.getByRole('button', { name: 'Montag, 17. August 2026' }).click()
   await expect(datum).toHaveValue('2026-08-17')
   await expect(page.getByText('Mo', { exact: true })).toBeVisible(AKTION)
@@ -394,10 +413,27 @@ test('Journey 6: Kalender, Rückweg und lesbare Notiz (AC-31 bis AC-34)', async 
   // Einstufung. Geprüft wird deshalb die Gleichheit mit der Kategorie, nicht ein Farbwert.
   expect(await farbe('Druckerpapier')).toBe(await farbe('Büromaterial'))
 
+  // --- BUG-9: die Seite ist gegliedert, nicht ein Block Text -------------------------------
+  // Wer eine Seite mit einem Screenreader erschließt, springt von Überschrift zu Überschrift.
+  // `auslage.` hatte auf keiner Seite eine einzige — die Kartentitel waren `div`. Geprüft wird
+  // die Gliederung, nicht der Wortlaut: genau eine `h1`, und darunter Abschnitte.
+  const ueberschriften = (seite: typeof page) =>
+    seite.locator('h1, h2, h3, h4, h5, h6').evaluateAll((els) =>
+      els.map((el) => `${el.tagName}:${el.textContent?.trim().slice(0, 40)}`),
+    )
+
+  const aufUebersicht = await ueberschriften(page)
+  expect(aufUebersicht.filter((h) => h.startsWith('H1'))).toHaveLength(1)
+  expect(aufUebersicht.length).toBeGreaterThan(2)
+
   // --- AC-33: der Rückweg von /konto ------------------------------------------------------
   await page.goto('/konto')
   const zurueck = page.getByRole('link', { name: 'Zur Übersicht' })
   await expect(zurueck).toBeVisible(AKTION)
+  const aufKonto = await ueberschriften(page)
+  expect(aufKonto.filter((h) => h.startsWith('H1'))).toHaveLength(1)
+  expect(aufKonto.length).toBeGreaterThan(2)
+
   await zurueck.click()
   await expect(page).toHaveURL('/', AKTION)
 })
