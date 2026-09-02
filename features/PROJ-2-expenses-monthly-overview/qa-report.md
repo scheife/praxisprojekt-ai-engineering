@@ -1038,3 +1038,135 @@ Der Export, die Summen und der Zugriffsschutz sind von der Änderung nicht berü
 **PROJ-2 bleibt `In Review`.** AC-3 ist repariert und erstmals dauerhaft abgesichert; offen ist
 BUG-6 in derselben Datei. Beide gehören in denselben `/build`-Lauf wie BUG-5 aus PROJ-3 — es ist
 derselbe Code.
+
+---
+
+## Dritter Durchlauf — 02.09.2026 (nach `/refine`, `/architecture`, `/tasks`, `/build` zu EC-13)
+
+**Getestet:** 2026-09-02 · **App-URL:** `http://localhost:3400` (Produktions-Build, `next start`)
+gegen das lokale Supabase auf `127.0.0.1:55321` · **Testsuite:** `npm test` → **278 Tests in 22
+Dateien, alle grün** (vorher 269) · **E2E als Regression:** `npx playwright test` → **28 von 28
+grün** in Chromium und Mobile Safari, sowohl mit einem als auch mit zwei Arbeitern ·
+**Ausfall-Zusicherung:** `npm run test:outage` grün
+
+> Der Port wurde vor der ersten Messung gegengeprüft (die ausgelieferte Seite trägt `auslage.`) —
+> in einem früheren Lauf hatte ein fremder Server eine Portnummer übernommen, und das fiel erst
+> spät auf.
+
+**Anlass dieses Laufs:** EC-13 ist neu, und die Fristen-Arbeit hat die Wege angefasst, auf denen
+PROJ-2 und PROJ-3 gemeinsam stehen. Geprüft wurde deshalb beides: das neue Kriterium und ob
+EC-4 und EC-12 dabei etwas verloren haben.
+
+### Das neue Kriterium
+
+- [x] **EC-13** — Die Meldung nennt nur den Fristablauf, keine Ursache und keinen Ausgang · *Evidenz an der laufenden App, mit **echtem** Ausfall in zwei Spielarten (`docker pause` auf PostgREST allein und auf der Datenbank) und je auf dem **Lese-** und dem **Schreibweg** — also vier Messungen:*
+
+  | Ausfall | Weg | HTTP | Dauer | „zu lange gedauert" | nennt Ursache | behauptet Ausgang | „nicht an dir" |
+  |---|---|---|---|---|---|---|---|
+  | nur Datenzugriff | lesen | 200 | 2.051 ms | ja | **nein** | **nein** | ja |
+  | nur Datenzugriff | schreiben | 200 | 4.130 ms | ja | **nein** | **nein** | ja |
+  | Datenbank + Auth | lesen | 200 | 2.024 ms | ja | **nein** | **nein** | ja |
+  | Datenbank + Auth | schreiben | 200 | 4.040 ms | ja | **nein** | **nein** | ja |
+
+  *Gesucht wurde nach `erreich · Datenbank · Verbindung · Netzwerk · offline · nicht verfügbar`
+  (Ursache) und `nichts gespeichert · nicht gespeichert · wurde angelegt · ging verloren` (Ausgang)
+  — im **ganzen ausgelieferten Dokument**, nicht nur in der Konstante.*
+
+- [x] **EC-13, strukturell** — der Satz kann nicht auseinanderlaufen · *Evidenz: `grep` über `src/` und `tests/` findet **kein einziges** Vorkommen von „Das hat zu lange gedauert" oder „liegt nicht an dir" außerhalb von `deadline.ts`. Alle vier Wege importieren `TIMEOUT_*`; keiner trägt einen eigenen Satz*
+
+### Der Fall, für den die zweite Hälfte von EC-13 geschrieben wurde — jetzt gemessen
+
+**Während der Ausfallmessung ist eine Zeile entstanden** (35 → 36), obwohl beide Schreibversuche
+„Das hat zu lange gedauert" meldeten. Nachgesehen: die Zeile `waehrend Ausfall`, angelegt um
+04:24:52 — mitten im Ausfallfenster. Der Mechanismus ist der im Entwurf beschriebene: `docker pause`
+friert den Prozess ein, die Anfrage lag bereits an, die Frist lief nach zwei Sekunden ab, und beim
+Freigeben wurde geschrieben.
+
+**Das ist kein Fehler, sondern die Bestätigung der Entscheidung.** Hätte die Meldung wie erwogen
+„es wurde nichts gespeichert" gesagt, wäre sie in genau diesem Lauf **nachweislich falsch** gewesen.
+Der Entwurf hat den Fall erschlossen; dieser Lauf hat ihn eintreten sehen.
+
+- [x] **Das Sicherheitsnetz dahinter hält** — EC-1 deckt den Wiederholversuch nach einer Zeitüberschreitung · *Evidenz: dieselbe Vorgangskennung erneut abgeschickt → Zeilen zu dieser Kennung **1 → 1**, HTTP 200, **keine** Fehlermeldung. Die Person sieht einen Erfolg, und es entsteht kein Duplikat*
+
+### Was EC-13 nicht beschädigt hat
+
+- [x] **EC-4** — beide Zahlen halten · *Evidenz zweifach: die vier Messungen oben (2,0 s lesen · 4,1 s schreiben, alle unter der 5-Sekunden-Zusage) und `npm run test:outage` → 2.346 ms schreiben · 2.401 ms lesen · 2.354 ms auf dem teuersten Weg, Grenze 5.000 ms*
+- [x] **EC-12** — keine Weiterleitung auf `/login` · *Evidenz: in allen vier Ausfallmessungen `Location: —` und HTTP 200 mit dem Zeitüberschreitungs-Zustand; die Sitzung wird nicht für abgelaufen erklärt, wenn sie nur nicht prüfbar war*
+- [x] **AC-15 / EC-12 auf dem Kontoweg** — bei nicht feststellbarer Anmeldung wird **nicht gelöscht** · *Evidenz: neue Zusicherung in `account.test.ts` — `rpc` nicht aufgerufen, `signOut` nicht aufgerufen, keine Weiterleitung*
+
+### Regression an der laufenden App
+
+- [x] **AC-1, AC-5, AC-6, AC-8, AC-29, AC-30** — die Eingaberegeln unverändert · *Evidenz: acht Erfassungen über den echten Formularweg. Zwei gültige gingen durch, sechs wurden abgewiesen und die Zeilenzahl blieb stehen: „Der Betrag muss größer als 0 sein." (0 und negativ) · „Der Betrag darf höchstens 9.999.999,99 sein." · „Das Datum liegt zu weit zurück — prüf bitte die Jahreszahl." · „Das Datum darf nicht in der Zukunft liegen." · „Diese Kategorie gibt es nicht."*
+- [x] **AC-13, AC-14** — Summen rechnen auf den Cent · *Evidenz: angezeigte Gesamtsumme **144,90 €** gegen `sum(amount_cents) = 14490` aus der Datenbank; Kategoriesummen 120,00 € + 24,90 € ergeben genau die Gesamtsumme, Prozentanteile 83 + 17 = 100*
+- [x] **AC-24, AC-25** — Kontogrenzen halten auf allen Operationen · *Evidenz mit zwei echten Konten und ihren JWTs, **am Anwendungscode vorbei**: A liest Bs Zeilen → `[]`; `PATCH amount_cents = 1` auf Bs Zeilen → `[]`; `DELETE` → `[]`. Bs zwei Zeilen und ihre Summe von 14490 danach unverändert*
+- [x] **PROJ-1 und PROJ-3 unberührt** — **28 von 28 E2E-Journeys grün** in Chromium und Mobile Safari, darunter alle vier von PROJ-1 und alle fünf von PROJ-3
+
+### Security
+
+- [x] **Zugriff ohne Anmeldung** — `/`, `/konto` und `/konto/export` → je HTTP **307** auf `/login`
+- [x] **Datenschnittstelle anonym** — `expenses`, `profiles` und `login_attempts` → je HTTP **401**
+- [x] **Sicherheits-Header** an der laufenden App — alle vier vorhanden: `X-Frame-Options: DENY` · `X-Content-Type-Options: nosniff` · `Referrer-Policy: origin-when-cross-origin` · `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- [x] **Keine Secrets im Client-Bundle** — je **0** Treffer in `.next/static` für `GATE_SECRET`, `service_role`, `sb_secret`, das JWT-Secret und `TRUSTED_PROXY_HOPS`
+- [x] **Die Fristmeldung verrät nichts über die Infrastruktur** — das ist die Sicherheitsseite von EC-13, nicht nur die sprachliche: Eine Meldung, die zwischen „Datenbank steht" und „Auth-Server steht" unterscheidet, ist ein kostenloser Statusbericht nach außen. Der neue Satz gibt in allen vier Ausfallarten **dieselbe** Auskunft · *Evidenz: die Tabelle oben — vier verschiedene Ausfälle, ein Wortlaut*
+- [x] **Ein echter Programmfehler wird nicht als Zeitüberschreitung verschluckt** · *Evidenz: neue Zusicherung in `route.test.ts`; der Rückbau (jeden Fehler als `unavailable` behandeln) macht sie rot*
+- [!] **Drosselung gewöhnlicher Endpunkte** — NOT VERIFIED: weiterhin nicht implementiert, so entschieden in TD-22. Für ein MVP vertretbar, aber nicht als bestandene Prüfung verbucht
+- [!] **Brute Force auf Zugangsdaten** — NOT VERIFIED für PROJ-2: kein Zugangsdaten-Pfad in diesem Feature. Die Drosselung von PROJ-1 ist unberührt und dort geprüft
+
+**7 Prüfungen verifiziert, 2 NOT VERIFIED.** Keine davon negativ.
+
+### Neue Tests aus diesem Lauf — eine echte Lücke, keine Kosmetik
+
+**Zwei der vier EC-13-Wege hatten überhaupt keine Zusicherung.** `deadline.test.ts` prüft die
+Konstante, `outage.spec.ts` prüft den Erfassungsweg — aber der **Kontoweg** und die
+**Export-Route** waren von beidem nicht berührt. Die Export-Route hatte gar keine Testdatei; eine
+Route ohne Testdatei ist der bequemste Ort, um unbemerkt wieder einen eigenen Satz hinzuschreiben.
+
+- **`src/lib/actions/account.test.ts`** — 2 Zusicherungen: Bei nicht feststellbarer Anmeldung wird
+  **nicht gelöscht** (der Aufruf ist unwiderruflich), und der Satz kommt aus der gemeinsamen Quelle.
+- **`src/app/konto/export/route.test.ts`** — neue Datei, 7 Zusicherungen: der Normalfall (CSV,
+  `no-store`), beide Wege in den 503 (Anmeldung nicht feststellbar · erst das Lesen scheitert),
+  der Wortlaut, dass bei 503 **keine halbe Datei** ausgeliefert wird, und dass ein echter
+  Programmfehler **nicht** als Zeitüberschreitung verschwindet.
+
+**Rot-Nachweis geführt**, drei gezielte Brüche: `account.ts` schreibt wieder seinen eigenen Satz
+(2 Zusicherungen fallen) · die Export-Route ebenso (3 fallen) · die Route behandelt jeden Fehler als
+Zeitüberschreitung (1 fällt). Jeder von genau den Zusicherungen gefangen, die ihn verhindern sollen;
+die Quellen sind danach nachweislich unverändert (`git diff` leer).
+
+### Not Verified In This Run
+
+- [!] **Darstellung auf 768 px und 1440 px** — kein Viewport in `/qa`. Mobile Safari (390 px) ist über die E2E-Suite gedeckt, aber nur auf Bedienbarkeit, nicht auf Optik.
+- [!] **Andere Browser als Chromium und WebKit** — Firefox ist in keiner Suite konfiguriert.
+- [!] **Der Zeitüberschreitungs-Zustand im Bild** — dass die Karte mit Überschrift, Hinweis und „Erneut versuchen" *gut aussieht*, ist nicht geprüft; geprüft ist, dass sie da ist und was sie sagt.
+- [!] **Drosselung gewöhnlicher Endpunkte** — bewusst nicht implementiert (TD-22).
+- [!] **Brute Force** — PROJ-2 hat keinen Zugangsdaten-Pfad.
+- [!] **Die Lastschwelle aus BUG-6** — in diesem Lauf lief die volle E2E-Suite mit zwei Arbeitern **28 von 28 grün**, die Maschine war dabei ruhig. Damit ist gezeigt, dass die Empfindlichkeit lastabhängig ist und keine dauerhafte Eigenschaft — **nicht**, ab welcher Auslastung sie zuschlägt. Die offene Frage in `spec.md` bleibt offen.
+
+### Bugs
+
+**Keine neuen Befunde.** Kein Critical, kein High, kein Medium, kein Low.
+
+**Zum Stand von BUG-6** aus dem QA-Bericht von PROJ-3 (dort, nicht hier nummeriert): Der Befund
+hatte zwei Hälften. Die **falsche Behauptung** ist behoben und in diesem Lauf an vier Ausfallwegen
+nachgemessen. Die **Lastempfindlichkeit der Frist** ist unverändert — bewusst, weil die 2 Sekunden
+nirgends als falsch nachgewiesen sind und eine geratene Zahl keine Messung ersetzt. Sie steht als
+offene Frage in `spec.md`, nicht als Bug.
+
+### Summary
+
+- **Acceptance Criteria:** 30 von 30 unverändert erfüllt — in diesem Lauf erneut belegt: AC-1, AC-5, AC-6, AC-8, AC-13, AC-14, AC-15, AC-24, AC-25, AC-29, AC-30 an der laufenden App, die übrigen über die grüne E2E-Suite
+- **Edge Cases:** **13 von 13 erfüllt** — EC-13 neu und an vier Ausfallwegen belegt, EC-4 und EC-12 unbeschädigt, EC-1 im neuen Zusammenhang bestätigt
+- **Bugs:** 0 Critical · 0 High · 0 Medium · 0 Low
+- **Security:** 7 Prüfungen verifiziert, 2 NOT VERIFIED, keine negativ
+- **Tests:** 278 Unit-/Integrationstests grün (9 neue, alle rot nachgewiesen) · 28/28 E2E · Ausfall-Zusicherung grün · Lint, Build und TypeScript sauber
+- **Production Ready:** **JA**
+
+**Was dieser Lauf gezeigt hat, das vorher nur erschlossen war.** Der Entwurf hat verboten zu
+behaupten, es sei nichts gespeichert worden — mit der Begründung, die Frist könne zuschlagen,
+nachdem die Datenbank die Zeile angenommen hat. Genau das ist während der Messung passiert: eine
+Zeile entstand, während die Person „das hat zu lange gedauert" las. Eine Meldung, die das Gegenteil
+behauptet hätte, wäre in diesem Lauf nachweislich falsch gewesen — und niemandem aufgefallen, weil
+sie plausibel klingt.
+
+**Und was der Lauf über die Testabdeckung gezeigt hat:** Zwei der vier Wege, die EC-13 gemeinsam
+halten müssen, hatten keine einzige Zusicherung. Beide sind jetzt gedeckt, mit Rot-Nachweis.

@@ -36,6 +36,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 const { deleteAccount, logout } = await import('./account')
+const { TIMEOUT_MESSAGE } = await import('@/lib/supabase/deadline')
 
 /** Führt die Action aus und gibt zurück, wohin sie umgeleitet hat — oder ihren Zustand. */
 async function laufe(fn: () => Promise<unknown>) {
@@ -107,5 +108,32 @@ describe('Konto löschen (AC-15)', () => {
     rpc.mockResolvedValue({ error: { message: 'permission denied for table auth.users' } })
     const { state } = await laufe(() => deleteAccount({}, new FormData()))
     expect(JSON.stringify(state)).not.toContain('permission denied')
+  })
+})
+
+describe('Wenn die Anmeldung nicht feststellbar ist (EC-12, EC-13)', () => {
+  /**
+   * **Dieser Weg hatte bis zum QA-Lauf vom 02.09.2026 keine einzige Zusicherung** — obwohl er
+   * einen der vier Sätze trägt, die EC-13 gemeinsam halten muss. `deadline.test.ts` prüft die
+   * Konstante, `outage.spec.ts` prüft den Erfassungsweg; hier hätte jemand unbemerkt wieder einen
+   * eigenen Satz hinschreiben können.
+   */
+  beforeEach(() => requireUser.mockResolvedValue({ state: 'unavailable' }))
+
+  it('löscht das Konto NICHT — der Aufruf ist unwiderruflich', async () => {
+    const { state, redirectedTo } = await laufe(() => deleteAccount({}, new FormData()))
+    expect(rpc).not.toHaveBeenCalled()
+    expect(signOut).not.toHaveBeenCalled()
+    // EC-12: keine Weiterleitung auf `/login` — dort bräuchte es denselben Auth-Server.
+    expect(redirectedTo).toBeNull()
+    expect(state).toEqual({ formError: TIMEOUT_MESSAGE })
+  })
+
+  it('nimmt den Satz aus der gemeinsamen Quelle, statt ihn abzuschreiben (EC-13)', async () => {
+    const { state } = await laufe(() => deleteAccount({}, new FormData()))
+    const meldung = (state as { formError: string }).formError
+    // Die Regel, nicht der Wortlaut: keine Ursache, die hier niemand geprüft hat.
+    expect(meldung).toBe(TIMEOUT_MESSAGE)
+    expect(meldung).not.toMatch(/erreich|Datenbank|Verbindung|Netzwerk/i)
   })
 })
