@@ -220,9 +220,19 @@
 - **EC-12** — Angenommen die Prüfung der Anmeldung läuft in die Frist aus EC-4, wenn dadurch unbekannt
   bleibt, ob jemand angemeldet ist, dann wird das **nicht** als abgelaufene Sitzung behandelt: Es
   erfolgt **keine** Weiterleitung auf `/login`, sondern die geschützte Seite zeigt einen eigenen
-  Zustand „gerade nicht erreichbar" mit der Möglichkeit, es erneut zu versuchen, und eine Server
+  Zustand „das hat zu lange gedauert" mit der Möglichkeit, es erneut zu versuchen, und eine Server
   Action meldet dasselbe am Formular. Der Unterschied ist nicht kosmetisch: `/login` braucht denselben
   Auth-Server, die dort angebotene Handlung könnte also gar nicht gelingen
+
+  > **Wortlaut geändert am 02.09.2026** (siehe EC-13 und Decision Log). Der Zustand hieß bis dahin
+  > „gerade nicht erreichbar" — schon der Name behauptete eine Ursache, die eine abgelaufene Frist
+  > nicht hergibt.
+- **EC-13** — Angenommen eine Frist aus EC-4 läuft ab, wenn die Person darüber unterrichtet wird,
+  dann nennt die Meldung **nur, was festgestellt wurde** — dass es zu lange gedauert hat — und
+  **keine Ursache**, die die App nicht geprüft hat: weder dass die Datenbank noch dass der
+  Auth-Server nicht erreichbar sei. Sie behauptet auf dem Schreibweg auch **nicht**, ob die Änderung
+  wirksam wurde; das steht nach dem nächsten Laden in der Liste
+  *(neu am 02.09.2026, siehe Decision Log)*
 
 ## Technical Requirements
 
@@ -274,6 +284,15 @@
   einem echten Deployment nachzumessen; laut `docs/PRD.md` ist keines vorgesehen, deshalb bleibt es
   eine Frage und keine Aufgabe.
 
+  **Nachtrag 02.09.2026 — die Frage ist größer als gedacht.** `/qa PROJ-3` hat die Frist schon
+  **lokal** reißen sehen, sobald die Maschine ausgelastet war: Im vollständigen E2E-Lauf mit zwei
+  Browsern scheiterten je nach Lauf 2 bis 16 von 28 Journeys daran, jede davon einzeln gefahren grün.
+  Es braucht also gar kein Netz, es reicht ein beschäftigter Rechner. Bei ruhiger Maschine blieben
+  80 gleichzeitige Seitenaufrufe fehlerfrei. **Was daraus folgt, ist zweierlei, und nur das Erste
+  ist erledigt:** Die *Aussage* ist jetzt ehrlich (EC-13). Ob die *Zahl* richtig ist, bleibt offen —
+  bewusst, weil eine Zahl zu raten die Messung nicht ersetzt, die dieses Projekt mangels Deployment
+  nicht machen kann.
+
 ## Decision Log
 
 ### Product Decisions
@@ -300,3 +319,4 @@
 | Ein **Gesamtbudget je Anfrage** wurde verworfen | Ein gemeinsames Abbruchsignal ab der ersten Anfrage hielte die 2 Sekunden buchstäblich — aber eine legitim langsame erste Abfrage (1,9 s) ließe die zweite nach 0,1 s scheitern, obwohl nichts kaputt ist. Das tauscht falsche Ausfälle im Normalbetrieb gegen eine Zahl im Vertrag. Technisch zudem nur begrenzt möglich: Vorprüfung und Seitenaufbau sind getrennte Abläufe | 2026-09-01 |
 | Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wurde noch am selben Tag **zurückgenommen** | Sie stand einen Schritt lang in den Technical Requirements und erwies sich beim Entwurf als nicht sicher baubar: Server Action und anschließender Neuaufbau teilen keinen anfragebezogenen Bereich — mit `React.cache` umschlossen lief die Prüfung trotzdem **zweimal** (gemessen). Ein modulweiter Zwischenspeicher wäre gefährlich, weil er die Sitzung einer Person an die nächste ausliefern könnte, und die Prüfung lokal statt beim Auth-Server zu machen nähme PROJ-1 seine Zusage aus EC-5. Eine Anforderung, die nur mit einem Sicherheitsverlust erfüllbar ist, gehört nicht in den Vertrag | 2026-09-01 |
 | „Nicht erreichbar" wird von „nicht angemeldet" unterschieden und führt **nicht** auf `/login` (EC-12) | Eine Frist allein hätte den Fehler nur schneller falsch gemacht: `getUser()` liefert bei Zeitüberschreitung `null`, und `requireUser()` leitet dann auf `/login?reason=session-expired`. Die App behauptete damit „deine Sitzung ist abgelaufen", obwohl sie es gar nicht wusste — und schickte die Person auf eine Seite, die denselben Auth-Server braucht. Die einzige angebotene Handlung könnte nicht gelingen. Verworfen wurde deshalb auch die mildere Variante, weiterhin auf `/login` zu leiten und nur den Grund ehrlicher zu benennen | 2026-09-01 |
+| **Bei abgelaufener Frist sagt die App nur, dass es zu lange gedauert hat** (EC-13); der Zustand heißt nicht mehr „nicht erreichbar" | `/qa PROJ-3` hat den Fall gefunden (dort BUG-6): Unter Last der Maschine reißt die Frist, und die Person liest „Wir erreichen deine Daten gerade nicht" — eine Aussage über die Gegenstelle, die aus einer abgelaufenen Frist überhaupt nicht folgt. Die App weiß in diesem Moment nur eines: Sie hat aufgegeben. Es ist derselbe Schnitt, den PROJ-3 beim Kursdienst sorgfältig zieht — „gibt es nicht" ist dort von „gerade nicht erreichbar" getrennt, weil die eine Meldung eine Prüfung hinter sich hat und die andere nicht. Beim Schreiben gilt dasselbe für den Ausgang: Die Frist kann zuschlagen, **nachdem** die Datenbank die Zeile angenommen hat, also darf die Meldung auch nicht behaupten, es sei nichts gespeichert worden. Verworfen wurde, stattdessen an der Zahl zu drehen: Die 2 Sekunden sind nirgends als falsch nachgewiesen, und eine geratene Zahl ersetzt keine Messung | 2026-09-02 |

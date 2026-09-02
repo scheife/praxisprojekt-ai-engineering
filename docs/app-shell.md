@@ -83,12 +83,15 @@ Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
   Tabelle.
 - **Fehlerzustand:** Feldfehler direkt am verursachenden Feld in `--destructive`; bei mehreren Feldern
   zusätzlich eine zusammenfassende Zeile über dem Formular.
-- **Nicht-erreichbar-Zustand:** _Ergänzt von `/refine PROJ-2` (01.09.2026, EC-4 und EC-12)._ Antwortet
-  die Datenbank oder der Auth-Server binnen **2 Sekunden** nicht, zeigt die geschützte Seite an der
-  Stelle des Inhalts einen eigenen Zustand — ein Satz, was gerade nicht geht, plus die Möglichkeit,
-  es erneut zu versuchen. Er ist **weder** der Leerzustand („hier steht noch nichts") **noch** der
-  Fehlerzustand am Feld: Beide behaupten, die App habe die Lage verstanden. Hier hat sie es
-  ausdrücklich nicht.
+- **Zeitüberschreitungs-Zustand:** _Ergänzt von `/refine PROJ-2` (01.09.2026, EC-4 und EC-12),
+  umbenannt und geschärft am 02.09.2026 (EC-13)._ Antwortet die Datenbank oder der Auth-Server
+  binnen **2 Sekunden** nicht, zeigt die geschützte Seite an der Stelle des Inhalts einen eigenen
+  Zustand — ein Satz, dass es zu lange gedauert hat, plus die Möglichkeit, es erneut zu versuchen.
+  Er ist **weder** der Leerzustand („hier steht noch nichts") **noch** der Fehlerzustand am Feld:
+  Beide behaupten, die App habe die Lage verstanden. Hier hat sie es ausdrücklich nicht — **und
+  genau deshalb sagt sie auch nicht, woran es lag.** Er hieß bis zum 02.09.2026
+  „Nicht-erreichbar-Zustand"; schon der Name behauptete eine Ursache, die eine abgelaufene Frist
+  nicht hergibt (`/qa PROJ-3`, BUG-6).
 - **Rückmeldungen:** Toast unten rechts, `--popover` als Fläche, 180ms.
 
 ## Anmeldezustände
@@ -102,7 +105,7 @@ Damit ist die offene Frage aus `spec.md` von PROJ-2 beantwortet.
   an- und abgemeldet: Die Sitzungsprüfung läuft in die Frist, die App **weiß nicht**, wer da ist. Sie
   behandelt das **nicht** als abgemeldet und leitet **nicht** auf `/login` — dort bräuchte es denselben
   Auth-Server, die angebotene Handlung könnte also gar nicht gelingen. Stattdessen der
-  Nicht-erreichbar-Zustand oben.
+  Zeitüberschreitungs-Zustand oben.
 - **Rollen:** keine. Alle angemeldeten Personen sehen dieselbe Oberfläche, jeweils nur mit den eigenen
   Daten.
 
