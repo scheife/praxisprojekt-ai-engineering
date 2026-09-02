@@ -25,9 +25,22 @@
 | PROJ-1 | Konto & Anmeldung | Registrierung und Login per E-Mail und Passwort; der Ausgabenbereich ist nur angemeldet erreichbar, und jede Person sieht ausschließlich die eigenen Daten. | Approved | [PROJ-1-accounts-auth](PROJ-1-accounts-auth/) | 2026-08-27 |
 | PROJ-2 | Ausgaben & Monatsübersicht | Ausgaben in Euro anlegen, bearbeiten und löschen (Betrag, Kategorie, Datum, Notiz) und je Monat Summe pro Kategorie plus Gesamtsumme sehen. | Approved | [PROJ-2-expenses-monthly-overview](PROJ-2-expenses-monthly-overview/) | 2026-08-27 |
 | PROJ-3 | Fremdwährung & Wechselkurs | Ausgaben in Fremdwährung erfassen, mit dem Kurs ihres Ausgabetags in Euro umrechnen und den verwendeten Kurs samt Datum ausweisen. | Approved | [PROJ-3-foreign-currency-exchange-rate](PROJ-3-foreign-currency-exchange-rate/) | 2026-08-27 |
+| PROJ-4 | CSV-Import | Eine CSV-Datei mit Ausgaben einlesen, statt jede Zeile von Hand zu erfassen. | Roadmap | — | 2026-09-02 |
+| PROJ-5 | Datenschutzerklärung | Offenlegen, welche Daten wo verarbeitet werden — einschließlich Supabase als Auftragsverarbeiter. | Roadmap | — | 2026-09-02 |
 
-**Build order:** P0 (MVP): PROJ-1 → PROJ-2 (braucht PROJ-1) → PROJ-3 (braucht PROJ-2)
+**Build order:** P0 (MVP): PROJ-1 → PROJ-2 (braucht PROJ-1) → PROJ-3 (braucht PROJ-2) · P1 (nach der Prüfung): PROJ-5 → PROJ-4 (braucht PROJ-2)
+
+**Warum PROJ-4 und PROJ-5 vertagt sind** (entschieden am 02.09.2026, aus dem Feedback am laufenden Stand):
+
+- **PROJ-4 CSV-Import** ist kein kleiner Bruder des Exports (PROJ-2, AC-27). Der Export schreibt, was da
+  ist; der Import muss doppelte Zeilen, unbekannte Kategorien, Fremdwährung mit oder ohne mitgelieferten
+  Kurs und den Teilausfall mitten in der Datei entscheiden. Das ist realistisch der Umfang von PROJ-2 und
+  passt nicht mehr in den Zeitrahmen des PRD.
+- **PROJ-5 Datenschutzerklärung** war schon vorher als offene Frage in `PROJ-2/spec.md` vermerkt: fällig
+  **vor dem ersten öffentlichen Zugang**, und laut `docs/PRD.md` ist kein Deployment vorgesehen. Der
+  Wunsch nach einem Footer kam aus demselben Bedürfnis — dass sichtbar ist, wo die Daten liegen. Ein
+  Footer, der auf eine nicht existierende Seite verlinkt, wäre allerdings schlechter als keiner.
 
 <!-- Add features above this line -->
 
-## Next Available ID: PROJ-4
+## Next Available ID: PROJ-6
