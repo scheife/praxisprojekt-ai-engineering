@@ -1170,3 +1170,387 @@ sie plausibel klingt.
 
 **Und was der Lauf über die Testabdeckung gezeigt hat:** Zwei der vier Wege, die EC-13 gemeinsam
 halten müssen, hatten keine einzige Zusicherung. Beide sind jetzt gedeckt, mit Rot-Nachweis.
+
+---
+
+## Vierter Durchlauf — 02.09.2026 (nach `/refine`, `/architecture`, `/tasks`, `/build` der Ebenen 15–18)
+
+**Getestet:** 2026-09-02 · **App-URL:** `http://localhost:3500` (**Produktions-Build**, `next start`)
+gegen das lokale Supabase auf `127.0.0.1:55321`; die E2E-Suite gegen den bereits laufenden
+Dev-Server auf `:3000` · **Testsuite:** `npm test` → **297 Tests in 22 Dateien, alle grün**
+(vorher 292; `/qa` hat 5 ergänzt) · **E2E als Regression:** `E2E_PORT=3000 npx playwright test` →
+**32 von 32 grün** in Chromium und Mobile Safari (vorher 28) · **Ausfall-Zusicherung:**
+`npm run test:outage` → grün · **Lint** und **Produktions-Build** ohne Befund
+
+> **Zum Port.** Auf `:3000` lief bereits ein Dev-Server **dieses** Projekts (Next 16 lässt keinen
+> zweiten für dasselbe Verzeichnis zu). Gegengeprüft, bevor irgendetwas gemessen wurde: die
+> ausgelieferte Seite trägt `<title>Anmelden · auslage.</title>`, und der Arbeitsbaum ist sauber
+> auf `28c3749` — es ist derselbe Stand. Alle **Messungen** liefen trotzdem gegen einen eigenen
+> Produktions-Build auf `:3500`, nur die E2E-Suite gegen `:3000`.
+
+**Anlass:** Die Rückmeldung am laufenden Stand hat vier Kriterien und zwei Edge Cases ergänzt —
+**AC-31 bis AC-34, EC-14 und EC-15** — und `/build` hat dazu die Ebenen 15 bis 18 gebaut (T37–T45,
+alle abgehakt, kein `[user]`-Task). Geprüft werden deshalb: die sechs neuen Kriterien vollständig
+und unabhängig von den Zusicherungen, die `/build` selbst geschrieben hat, dazu Sicherheit,
+Regression und der Verbleib der offenen Befunde.
+
+**Wie geprüft wurde.** `/qa` hat keinen Browser — die Journeys aus `/e2e-tests` bringen aber einen
+mit, und der ist installiert. Genutzt wurde er über **eigene, gesteuerte Skripte**, nicht über die
+vorhandene Suite: Ein Kalender lässt sich nicht über HTTP bedienen, und eine Prüfung, die nur die
+Tests des Bauens noch einmal ausführt, prüft nichts Neues. Dazu wie immer die Datenbank direkt über
+PostgREST und `psql` mit zwei echten Konten — **am Anwendungscode vorbei**.
+
+### Die vier neuen Acceptance Criteria
+
+#### AC-31 — Zwei Wege zum selben Wert, Kalender mit Wochentagsspalten und Monatsblättern
+
+- [x] **Das Feld bleibt tippbar** — mit **echter Tastatureingabe** gesetzt (nicht mit `fill()`, das
+  den Wert nur zuweist): Ziffernfolge ins fokussierte Feld getippt → `2026-08-17`, der Wochentag
+  „Mo" erscheint dazu · *Nachweis: gesteuerter Browser, `keyboard.press('Digit…')` je Ziffer*
+
+  > **Eine Fehlmessung, die fast ein Befund geworden wäre.** Derselbe Test schlug zuerst fehl
+  > (`2026-12-08` statt `2026-08-17`). Ursache war nicht das Produkt: Chromium rendert das
+  > `type="date"`-Feld hier in **US-Segmentreihenfolge** (MM/DD/YYYY) — auch dann noch, wenn der
+  > Browserkontext auf `de-AT` steht, weil die Reihenfolge an der UI-Sprache des Browsers hängt und
+  > nicht an der JS-Locale. Mit der passenden Ziffernfolge kommt in beiden Locales genau das
+  > erwartete Datum heraus. Die Segmentreihenfolge ist Sache des Browsers, nicht der Anwendung.
+- [x] **Der Kalender ist der zweite Weg** — `Kalender öffnen` klicken, `Montag, 17. August 2026`
+  wählen → Feldwert `2026-08-17` · *Nachweis: gesteuerter Browser gegen den Produktions-Build*
+- [x] **Der Kalender ist auch mit der Tastatur erreichbar** — ein `Tab` vom Datumsfeld setzt den
+  Fokus auf „Kalender öffnen", `Enter` öffnet ihn · *Nachweis: `document.activeElement` nach `Tab`*
+- [x] **Wochentage als Spalten** — sieben `<th scope="col">` mit `Mo Di Mi Do Fr Sa So`, Woche
+  beginnt am Montag, je mit ausgeschriebenem `aria-label` („Montag") · *Nachweis: `outerHTML` des
+  `role="grid"` im offenen Popover*
+
+  > Diese Zusicherung fehlte in Journey 6 — sie prüft das Anklicken eines Tages, nicht den **Aufbau**
+  > des Blatts. Beides steht aber im Kriterium.
+- [x] **Monat für Monat blättern** — `August 2026` → einmal zurück → `Juli 2026` → zweimal vor →
+  `September 2026` · *Nachweis: `aria-label` des Rasters nach jedem Klick; Knöpfe heißen „Zum
+  vorherigen/nächsten Monat"*
+- [x] **Derselbe Baustein im Änderungsdialog** — genau **ein** „Kalender öffnen" im Dialog, Feld mit
+  dem gespeicherten Datum vorbelegt · *Nachweis: gesteuerter Browser, Dialog einer echten Ausgabe*
+
+#### AC-32 — Der Wochentag steht am Feld
+
+- [x] **Sichtbar, ohne den Kalender zu öffnen** — `2026-08-15` → „Sa", `2026-08-17` → „Mo";
+  in der Erfassungszeile **und** im Änderungsdialog (dort „Di" zum 01.09.2026) · *Nachweis:
+  gesteuerter Browser; dazu `formatWeekday` über `Intl` mit `timeZone: 'UTC'`, sodass keine
+  Zeitzone den Tag verschiebt (`src/lib/expenses/format.ts:76`)*
+- [x] **Berechnet, nie gespeichert** — keine Spalte, kein Feld; `docs/data-model.md` unberührt ·
+  *Nachweis: `\d public.expenses` — zwölf Spalten, keine für den Wochentag*
+- [ ] **BUG** **Für Screenreader gibt es den Wochentag nicht** — siehe **BUG-8** (Low). Die Anzeige
+  trägt `aria-hidden`, und der Wochentag steht in keinem zugänglichen Namen des Feldes
+
+#### AC-33 — Erkennbarer Rückweg auf `/konto`
+
+- [x] **Genau ein sichtbar beschrifteter Rückweg** — Link `‹ Zur Übersicht` mit `href="/"`, als
+  Text lesbar statt nur als Etikett · *Nachweis: `getByRole('link')` auf `/konto` liefert
+  `[auslage. → /, Konto → /konto, Zur Übersicht → /, Ausgaben als CSV herunterladen →
+  /konto/export]`*
+- [x] **Er führt wirklich auf die Monatsübersicht** — Klick → `/` · *Nachweis: gesteuerter Browser*
+- [x] **Kein zweiter gleichnamiger Link daneben** — das `aria-label="Zur Übersicht"` der Wortmarke
+  ist entfernt, sie heißt jetzt nach ihrem eigenen Text „auslage." · *Nachweis: die Linkliste oben —
+  vier Links, vier verschiedene Namen. Genau der Fehler aus BUG-3, diesmal vor der Auslieferung
+  bemerkt (`design.md`, Bau-Notiz 2)*
+- [x] **Ein Link, kein `history.back()`** (TD-40) — `href="/"` im Markup; wer `/konto` direkt
+  aufruft, fliegt nicht aus der Anwendung · *Nachweis: `src/app/konto/page.tsx:58`*
+
+#### AC-34 — Die Notiz ist so lesbar wie Datum und Kategorie
+
+- [x] **Gemessen, nicht behauptet** — in derselben Zeile: Notiz `rgb(245, 245, 240)`, Kategorie
+  `rgb(245, 245, 240)`, Datum `rgb(245, 245, 240)` — **identisch** · *Nachweis:
+  `getComputedStyle(el).color` je Zelle im gesteuerten Browser gegen den Produktions-Build*
+
+  > Journey 6 vergleicht die Notiz nur mit der **Kategorie**. Das Kriterium nennt Datum **und**
+  > Kategorie; hier stehen alle drei.
+- [x] **Das Abschneiden langer Notizen bleibt** — `max-w-0 truncate` unverändert ·
+  *Nachweis: `src/components/expenses/expense-list.tsx:63`*
+
+### Die zwei neuen Edge Cases
+
+#### EC-14 — Unzulässige Tage sind gar nicht erst wählbar
+
+- [x] **Obergrenze** — im laufenden Monat ist „Zum nächsten Monat" gesperrt, und **morgen**
+  (`Donnerstag, 3. September 2026`) steht gar nicht im Blatt · *Nachweis: gesteuerter Browser,
+  `aria-disabled="true"` bzw. `getByRole('button', {name: …}).count() === 0`*
+- [x] **Untergrenze** — mit Feldwert `2000-01-15` beginnt das Blatt beim `Samstag, 1. Januar 2000`;
+  kein Tag aus Dezember 1999 ist anklickbar, und „Zum vorherigen Monat" ist gesperrt · *Nachweis:
+  ebenso*
+
+  > Die Untergrenze ist die unauffälligere Hälfte des Kriteriums und hatte **keine** Zusicherung —
+  > weder als Einheitentest noch in Journey 6. Sie steht jetzt da (siehe *Neue Tests*).
+- [x] **Käme so ein Datum doch an, greifen AC-7 und AC-30 unverändert** — im Browser ein Datum
+  von morgen abgeschickt → „Das Datum darf nicht in der Zukunft liegen."; `1999-12-31` → „Das Datum
+  liegt zu weit zurück — prüf bitte die Jahreszahl."; nichts gespeichert · *Nachweis: gesteuerter
+  Browser gegen den Produktions-Build*
+
+  > **Das war die Stelle mit dem echten Risiko.** Der Baustein setzt jetzt `min="2000-01-01"` und
+  > `max="2026-09-02"` am Feld. Trüge das Formular keine Abschaltung der nativen Prüfung, hätte der
+  > Browser das Absenden mit **seiner eigenen** Sprechblase abgefangen, und die im Vertrag
+  > zugesagten deutschen Sätze wären nie erschienen. Beide Formulare tragen `noValidate`
+  > (`expense-composer.tsx:152`, `edit-expense-dialog.tsx:168`) — gemessen, nicht nur gelesen.
+
+#### EC-15 — Der Kalender schafft keinen zweiten Verhaltensweg
+
+- [x] **Erfassungszeile** — Datum über den Kalender auf den 17.08.2026 gesetzt, erfasst → in der
+  Datenbank steht `spent_on = 2026-08-17` · *Nachweis: gesteuerter Browser, danach `psql`*
+- [x] **Änderungsdialog** — bestehende Ausgabe vom 01.09. über den Kalender auf den 17.08. geändert
+  → Datenbank `2026-08-17`, und die Ansicht wandert auf `/?monat=2026-08` mit (**EC-11 nebenbei
+  belegt**) · *Nachweis: ebenso*
+- [x] **Die Garantie dahinter, nicht nur das Ergebnis** — es gibt **einen** Baustein, nicht zwei:
+  `DateField` wird von Erfassungszeile und Dialog importiert, getippt und geklickt laufen durch
+  dasselbe `onChange` · *Nachweis: `src/components/expenses/date-field.tsx:78,110`; je ein Import in
+  `expense-composer.tsx:25` und `edit-expense-dialog.tsx:18`*
+- [x] **Der Kursabruf von PROJ-3 löst auch beim Kalenderdatum aus** · *Nachweis: der neue E2E-Test
+  „Ein über den Kalender geändertes Datum holt den Kurs neu" — grün in beiden Engines*
+
+### Regression an der laufenden Anwendung
+
+Nicht nur über die Suiten — die neuen Kriterien fassen die Erfassungszeile und den Änderungsdialog
+an, also die Wege, auf denen alles andere steht.
+
+- [x] **AC-2 — Datumsvorbelegung überlebt den neuen Baustein** — `/?monat=2026-07` → `2026-07-01`,
+  `/` → `2026-09-02` (heute in Wien) · *Nachweis: `inputValue()` im gesteuerten Browser*
+- [x] **AC-11, AC-13, EC-9 — 302 Ausgaben in einem Monat** — alle 302 Zeilen im HTML (303 `<tr>`
+  inkl. Kopfzeile), angezeigte Gesamtsumme **72.039,22 €** gegen `sum(amount_cents) = 7203922` aus
+  der Datenbank — auf den Cent · *Nachweis: HTML des Produktions-Builds gegen `psql`*
+- [x] **AC-14, EC-7 — Kategoriesummen exakt, Prozente gerundet** — neun belegte Kategorien,
+  absteigend `17 · 15 · 13 · 12 · 10 · 9 · 9 · 8 · 7 %` = **100 %**; die Summe der neun
+  Kategoriebeträge ist **7.203.922 Cent** und damit exakt die Gesamtsumme · *Nachweis: aus dem
+  gerenderten HTML zurückgerechnet*
+- [x] **Leistungszusage — 95 % unter 500 ms, keine über 1 s, bei bis zu 300 Ausgaben** — 20 Abrufe
+  von `/?monat=2026-09` am eingeschwungenen Produktions-Build mit **302 Ausgaben**:
+  `min 60 ms · Median 67 ms · p95 97 ms · max 117 ms`. Das ist **ein Fünftel** der zugesagten
+  Grenze · *Nachweis: `curl -w '%{time_total}'`, fünf Aufwärmläufe vorweg*
+- [x] **AC-27, EC-10 — Export unverändert** — `content-type: text/csv; charset=utf-8`,
+  `content-disposition: attachment; filename="auslage-export-2026-09-02.csv"`,
+  `cache-control: no-store, must-revalidate`, `X-Content-Type-Options: nosniff`; BOM, CRLF,
+  306 Zeilen (3 Kopf + 1 Leerzeile + 302 Daten). Die Notiz mit Anführungszeichen und Semikolon steht
+  korrekt begrenzt mit verdoppelten inneren Anführungszeichen · *Nachweis: `curl -D -` auf
+  `/konto/export`, Datei mit `cat -v` gelesen*
+- [x] **AC-28 — Hinweis am Notizfeld** — „Keine Namen anderer Personen und nichts Sensibles wie
+  Gesundheitsangaben — eine kurze Beschreibung reicht." im ausgelieferten Markup · *Nachweis: `grep`*
+- [x] **AC-26 — Kontolöschung räumt weiterhin vollständig ab** — 18 Testkonten mit über 300
+  Ausgaben gelöscht; danach **0** verwaiste Ausgaben und **0** verwaiste Profile · *Nachweis:
+  `delete from auth.users …`, dann zwei `left join`-Zählungen*
+- [x] **PROJ-1 und PROJ-3 unberührt** — **32 von 32 E2E-Journeys grün** in Chromium und Mobile
+  Safari, darunter alle vier von PROJ-1 und alle sechs von PROJ-3 · *Nachweis: `npx playwright test`*
+- [x] **EC-4, EC-12, EC-13 unbeschädigt** — `npm run test:outage` grün, mit echtem `docker pause`:
+  **2375 ms** (schreiben ohne Datenzugriff) · **2370 ms** (lesen) · **2356 ms** (teuerster Weg),
+  Grenze 5000 ms. Danach alle sechs Container wieder `Up` · *Nachweis: Ausgabe des Laufs*
+- [x] **Geometrie des neuen Feldes bei 375 / 768 / 1440 px** — der Kalenderknopf liegt in allen drei
+  Breiten **innerhalb** des Feldes, hat eine Trefferfläche von 28 × 28 px (über den 24 px, die als
+  Minimum gelten), und das Popover bleibt im Ansichtsfenster (rechter Rand 321 px bei 375 px
+  Fensterbreite). Links vom Wochentag bleiben 250 px bzw. 101 px für den Datumstext ·
+  *Nachweis: `boundingBox()` je Element in drei Ansichtsfenstern*
+
+  > Das ist **Geometrie, nicht Optik** — gemessen wird Überlappung und Trefferfläche, nicht, ob es
+  > gut aussieht. Letzteres steht weiterhin unter *Nicht geprüft*.
+
+### Sicherheit (Red Team, vollständig durchgespielt)
+
+Zwei frische Konten A und B mit gültigen Zugangs-Token, Zugriff **am Anwendungscode vorbei** direkt
+gegen PostgREST.
+
+- [x] **Zugriffsschutz ohne Sitzung** — `/`, `/konto`, `/konto/export`, `/?monat=2026-08` je
+  **HTTP 307 → `/login`** · *Nachweis: `curl -o /dev/null -w '%{http_code} %{redirect_url}'`*
+- [x] **AC-24 quer über zwei Konten** — A gegen Bs Zeile: lesen → `[]`, ändern → `[]`, löschen →
+  `[]`; eine Zeile auf **Bs** `user_id` anlegen → `42501 new row violates row-level security
+  policy`. Bs Zeile danach unverändert (`4242 Cent`, Notiz „B geheim") · *Nachweis: `GET`/`PATCH`/
+  `DELETE`/`POST` auf `/rest/v1/expenses` mit As Bearer-Token*
+- [x] **Anonymer Schlüssel** — `expenses`, `profiles`, `login_attempts` je **HTTP 401 / `42501`
+  permission denied** · *Nachweis: `curl` nur mit `apikey`*
+- [x] **`login_attempts` auch für Angemeldete verschlossen** — mit gültigem Bearer-Token
+  **HTTP 403 / `42501`** · *Nachweis: `curl` mit As Token*
+- [x] **AC-10 / AC-29 / AC-30 / AC-5 an der Datenbank** — erfundene Kategorie `urlaub` und
+  Anzeigename `Bewirtung` → `23514`; Betrag `1000000000` Cent → `23514`; Betrag `0` → `23514`;
+  Datum `1999-12-31` → `23514` · *Nachweis: fünf `POST` direkt gegen PostgREST*
+- [x] **Einschleusung über `?monat=`** — **14 Nutzlasten**, darunter `2026-08' or 1=1--`,
+  `'; drop table expenses;--`, `../../etc/passwd`, `2026-08%00`, `<script>alert(1)</script>` und
+  `2026-08" onmouseover="alert(1)`: **alle** HTTP 200 mit dem laufenden Monat (AC-19),
+  **null** ausgelöste Dialoge, **null** Elemente mit `onmouseover`, Tabelle danach unverändert
+  (24 → 24 Zeilen) · *Nachweis: gesteuerter Browser mit `page.on('dialog')` als echtem
+  XSS-Nachweis statt einer Textsuche im Quelltext*
+- [x] **Einschleusung in die Notiz** — `<script>alert(1)</script>` und
+  `"><img src=x onerror=alert(1)> ' OR 1=1--` gespeichert und ausgeliefert: im HTML als
+  `&lt;script&gt;` bzw. `&quot;&gt;&lt;img src=x …&gt;` maskiert, in der RSC-Nutzlast als
+  `<`; **null** lebende `<img>`-Elemente auf der Seite · *Nachweis: `grep` auf den
+  ausgelieferten Rumpf, Kontext beider Treffer einzeln angesehen*
+- [x] **Keine Server-Geheimnisse im Client-Bundle** — `.next/static` nach `service_role`,
+  `sb_secret_`, `SERVICE_ROLE`, `JWT_SECRET`, `GATE_SECRET`, `super-secret` und
+  `TRUSTED_PROXY_HOPS` durchsucht: je **0** Treffer · *Nachweis: `grep -rl` nach `npm run build`*
+- [x] **Keine Zugangsdaten in der Adresse** — kein `method="get"` in `src/`; `/login`, `/signup` und
+  die Erfassungszeile tragen `method="POST"` im ausgelieferten Markup · *Nachweis: `grep -rn` und
+  `grep -o '<form[^>]*>'` je Seite*
+- [x] **Sicherheits-Kopfzeilen an der laufenden App** — `X-Frame-Options: DENY` ·
+  `X-Content-Type-Options: nosniff` · `Referrer-Policy: origin-when-cross-origin` ·
+  `Strict-Transport-Security: max-age=31536000; includeSubDomains` · *Nachweis: `curl -D -`*
+- [x] **Die neue Abhängigkeit vergrößert die Angriffsfläche nicht unbemerkt** — `react-day-picker`
+  bringt `date-fns` mit; beides landet in **einem** Chunk (164 KB JS), der auf `/login` und
+  `/signup` **nicht** geladen wird. Unser eigener Quelltext importiert `date-fns` **nirgends**
+  (0 Treffer in `src/`) · *Nachweis: `grep -rl` über `.next/static`, `grep -c` auf die
+  Chunk-Kennung in den ausgelieferten Seiten*
+- [!] **Drosselung auf den Ausgaben-Wegen** — NOT VERIFIED: weiterhin nicht implementiert, so
+  entschieden in TD-22. PROJ-2 prüft keine Zugangsdaten, alles liegt hinter PROJ-1s Anmeldung und
+  zusätzlich hinter RLS. Kein Befund, aber **keine bestandene Prüfung**
+- [!] **Brute Force und Kontoaufzählung** — NOT VERIFIED für PROJ-2: in diesem Feature
+  gegenstandslos, es gibt keinen Anmelde-, Registrierungs- oder Zurücksetzen-Weg. Die Drosselung von
+  PROJ-1 ist unberührt (32/32 E2E grün) und dort geprüft
+- [!] **CSRF** — NOT VERIFIED: unverändert nur als Indiz belegbar. Next.js 16 prüft den Origin von
+  Server Actions eingebaut; ohne Browser lässt sich die Aufrufkonvention nicht sauber nachbilden
+
+**11 Prüfungen verifiziert, 3 NOT VERIFIED.** Keine davon negativ.
+
+### Neue Tests aus diesem Lauf — eine echte Lücke, keine Kosmetik
+
+**EC-14 nennt zwei Grenzen; abgedeckt war nur die obere.** `date-field.test.tsx` prüfte „zeigt
+keinen Tag nach heute" — die **Untergrenze** (nichts vor dem 01.01.2000) und die **Blättergrenzen**
+aus TD-37 hatten keine einzige Zusicherung, weder als Einheitentest noch in Journey 6. Fielen
+`startMonth` und `endMonth` weg, blieben alle bestehenden Tests grün: Sie sehen nur das
+aufgeschlagene Blatt an, nicht, wie weit man von dort wegkommt.
+
+- **`src/components/expenses/date-field.test.tsx`** — 5 neue Zusicherungen: kein Tag vor dem
+  01.01.2000 · der 01.01.2000 selbst ist zulässig (die Grenze schließt ein) · kein Rückblättern vor
+  Januar 2000 · kein Vorblättern über den laufenden Monat · innerhalb des Bereichs blättert er ganz
+  normal.
+
+**Rot-Nachweis geführt** — vier gezielte Brüche, jeder zurückgenommen:
+
+| Bruch | Was fiel |
+|---|---|
+| `startMonth`/`endMonth` entfernt | die **zwei** Blättergrenzen |
+| `hidden` entfernt | „zeigt keinen Tag nach heute" |
+| **beides** entfernt | zusätzlich die **Untergrenze** — sie wird von beiden Ebenen zugleich getragen, genau wie TD-37 es beschreibt |
+| Untergrenze auf den 02.01. verschoben, Blätterstart auf den laufenden Monat | „01.01.2000 ist zulässig" und „blättert normal" |
+
+Danach ist `src/components/expenses/date-field.tsx` nachweislich unverändert (`git diff` leer) und
+die Datei steht bei **16 von 16 grün**.
+
+> **Eine Sache, die der Rot-Nachweis über die Bibliothek gezeigt hat:** `react-day-picker` sperrt
+> die Monatsnavigation über **`aria-disabled`**, nicht über das `disabled`-Attribut. Eine
+> Zusicherung mit `toBeDisabled()` wäre grün-blind gewesen. Geprüft wird jetzt genau das, was die
+> Bibliothek wirklich setzt.
+
+### Nicht geprüft in diesem Durchlauf
+
+- [!] **Wie es aussieht** — Farbwerte, Abstände und Trefferflächen sind **gemessen**, die Optik
+  nicht beurteilt. `/qa` kann Geometrie prüfen, nicht Gestaltung
+- [!] **Andere Browser-Engines als Chromium und WebKit** — Firefox läuft in keiner Suite
+- [!] **Das Datumsfeld auf einem echten iOS-Gerät** — `design.md` benennt es ausdrücklich: Unter iOS
+  lässt sich ein `type="date"`-Feld **nicht tippen**, dort öffnet ein Antippen das Walzenrad des
+  Systems. AC-31 ist damit erfüllt, aber **nicht mit denselben zwei Wegen wie am Rechner**. Mobile
+  Safari in der E2E-Suite ist eine Emulation und beweist das nicht
+- [!] **Die 24 AC und 11 EC, die dieser `/refine` nicht angefasst hat** — sie wurden nicht einzeln
+  neu durchgespielt. Belegt sind sie über 297 Einheitentests, 32 E2E-Journeys, die
+  Ausfall-Zusicherung und die oben einzeln nachgewiesenen Stichproben (AC-2, AC-5, AC-7, AC-10,
+  AC-11, AC-13, AC-14, AC-19, AC-24, AC-25, AC-26, AC-27, AC-28, AC-29, AC-30, EC-7, EC-9, EC-10,
+  EC-11). Das steht hier, damit niemand mehr Abdeckung annimmt, als dieser Lauf hergibt
+- [!] **Drosselung, Brute Force, CSRF** — siehe Sicherheit oben
+- [!] **Ob die 2-Sekunden-Frist außerhalb des lokalen Stacks passt** — unverändert offene Frage der
+  Spec, hier nicht angefasst
+
+### Umgebung
+
+- [x] **Sauber hinterlassen** — 18 eigene Testkonten und alle von ihnen erzeugten Ausgaben gelöscht,
+  `login_attempts` geleert, der eigene Produktions-Server auf `:3500` beendet, alle sechs Container
+  `Up` und keiner `Paused`, sämtliche Hilfsskripte entfernt · *Nachweis: `docker ps`,
+  `git status --short` zeigt nur die beiden beabsichtigten Änderungen*
+- **Fremder Rest im lokalen Stack, nicht angefasst:** zwei Ausgaben eines Kontos
+  `qa3-a-…@qa.example.com` aus einem **früheren** QA-Lauf (Notiz `<img src=x onerror=alert(1)>`).
+  Sie stammen nicht aus diesem Durchgang; fremde Daten werden nicht ungefragt gelöscht. Wer
+  aufräumen will: `delete from auth.users where email like '%@qa.example.com';`
+
+### Gefundene Bugs
+
+#### BUG-8: Der Wochentag am Datumsfeld ist für Screenreader nicht vorhanden
+- **Severity:** Low
+- **Betrifft:** AC-32
+- **Was ist:** Die Anzeige des Wochentags trägt `aria-hidden`, steht in keinem `aria-label` und in
+  keiner `aria-describedby`-Beschreibung des Feldes. Wer die Seite vorlesen lässt, bekommt den
+  Wochentag am Feld also gar nicht — AC-32 verlangt ihn aber „ablesbar, **ohne den Kalender zu
+  öffnen**", und der Kalender ist genau der Umweg, den das Kriterium ausschließt
+- **Schritte zur Reproduktion:** `/` aufrufen, ein Datum eintragen, den zugänglichen Namen und die
+  Beschreibung des Datumsfeldes auslesen — beides enthält den Wochentag nicht
+- **Nachweis:** `aria-hidden="true"` an der Anzeige (`src/components/expenses/date-field.tsx:82`);
+  im gesteuerten Browser: Feldbezeichnung `"Datum"`, Beschreibung `""` — kein „Sa", kein „Samstag"
+- **Warum es trotzdem Low ist:** Sehende Nutzer:innen bekommen genau das, wofür das Kriterium
+  geschrieben wurde, und der Kalender selbst ist sauber ausgezeichnet (jeder Tag trägt seinen vollen
+  deutschen Namen). Es fehlt ein Weg, nicht die Funktion
+- **Vorschlag (nicht hier entschieden):** den Wochentag ausgeschrieben in eine
+  `aria-describedby`-Beschreibung des Feldes hängen („Samstag") und die sichtbare Kurzform
+  `aria-hidden` lassen. Dann liest der Screenreader „Datum, 15.08.2026, Samstag", ohne dass ein
+  zusammenhangloses „Sa" im Vorlesefluss landet
+- **Priorität:** nächste Runde
+
+#### BUG-9: Keine einzige Überschrift auf den Seiten der Anwendung
+- **Severity:** Low
+- **Betrifft:** kein AC direkt — den App-Rahmen, der laut `spec.md` **PROJ-2 gehört**
+- **Was ist:** `/`, `/konto` und `/login` enthalten **null** Elemente `<h1>`–`<h6>` und **null**
+  `role="heading"`. „Konto", „Deine Daten mitnehmen", die Monatsüberschrift — alles sind `<div>`.
+  Screenreader-Nutzer:innen navigieren Seiten üblicherweise über die Überschriftenliste; hier ist
+  sie leer, und es bleibt nur das Durchlaufen der ganzen Seite
+- **Schritte zur Reproduktion:** angemeldet `/` oder `/konto` abrufen und den Rumpf nach `<h1`–`<h6`
+  durchsuchen → 0 Treffer
+- **Nachweis:** `grep -o '<h[1-6][ >]'` auf den ausgelieferten Rumpf von `/?monat=2026-09`,
+  `/konto` und `/login` → je **0**; `getByRole('heading')` im Browser → leeres Ergebnis
+- **Vorbestehend, nicht von diesem Bau verursacht:** Commit `28c3749` hat an der
+  Überschriftensemantik nichts geändert. Der Befund fällt hier nur auf, weil dieser Lauf erstmals
+  die Zugänglichkeit des Rahmens angesehen hat
+- **Priorität:** nächste Runde; berührt auch Seiten von PROJ-1, gehört aber über den Rahmen zu PROJ-2
+
+#### BUG-10: `design.md` nennt `date-fns` eine Transitivabhängigkeit — sie steht direkt in `package.json`
+- **Severity:** Low (Dokumentation)
+- **Betrifft:** `design.md` → *Notizen aus dem Bau der Ebenen 15–18*, Abweichung 1
+- **Was ist:** Die Bau-Notiz hält fest: „Es bleibt eine Transitivabhängigkeit, kein zweiter
+  Datumsapparat in unserem Code." Die **zweite** Hälfte stimmt — `grep` findet `date-fns` in `src/`
+  null Mal. Die **erste** nicht: `npx shadcn add calendar` hat `"date-fns": "^4.4.0"` in die
+  `dependencies` von `package.json` eingetragen, also als direkte Abhängigkeit
+- **Nachweis:** `package.json` → `dependencies` enthält `date-fns` und `react-day-picker`;
+  `npm ls date-fns` zeigt sie sowohl direkt als auch unter `react-day-picker` (dedupliziert)
+- **Warum es zählt:** Der Unterschied ist keine Wortklauberei. Eine direkte Abhängigkeit bleibt
+  stehen, wenn `react-day-picker` einmal entfernt wird, und sie lädt die nächste Person ein, sie zu
+  benutzen — genau das, was TD-36 verhindern wollte. 26 MB im Abhängigkeitsbaum für null eigene
+  Importe
+- **Vorschlag:** entweder `date-fns` aus `dependencies` entfernen (sie kommt über
+  `react-day-picker` ohnehin mit) oder den Satz in `design.md` berichtigen. Nicht hier entschieden
+- **Priorität:** nächste Runde
+
+#### BUG-2: Kategorien unter 0,5 % Anteil erscheinen als „0 %" mit unsichtbarem Balken — **unverändert offen**
+- **Severity:** Low · **Betrifft:** AC-14
+- **Stand 02.09.2026: erneut nachgestellt, Zustand unverändert.** Monat Juli mit 5.000,00 € Hardware
+  · 9,00 € Gebühren · 3,50 € Reise · 2,00 € Sonstiges: die drei kleinen Kategorien zeigen „0 %" und
+  tragen `width:0%`, sind also gar nicht sichtbar · *Nachweis: Daten eingespielt, `/?monat=2026-07`
+  mit echter Sitzung abgerufen, Balkenbreiten aus dem HTML gelesen*
+- **EC-7 bleibt davon unberührt** — die Euro-Summen ergeben exakt die Gesamtsumme
+
+### Zusammenfassung — vierter Durchlauf (02.09.2026)
+
+- **Acceptance Criteria:** **34 von 34 erfüllt.** Die vier neuen (AC-31 bis AC-34) wurden
+  vollständig und unabhängig an der laufenden Anwendung ausgeführt; AC-32 mit einer Einschränkung
+  bei der Zugänglichkeit (BUG-8). 19 der übrigen 30 wurden als Stichprobe erneut belegt
+- **Edge Cases:** **15 von 15 erfüllt** — EC-14 und EC-15 neu und beide an der laufenden Anwendung
+  belegt, EC-4/EC-11/EC-12/EC-13 unbeschädigt
+- **Bugs:** **0 Critical · 0 High · 0 Medium · 4 Low** (BUG-8, BUG-9, BUG-10 neu; BUG-2 unverändert)
+- **Security:** **11 Prüfungen verifiziert, 3 NOT VERIFIED** (Drosselung, Brute Force, CSRF) —
+  keine davon negativ
+- **Tests:** **297** Einheiten-/Integrationstests grün (5 neue, alle rot nachgewiesen) ·
+  **32 von 32** E2E in Chromium und Mobile Safari · Ausfall-Zusicherung grün · Lint, Build und
+  TypeScript ohne Befund
+- **Leistung:** p95 **97 ms** bei 302 Ausgaben im Monat, gegen eine Zusage von 500 ms
+- **Production Ready:** **JA** — kein Critical- oder High-Befund, und die Kriterien, um die es in
+  dieser Runde ging, wurden **wirklich ausgeführt**, nicht nur gelesen. „Ready" heißt: keine
+  blockierenden Fehler gefunden — **nicht**, dass alles geprüft wurde; die offenen Punkte stehen
+  oben unter *Nicht geprüft*
+
+**Was dieser Lauf gezeigt hat, das vorher niemand gemessen hatte.** Der Kalender bringt zwei neue
+Attribute ans Datumsfeld — `min` und `max`. Trüge das Formular nicht ausdrücklich `noValidate`,
+hätte der Browser das Absenden mit **seiner eigenen** Sprechblase abgefangen, und die im Vertrag
+zugesagten deutschen Sätze aus AC-7 und AC-30 wären in einer sonst durchgehend deutschsprachigen
+Anwendung nie erschienen — ein Fehler, den keine der bestehenden Zusicherungen bemerkt hätte, weil
+sie das Schema direkt prüfen und nicht den Weg durch den Browser. Gemessen: beide Sätze erscheinen.
+
+**Und was er über die Abdeckung gezeigt hat.** EC-14 nennt zwei Grenzen, geprüft wurde eine. Die
+Untergrenze und die Blättergrenzen aus TD-37 hätten wegfallen können, ohne dass ein einziger Test
+rot geworden wäre. Beide sind jetzt gedeckt, mit Rot-Nachweis — und der Nachweis hat nebenbei
+gezeigt, dass die Untergrenze von **zwei** Mechanismen zugleich getragen wird: Sie fällt erst,
+wenn man beide entfernt. Genau das ist die Tiefenstaffelung, die TD-37 beschreibt.

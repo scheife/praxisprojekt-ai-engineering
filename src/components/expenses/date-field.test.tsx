@@ -114,6 +114,71 @@ describe('Der Kalender bietet nichts Unzulässiges an (EC-14)', () => {
     expect(input).toHaveAttribute('min', '2000-01-01')
     expect(input).toHaveAttribute('max', '2026-08-20')
   })
+
+  /**
+   * Ergänzt von `/qa` am 02.09.2026. EC-14 nennt **zwei** Grenzen, abgedeckt war nur die obere.
+   * Die untere ist die unauffälligere: Ein Kalender, der den 31.12.1999 anbietet, sieht bis zum
+   * Klick völlig richtig aus — und AC-30 lehnt danach ab. Genau die Falle, die EC-14 verbietet.
+   */
+  it('zeigt keinen Tag vor dem 01.01.2000 — die untere Grenze aus EC-14', async () => {
+    feld('2000-01-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    await screen.findByRole('button', { name: 'Samstag, 1. Januar 2000' })
+
+    // Der Januar 2000 beginnt an einem Samstag; die Randtage davor gehören zum Dezember 1999
+    // und sind unzulässig. Sie dürfen deshalb gar nicht erst anklickbar sein.
+    for (const tag of ['Freitag, 31. Dezember 1999', 'Donnerstag, 30. Dezember 1999']) {
+      expect(screen.queryByRole('button', { name: tag })).not.toBeInTheDocument()
+    }
+  })
+
+  it('lässt den 01.01.2000 zu — auch die untere Grenze ist einschließlich', async () => {
+    feld('2000-01-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    expect(
+      await screen.findByRole('button', { name: 'Samstag, 1. Januar 2000' }),
+    ).toBeInTheDocument()
+  })
+})
+
+/**
+ * Ergänzt von `/qa` am 02.09.2026.
+ *
+ * TD-37 begrenzt das Blättern **zusätzlich** zum Ausblenden der Tage — „sonst landet man mit zwei
+ * Klicks im Jahr 1850". Diese zweite Ebene hatte keine einzige Zusicherung: Fielen `startMonth`
+ * und `endMonth` weg, blieben alle bestehenden Tests grün, weil sie nur das aufgeschlagene Blatt
+ * ansehen. Der Kalender liefe dann durch leere Monate, in denen kein Tag wählbar ist — sichtbar
+ * kaputt, aber von keinem Test bemerkt.
+ */
+describe('Das Blättern bleibt im zulässigen Bereich (EC-14, TD-37)', () => {
+  it('lässt nicht vor den Januar 2000 zurückblättern', async () => {
+    feld('2000-01-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    // `react-day-picker` sperrt die Navigation über `aria-disabled`, nicht über das
+    // `disabled`-Attribut — geprüft wird deshalb genau das, was die Bibliothek wirklich setzt.
+    expect(
+      await screen.findByRole('button', { name: 'Zum vorherigen Monat' }),
+    ).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('lässt nicht über den laufenden Monat hinaus vorblättern', async () => {
+    feld('2026-08-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    expect(
+      await screen.findByRole('button', { name: 'Zum nächsten Monat' }),
+    ).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('blättert innerhalb des Bereichs ganz normal', async () => {
+    feld('2026-08-15')
+    fireEvent.click(screen.getByRole('button', { name: 'Kalender öffnen' }))
+    const zurueck = await screen.findByRole('button', { name: 'Zum vorherigen Monat' })
+    expect(zurueck).not.toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(zurueck)
+    expect(
+      await screen.findByRole('button', { name: 'Mittwoch, 15. Juli 2026' }),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('Der Auslöser schickt das Formular nicht ab', () => {
