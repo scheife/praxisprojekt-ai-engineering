@@ -134,10 +134,13 @@ function Calendar({
           "text-muted-foreground aria-selected:text-muted-foreground",
           defaultClassNames.outside
         ),
-        disabled: cn(
-          "text-muted-foreground opacity-50",
-          defaultClassNames.disabled
-        ),
+        // Kein `opacity-50` — das kommt so von `shadcn add` und unterläuft den Kontrastboden.
+        // `docs/design-system.md` §Farben legt fest: der Boden liegt bei `--muted-foreground`.
+        // Gerechnet auf `--popover` (HSL 60 3% 6.5%): `--muted-foreground` allein ergibt 4,97:1,
+        // mit `opacity-50` nur noch 2,13:1 — weniger als die Hälfte des geforderten 4,5:1.
+        // Ein gesperrter Tag muss lesbar bleiben; unterschieden wird er über die Helligkeit,
+        // nicht über Unlesbarkeit: aktiv sind 17,27:1, also das 3,5-fache. (BUG-14)
+        disabled: cn("text-muted-foreground", defaultClassNames.disabled),
         hidden: cn("invisible", defaultClassNames.hidden),
         ...classNames,
       }}

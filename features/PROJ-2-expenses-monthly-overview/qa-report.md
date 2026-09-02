@@ -1860,3 +1860,60 @@ Die Quellen sind danach nachweislich unverändert.
 
 **0 Critical · 0 High · 0 Medium · 1 Low.** · *Berichtigt von `/cleanup` am 02.09.2026: dazu **BUG-7** (Low), der nie geschlossen wurde — siehe „Weiterhin offen".* BUG-2 und BUG-8 bis BUG-13 sind behoben und
 verifiziert; der im siebten Durchlauf benannte offene Punkt zu den Flächenfarben ist geschlossen.
+
+---
+
+## Neunter Durchlauf — 02.09.2026 (gesperrte Kalendertage waren nicht lesbar)
+
+**Anlass:** Rückmeldung am laufenden Stand, mit Screenshot: Die gesperrten Zukunftstage im
+Kalender sind zu dunkel zum Lesen. Ausdrücklich gewünscht ist **beides** — lesbar *und* erkennbar
+anders als die wählbaren Tage. Nicht Gleichmacherei, sondern ein Unterschied, der nicht in
+Unlesbarkeit umschlägt.
+
+**Testsuite:** `npm test` → **334 Tests in 25 Dateien, alle grün** (vorher 332) · Lint,
+TypeScript und Build ohne Befund
+
+### BUG-14: Gesperrte Tage lagen bei 2,13:1 — **BEHOBEN**
+
+- **Severity:** **Low** · **Status:** behoben und verifiziert · **Betrifft:**
+  `src/components/ui/calendar.tsx`, die `disabled`-Zuweisung · gefunden aus der Nutzung, nicht im Test
+- **Was nicht stimmte:** Die gesperrten Tage trugen `text-muted-foreground` **und** `opacity-50` —
+  zwei Abschwächungen übereinander. AC-7 verbietet Datumsangaben in der Zukunft, also ist im
+  laufenden Monat der größere Teil des Kalenderblatts betroffen: im September 2026 waren es 28 von
+  30 Tagen.
+- **Ursache:** So liefert `shadcn add calendar` die Komponente aus. Die Farbe war nie das Problem —
+  die zusätzliche Deckkraft darüber war es.
+- **Warum das ein Befund ist:** `docs/design-system.md` legt fest: *„**Der Kontrastboden liegt bei
+  `--muted-foreground`.** Das Quellsystem nutzt für Meta-Text Alpha `.34–.45`; auf `#080807` ergibt
+  `.44` nur 4,07:1 und `.34` nur 3,1:1 — beides unter 4,5:1."* Genau diese Entscheidung unterläuft
+  das `opacity-50`, nur eine Ebene höher. Gerechnet auf `--popover` (HSL 60 3% 6.5%):
+
+| Zustand | Kontrast | |
+|---|---|---|
+| aktiver Tag (`--popover-foreground`) | **17,27:1** | |
+| `--muted-foreground` allein | **4,97:1** | der dokumentierte Boden |
+| `--muted-foreground` + `opacity-50` | **2,13:1** | ausgeliefert — weniger als die Hälfte von 4,5:1 |
+
+- **Der Fix:** `opacity-50` entfernt, sonst nichts. Keine neue Farbe erfunden — der Boden des
+  Design Systems ist die Antwort, er war nur überschrieben. Der Unterschied zu einem wählbaren Tag
+  bleibt deutlich: 4,97:1 gegen 17,27:1 ist das **3,5-fache**, und das sieht man ohne Vergleich.
+- **Warum Low:** Kein Fehlverhalten der Anwendung, keine falsche Zahl, kein Datenverlust. Die
+  Auswahl funktionierte auch vorher — man konnte nur nicht lesen, welchen Tag man nicht wählen darf.
+
+### Neuer Test aus diesem Lauf
+
+`src/components/ui/calendar-contrast.test.ts` prüft am Quelltext, dass die `disabled`-Zuweisung den
+Kontrastboden trägt und **keine** `opacity-`Klasse daneben. Die Prüfung greift bewusst nur diese eine
+Zuweisung — die `aria-disabled:opacity-50` an den Navigationspfeilen sitzen auf Icons, nicht auf Text,
+und sind nicht gemeint.
+
+**Warum am Quelltext:** `shadcn add calendar` überschreibt die Datei und bringt `opacity-50` lautlos
+zurück — dieselbe Begründung wie bei `floating-surfaces.test.ts`.
+
+**Rot-Nachweis:** `opacity-50` wieder eingesetzt → 1 von 2 Prüfungen fällt. Danach zurückgenommen,
+Suite wieder 334 grün.
+
+### Bug-Stand nach diesem Durchlauf
+
+**0 Critical · 0 High · 0 Medium · 1 Low** — unverändert **BUG-7** (die Zahl im `design.md`, siehe
+„Weiterhin offen"). BUG-14 ist behoben und verifiziert.
