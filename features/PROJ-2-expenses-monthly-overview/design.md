@@ -773,6 +773,12 @@ wartende Station einführt, würde sie unbemerkt reißen.
 | **TD-32** Die Forderung „höchstens **eine** Sitzungsprüfung je Anfrage" wird **verworfen** | Sie stand einen Schritt lang in der Spec und ist nicht sicher baubar. Gemessen: Server Action und anschließender Neuaufbau teilen **keinen** anfragebezogenen Bereich — die in `React.cache` umschlossene Prüfung lief in **einer** Anfrage trotzdem zweimal. Die Next.js-Doku sagt zu `React.cache` „scoped to the current request only"; diese beiden Durchgänge zählen offenbar nicht als derselbe | Modulweiter Zwischenspeicher; die Prüfung der Seite lokal statt beim Auth-Server | Der modulweite Speicher würde die Sitzung einer Person an die nächste ausliefern — ausgeschlossen. Die lokale Prüfung nähme PROJ-1 seine Zusage aus EC-5 (eine entzogene Sitzung fiele erst nach bis zu einer Stunde auf) und wäre ein `/refine PROJ-1`. Der Preis des Verzichts ist klein: Im Normalbetrieb kostet die zweite Prüfung rund 50 ms; teuer ist sie nur im Ausfall, also wenn ohnehin nichts geht | 2026-09-01 |
 | **TD-33** Die Meldung bei Fristablauf nennt **nur den Fristablauf** — und die Komponente heißt danach | `/qa PROJ-3` hat gemessen, dass die Frist auch bei gesunder Gegenstelle reißt, sobald die Maschine ausgelastet ist. Der bisherige Satz „Wir erreichen deine Daten gerade nicht" behauptete dann eine Ursache, die die App nie geprüft hatte. Sie weiß in diesem Moment genau eines: Sie hat gewartet und aufgegeben. Es ist derselbe Schnitt wie bei PROJ-3s Kursdienst, wo „gibt es nicht" von „gerade nicht erreichbar" getrennt ist — die eine Meldung hat eine Prüfung hinter sich, die andere nicht. Deshalb wandert der Name mit: `UnavailableNotice` → `TimeoutNotice`, und im Rahmen heißt der Zustand Zeitüberschreitungs-Zustand | Nur den Text ändern und die Komponente `UnavailableNotice` lassen; alternativ an der Zahl drehen statt an der Aussage | Der Rename kostet eine Datei und zwei Importe. Dagegen steht: Eine Komponente, die „unavailable" heißt und laut Vertrag gerade **nicht** behaupten darf, dass etwas nicht verfügbar ist, ist eine Falle für die nächste Person, die sie benutzt. An der Zahl wurde bewusst nicht gedreht — die 2 Sekunden sind nirgends als falsch nachgewiesen (`spec.md`, Offene Fragen) | 2026-09-02 |
 | **TD-34** Der Satz steht **einmal** im Code, als Konstante neben `DEADLINE_MS` | Er stand an vier Stellen plus einmal als Zusicherung im Test — fünf Kopien, deren Übereinstimmung reine Disziplin war. Ändert jemand später drei davon, widersprechen sich die Wege, und genau das verbietet EC-13. `deadline.ts` ist der richtige Ort: Dort steht bereits, **was ein Fristablauf bedeutet** (`isUnreachable`), das Modul zieht bewusst kein `next/headers` mit und wird von Rahmen und Server Actions gleichermaßen benutzt. Dasselbe Argument, mit dem TD-27 die Frist an eine Stelle gelegt hat | Den Text in jeder der vier Dateien einzeln pflegen, wie ursprünglich aufgezählt; oder ein eigenes Modul `messages.ts` nur für diesen einen Satz | Der Rahmen bekommt einen Import aus `lib/supabase/` — auf den ersten Blick eine Schichtverletzung, tatsächlich derselbe Bezug, den `MonthView` mit `isUnreachable` schon hat. Ein eigenes Modul für einen Satz wäre eine Datei ohne zweiten Bewohner | 2026-09-02 |
+| **TD-35** Das Feld bleibt `type="date"`; **das native Kalendersymbol wird ausgeblendet** | AC-31 verlangt zwei Wege zum selben Wert. Ein `type="date"`-Feld bringt seinen eigenen Kalenderknopf mit — neben unserem stünden zwei Symbole für dieselbe Aufgabe, und das erzeugte gerade die Ratlosigkeit, gegen die AC-31 geschrieben wurde. Das Feld selbst bleibt: Es bringt Tastatureingabe, die Datumsprüfung des Browsers und auf dem Telefon die Bedienung des Betriebssystems kostenlos mit | Ein reines Textfeld mit eigenem Parser für `TT.MM.JJJJ` | Wir verlassen uns auf ein Browser-Detail, das jeder Hersteller anders benennt. Der Preis eines eigenen Parsers wäre höher: Lokalformate, Teileingaben, Tastaturbedienung — alles selbst gebaut und selbst kaputt | 2026-09-02 |
+| **TD-36** Der Kalender ist die **shadcn-Komponente** auf `react-day-picker` v9, ohne `date-fns` | Die Projektregel lautet, installierte shadcn-Bausteine nie nachzubauen; einen Kalender selbst zu schreiben hieße Wochenanfang, Lokalisierung, Tastaturbedienung und Barrierefreiheit von Hand — genau das, was eine Bibliothek richtig macht. **Gegen die aktuelle Dokumentation geprüft, nicht aus dem Gedächtnis:** v9 liefert die Lokalisierung über `react-day-picker/locale` mit, `date-fns` ist nicht mehr nötig | Einen minimalen Monatskalender selbst schreiben; oder das native Feld unverändert lassen | Eine neue Abhängigkeit für zwei Formularfelder. Vertretbar, weil `popover` und `lucide-react` schon da sind und es damit **eine** bleibt, nicht drei | 2026-09-02 |
+| **TD-37** Die Grenzen wirken im Kalender **zweifach** — Blätterbereich und sichtbare Tage —, ersetzen die Serverprüfung aber **nicht** | EC-14 verlangt, dass unzulässige Tage gar nicht erst wählbar sind. Nur die Tage auszublenden ließe einen mit zwei Klicks ins Jahr 1850 blättern; nur den Bereich zu begrenzen ließe im laufenden Monat noch übermorgen anklicken. Beides zusammen ergibt einen Kalender, in dem nichts Falsches anklickbar ist | Nur die Tage ausblenden; oder gar nichts begrenzen und auf die Fehlermeldung nach dem Absenden vertrauen | Die Grenzen stehen jetzt an drei Stellen (Blätterbereich, sichtbare Tage, Serverprüfung). Das ist Absicht: Die ersten beiden sind Bequemlichkeit, die dritte ist die Kontrolle, und **nur die dritte darf man glauben** | 2026-09-02 |
+| **TD-38** Erfassungszeile und Änderungsdialog benutzen **einen** Datums-Baustein, nicht zwei | **Das ist die Garantie hinter EC-15.** Der Änderungsdialog gehört PROJ-2, aber PROJ-3 hängt daran: Ändert sich das Datum, wird der Wechselkurs neu geholt (dort AC-12). Zwei getrennt verdrahtete Kalender driften auseinander, und der Fehler wäre eine Ausgabe mit dem Kurs des alten Datums — richtig aussehend, still falsch. Ein Baustein macht das Auseinanderlaufen **unmöglich**, nicht unwahrscheinlich | In beiden Komponenten je einen Kalender verdrahten und auf Sorgfalt setzen | Ein Baustein mehr im Verzeichnis. Gegenüber einem stillen Kursfehler ist das kein Preis | 2026-09-02 |
+| **TD-39** Der Wochentag wird **berechnet**, nie gespeichert | Er ist aus dem Datum eindeutig ableitbar. Ihn mitzuführen hieße, eine zweite Wahrheit über dasselbe Datum zu halten — die beim ersten Ändern auseinanderfällt. Er wird über `Intl` erzeugt, an derselben Stelle wie jede andere Datumsausgabe des Projekts | Eine Spalte an `expenses`; oder eine eigene Formatierung neben `format.ts` | Keiner. Diese Entscheidung steht hier, weil „Wochentag anzeigen" jemanden auf die Idee bringen könnte, ihn zu speichern | 2026-09-02 |
+| **TD-40** Der Rückweg auf `/konto` ist ein **Link auf `/`**, kein „zurück" der Browserhistorie | Wer `/konto` direkt aufruft oder aus einem Lesezeichen kommt, hat keine Historie in der App — ein Historien-Zurück führte dann aus der Anwendung heraus. Ein Link führt immer dorthin, wo er hinzeigt | `history.back()`; oder die Wortmarke im Kopf mit einem Pfeil versehen | Der Rückweg landet nicht dort, wo man herkam, sondern immer auf der Übersicht. Das ist bei genau zwei Seiten kein Verlust | 2026-09-02 |
 
 ---
 
@@ -816,6 +822,12 @@ wartende Station einführt, würde sie unbemerkt reißen.
 | EC-4 Datenbank oder Auth-Server antwortet nicht | Frist im gemeinsamen `fetch` (TD-27), Wiederholversuche aus (TD-28); formularweite Meldung, Zustand bleibt stehen |
 | EC-12 Anmeldung nicht feststellbar | Drei Ausgänge (TD-30), Vorprüfung lässt durch (TD-29), `TimeoutNotice` statt `/login` |
 | EC-13 Die Meldung behauptet keine ungeprüfte Ursache | Ein Text für alle vier Stellen (TD-33); der Schreibweg sagt nichts über den Ausgang |
+| AC-31 Kalender neben dem tippbaren Feld | Ein Datums-Baustein für beide Stellen (TD-35, TD-36, TD-38) |
+| AC-32 Wochentag am Feld | Berechnet über `Intl`, nicht gespeichert (TD-39) |
+| AC-33 Rückweg auf `/konto` | Link auf `/` über der Konto-Karte (TD-40) |
+| AC-34 Notiz so lesbar wie Datum und Kategorie | Meta-Einfärbung entfällt; die Fremdwährungs-Beizeile bleibt gedämpft |
+| EC-14 Unzulässige Tage nicht wählbar | Blätterbereich **und** sichtbare Tage begrenzt; Serverprüfung bleibt die Kontrolle (TD-37) |
+| EC-15 Kalender verhält sich wie Tippen | **Ein** Baustein statt zweier — Auseinanderlaufen ist unmöglich, nicht unwahrscheinlich (TD-38) |
 | EC-5 Sitzung abgelaufen | `requireUser()` aus PROJ-1 (Routen und Zugriffsschutz) |
 | EC-6 Monatsgrenze um Mitternacht | Zeitzone (TD-24) |
 | EC-7 Rundung der Prozentwerte | Summen |
@@ -1045,3 +1057,74 @@ benennt der Fehlschlag das Wort, das zurückgekommen ist, statt nur „irgendetw
 **Was bewusst nicht gebaut wurde:** kein Anfassen der Zahl `DEADLINE_MS`, kein zweiter Mechanismus,
 keine Änderung an PROJ-1s Meldungen. Die sagen schon heute nur, dass die *Handlung* nicht ging —
 sie erfüllen EC-13 bereits und wurden geprüft, nicht angefasst.
+
+---
+
+## Nachtrag: der Entwurf zu AC-31 bis AC-34 (`/architecture`, 02.09.2026)
+
+Ergänzung am bestehenden Entwurf. Vier Kriterien und zwei Edge Cases aus dem Feedback am laufenden
+Stand; **keine Datenänderung** — `docs/data-model.md` bleibt unberührt, es kommt keine Spalte und
+keine Entität dazu.
+
+### Das Datumsfeld (AC-31, AC-32, EC-14, EC-15)
+
+**Aufbau**
+
+```
+Datumsfeld (ein Baustein, zweimal eingesetzt)
++-- Eingabefeld  type="date"        <- tippen, wie bisher
+|     +-- natives Kalendersymbol    <- ausgeblendet (TD-35)
++-- Wochentag    „Sa"               <- abgeleitet, nie gespeichert (TD-39)
++-- Schaltfläche mit Kalendersymbol
+      +-- Popover
+            +-- Kalender  (Monatsblatt, Wochentage als Spalten, < > zum Blättern)
+```
+
+**Wo er sitzt:** in der Erfassungszeile **und** im Änderungsdialog — derselbe Baustein, nicht zwei
+(TD-38). Das ist die Garantie hinter EC-15.
+
+**Die Grenzen stehen im Kalender zweimal, und in der Prüfung ein drittes Mal:**
+
+| Ebene | Was sie tut | Warum |
+|---|---|---|
+| Blätterbereich | Der Kalender lässt sich nur zwischen Januar 2000 und dem laufenden Monat blättern | Sonst landet man mit zwei Klicks im Jahr 1850 |
+| Sichtbare Tage | Tage vor dem 01.01.2000 und nach heute werden **nicht angezeigt** | Ein Tag, den man anklicken kann und der danach abgelehnt wird, ist eine Falle |
+| Server | AC-7 und AC-30 prüfen unverändert weiter | **Der Kalender ist eine Bequemlichkeit, nie die Kontrolle.** Wer das Formular direkt anspricht, umgeht ihn |
+
+**Der Wochentag** (AC-32) wird aus dem Datum **berechnet**, sobald es angezeigt wird — zweibuchstabig
+(`Mo` bis `So`), über dieselbe Stelle wie jede andere Datumsausgabe des Projekts (`format.ts`, alles
+über `Intl`). Er steht **nur am Feld**, nicht in der Listenzeile; die Begründung und die offene Frage
+dazu stehen in `spec.md`.
+
+**Was auf dem Telefon anders ist — benannt, nicht verschwiegen.** Ein `type="date"`-Feld lässt sich
+unter iOS **nicht tippen**; ein Antippen öffnet das Walzenrad des Betriebssystems, und das zeigt
+keine Wochentage. Dort ist der zweite Weg aus AC-31 also nicht „tippen", sondern das Walzenrad — und
+der Kalender ist genau da der einzige Weg, der den Samstag zeigt. AC-31 ist damit erfüllt, aber
+**nicht auf beiden Geräten mit denselben zwei Wegen**. Wer das prüft, soll es wissen, statt es als
+Fehler zu melden.
+
+### Der Rückweg von `/konto` (AC-33)
+
+Über der Konto-Karte eine Zeile `‹ Zur Übersicht`, als **Link auf `/`** — nicht als „zurück" im Sinne
+der Browserhistorie (TD-40). Die Wortmarke im Kopf bleibt unverändert, sie ist und war ein Link;
+AC-33 verlangt einen **erkennbaren** Weg, nicht einen zweiten versteckten.
+
+### Die Notiz in der Liste (AC-34)
+
+Die Zelle verliert ihre Meta-Einfärbung und steht in derselben Textfarbe wie Datum und Kategorie.
+Das Abschneiden langer Notizen bleibt. Die Beizeile der Fremdwährung (PROJ-3) bleibt **gedämpft** —
+sie ist wirklich Nebeninformation, und der Unterschied wird dadurch erst sichtbar.
+
+### Dependencies
+
+- **`react-day-picker`** — über `npx shadcn@latest add calendar --yes`. Version 9 bringt ihre
+  **Lokalisierung selbst mit** (`react-day-picker/locale`), es braucht also **kein** `date-fns`
+  daneben. Sollte die erzeugte `calendar.tsx` trotzdem aus `date-fns` importieren, wird das durch
+  `Intl` ersetzt — dieses Projekt formatiert jedes Datum über `Intl` (`format.ts`), und eine zweite
+  Datumsbibliothek für zwei Beschriftungen wäre Ballast.
+- `popover` ist **bereits installiert**, `lucide-react` für das Symbol ebenso. Es kommt genau eine
+  Abhängigkeit dazu.
+
+### Settings the user makes
+
+**Keine.** Diese Ergänzung berührt weder Auth noch eine Anbieter-Einstellung.
